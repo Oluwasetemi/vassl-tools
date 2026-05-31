@@ -6,6 +6,7 @@ members = [
     "crates/vassl-inventory",
     "crates/vassl-quotations",
     "crates/vassl-pricebook",
+    "crates/vassl-ui",
     # Vendored from Zed monorepo
     "crates/collections",
     "crates/util",
@@ -22,7 +23,7 @@ resolver = "2"
 [workspace.dependencies]
 # UI
 gpui          = { git = "https://github.com/zed-industries/zed" }
-gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["runtime_shaders"] }
+gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["runtime_shaders", "font-kit"] }
 
 # Error handling
 anyhow    = "1"
@@ -44,8 +45,13 @@ inventory = "0.3"
 dirs   = "5"
 chrono = { version = "0.4", features = ["serde"] }
 
+# Text input grapheme navigation
+unicode-segmentation = "1"
+
 # Live config reload
 arc-swap = "1"
+
+vassl-ui = { path = "crates/vassl-ui" }
 
 # Vendored Zed crates
 collections    = { path = "crates/collections" }
