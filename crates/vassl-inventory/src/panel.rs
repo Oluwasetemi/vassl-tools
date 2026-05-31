@@ -39,6 +39,7 @@ impl InventoryPanel {
     }
 
     fn open_stock_form(&mut self, cx: &mut Context<Self>) {
+        if self.stock_form.is_some() { return; }  // prevent double-open
         // Read needed data from store — borrow scoped
         let (product_id, product_name) = {
             let store = self.store.read(cx);
@@ -56,8 +57,8 @@ impl InventoryPanel {
         let sub = cx.subscribe(&form, |this, _form, ev: &StockFormEvent, cx| {
             match ev {
                 StockFormEvent::Submitted | StockFormEvent::Cancelled => {
-                    this.stock_form = None;
-                    this._form_sub  = None;
+                    this._form_sub  = None;  // drop observer first
+                    this.stock_form = None;  // then release the entity
                     cx.notify();
                 }
             }
@@ -81,6 +82,7 @@ impl Render for InventoryPanel {
         };
 
         let mut root = div()
+            .relative()        // establishes containing block for absolute overlay
             .flex_1().flex().flex_col().h_full()
             .child(
                 div()
@@ -118,18 +120,23 @@ impl Render for InventoryPanel {
                     // Spacer
                     .child(div().flex_1())
                     // New Entry button
-                    .child(
-                        div()
+                    .child({
+                        let mut btn = div()
                             .id("btn-new-entry")
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
                             .bg(rgb(if has_selection { colors::SURFACE_ACTIVE } else { colors::SURFACE_DEFAULT }))
                             .text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT))
-                            .cursor_pointer()
-                            .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
-                                this.open_stock_form(cx);
-                            }))
-                            .child("+ New Entry")
-                    )
+                            .child("+ New Entry");
+
+                        if has_selection {
+                            btn = btn
+                                .cursor_pointer()
+                                .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
+                                    this.open_stock_form(cx);
+                                }));
+                        }
+                        btn
+                    })
             )
             .child(content);
 

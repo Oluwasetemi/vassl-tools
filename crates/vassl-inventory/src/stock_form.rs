@@ -31,6 +31,16 @@ pub struct StockEntryForm {
     focus_handle:     FocusHandle,
 }
 
+fn validate_entry(quantity: &str, unit_cost: &str) -> Result<(f64, f64), String> {
+    let qty: f64 = quantity.trim().parse()
+        .map_err(|_| "Quantity must be a positive number".to_string())?;
+    if qty <= 0.0 { return Err("Quantity must be > 0".to_string()); }
+    let cost: f64 = unit_cost.trim().parse()
+        .map_err(|_| "Unit cost must be a number ≥ 0".to_string())?;
+    if cost < 0.0 { return Err("Unit cost must be ≥ 0".to_string()); }
+    Ok((qty, cost))
+}
+
 impl StockEntryForm {
     pub fn new(
         store: Entity<InventoryStore>,
@@ -46,6 +56,7 @@ impl StockEntryForm {
             unit_cost: String::new(),
             supplier: String::new(),
             invoice_ref: String::new(),
+            // TODO(Plan 5): default Restock until TextInput + AcquisitionType picker added
             acquisition_type: AcquisitionType::Restock,
             error: None,
             focus_handle: cx.focus_handle(),
@@ -53,13 +64,7 @@ impl StockEntryForm {
     }
 
     fn validate(&self) -> Result<(f64, f64), String> {
-        let qty: f64 = self.quantity.trim().parse()
-            .map_err(|_| "Quantity must be a positive number".to_string())?;
-        if qty <= 0.0 { return Err("Quantity must be > 0".to_string()); }
-        let cost: f64 = self.unit_cost.trim().parse()
-            .map_err(|_| "Unit cost must be a number ≥ 0".to_string())?;
-        if cost < 0.0 { return Err("Unit cost must be ≥ 0".to_string()); }
-        Ok((qty, cost))
+        validate_entry(&self.quantity, &self.unit_cost)
     }
 
     fn submit(&mut self, cx: &mut Context<Self>) {
@@ -79,7 +84,7 @@ impl StockEntryForm {
                 let sup_opt: Option<String> = if sup.is_empty() { None } else { Some(sup) };
                 let invref_opt: Option<String> = if invref.is_empty() { None } else { Some(invref) };
 
-                cx.spawn(async move |_this, cx| {
+                cx.spawn(async move |this, cx| {
                     let result = db.insert_stock_entry(
                         pid, qty, cost,
                         sup_opt.as_deref(),
@@ -91,15 +96,14 @@ impl StockEntryForm {
 
                     if let Err(e) = result {
                         tracing::error!("insert_stock_entry failed: {e:?}");
-                        return;
+                        return Ok(());
                     }
 
-                    // Refresh the product list in both tabs
+                    // Refresh products, then emit Submitted to close the form
                     let _ = store.update(cx, |s, cx| s.load_products(cx));
+                    this.update(cx, |_, cx| cx.emit(StockFormEvent::Submitted))
                 })
                 .detach();
-
-                cx.emit(StockFormEvent::Submitted);
             }
         }
     }
@@ -216,41 +220,25 @@ fn form_field(label: &str, value: &str, placeholder: &str) -> impl IntoElement {
 
 #[cfg(test)]
 mod tests {
-    struct FakeForm { quantity: String, unit_cost: String }
-
-    impl FakeForm {
-        fn validate(&self) -> Result<(f64, f64), String> {
-            let qty: f64 = self.quantity.trim().parse()
-                .map_err(|_| "Quantity must be a positive number".to_string())?;
-            if qty <= 0.0 { return Err("Quantity must be > 0".to_string()); }
-            let cost: f64 = self.unit_cost.trim().parse()
-                .map_err(|_| "Unit cost must be a number ≥ 0".to_string())?;
-            if cost < 0.0 { return Err("Unit cost must be ≥ 0".to_string()); }
-            Ok((qty, cost))
-        }
-    }
+    use super::validate_entry;
 
     #[test]
     fn validate_rejects_empty_quantity() {
-        let f = FakeForm { quantity: "".into(), unit_cost: "10.0".into() };
-        assert!(f.validate().is_err());
+        assert!(validate_entry("", "10.0").is_err());
     }
 
     #[test]
     fn validate_rejects_zero_quantity() {
-        let f = FakeForm { quantity: "0".into(), unit_cost: "10.0".into() };
-        assert!(f.validate().is_err());
+        assert!(validate_entry("0", "10.0").is_err());
     }
 
     #[test]
     fn validate_rejects_negative_cost() {
-        let f = FakeForm { quantity: "5".into(), unit_cost: "-1".into() };
-        assert!(f.validate().is_err());
+        assert!(validate_entry("5", "-1").is_err());
     }
 
     #[test]
     fn validate_accepts_valid_input() {
-        let f = FakeForm { quantity: "10.5".into(), unit_cost: "120.00".into() };
-        assert_eq!(f.validate().unwrap(), (10.5, 120.0));
+        assert_eq!(validate_entry("10.5", "120.00").unwrap(), (10.5, 120.0));
     }
 }
