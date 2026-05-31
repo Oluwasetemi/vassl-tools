@@ -67,26 +67,26 @@ fn main() {
         // Keybindings are also documented in assets/keymaps/default.json (kept in sync manually).
         // The JSON is not loaded at runtime — cx.bind_keys is the source of truth.
         cx.bind_keys([
-            // App-level shortcuts
-            KeyBinding::new("ctrl-1",       OpenInventory,  Some("VasslRoot")),
-            KeyBinding::new("ctrl-2",       OpenQuotations, Some("VasslRoot")),
-            KeyBinding::new("ctrl-3",       OpenPriceBook,  Some("VasslRoot")),
-            KeyBinding::new("ctrl-shift-a", OpenAuditLog,   Some("VasslRoot")),
-            KeyBinding::new("ctrl-n",       NewRecord,      Some("VasslRoot")),
-            KeyBinding::new("ctrl-f",       FocusSearch,    Some("VasslRoot")),
+            // App-level shortcuts — "secondary" maps to Cmd on macOS, Ctrl on Windows/Linux
+            KeyBinding::new("secondary-1",       OpenInventory,  Some("VasslRoot")),
+            KeyBinding::new("secondary-2",       OpenQuotations, Some("VasslRoot")),
+            KeyBinding::new("secondary-3",       OpenPriceBook,  Some("VasslRoot")),
+            KeyBinding::new("secondary-shift-a", OpenAuditLog,   Some("VasslRoot")),
+            KeyBinding::new("secondary-n",       NewRecord,      Some("VasslRoot")),
+            KeyBinding::new("secondary-f",       FocusSearch,    Some("VasslRoot")),
             // TextInput editing keys
-            KeyBinding::new("backspace",   Backspace,   Some("TextInput")),
-            KeyBinding::new("delete",      Delete,      Some("TextInput")),
-            KeyBinding::new("left",        Left,        Some("TextInput")),
-            KeyBinding::new("right",       Right,       Some("TextInput")),
-            KeyBinding::new("shift-left",  SelectLeft,  Some("TextInput")),
-            KeyBinding::new("shift-right", SelectRight, Some("TextInput")),
-            KeyBinding::new("ctrl-a",      SelectAll,   Some("TextInput")),
-            KeyBinding::new("home",        Home,        Some("TextInput")),
-            KeyBinding::new("end",         End,         Some("TextInput")),
-            KeyBinding::new("ctrl-v",      Paste,       Some("TextInput")),
-            KeyBinding::new("ctrl-c",      Copy,        Some("TextInput")),
-            KeyBinding::new("ctrl-x",      Cut,         Some("TextInput")),
+            KeyBinding::new("backspace",        Backspace,   Some("TextInput")),
+            KeyBinding::new("delete",           Delete,      Some("TextInput")),
+            KeyBinding::new("left",             Left,        Some("TextInput")),
+            KeyBinding::new("right",            Right,       Some("TextInput")),
+            KeyBinding::new("shift-left",       SelectLeft,  Some("TextInput")),
+            KeyBinding::new("shift-right",      SelectRight, Some("TextInput")),
+            KeyBinding::new("secondary-a",      SelectAll,   Some("TextInput")),
+            KeyBinding::new("home",             Home,        Some("TextInput")),
+            KeyBinding::new("end",              End,         Some("TextInput")),
+            KeyBinding::new("secondary-v",      Paste,       Some("TextInput")),
+            KeyBinding::new("secondary-c",      Copy,        Some("TextInput")),
+            KeyBinding::new("secondary-x",      Cut,         Some("TextInput")),
         ]);
 
         let bounds = Bounds::centered(None, size(px(1280.0), px(800.0)), cx);
