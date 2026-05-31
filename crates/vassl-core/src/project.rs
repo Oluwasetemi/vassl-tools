@@ -18,7 +18,7 @@ pub enum ProjectStatus {
     Archived,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewProject {
     pub name: String,
     pub client_name: String,

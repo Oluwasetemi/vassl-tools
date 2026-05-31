@@ -6,4 +6,3 @@ edition = "2021"
 [dependencies]
 thiserror.workspace = true
 serde.workspace     = true
-chrono.workspace    = true

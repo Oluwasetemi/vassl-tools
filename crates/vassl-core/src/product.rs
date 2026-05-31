@@ -12,7 +12,7 @@ pub struct Product {
     pub created_at: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewProduct {
     pub sku: String,
     pub name: String,
@@ -43,7 +43,7 @@ pub enum AcquisitionType {
     Restock,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewStockEntry {
     pub product_id: i64,
     pub quantity: f64,

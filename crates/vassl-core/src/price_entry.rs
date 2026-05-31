@@ -13,7 +13,7 @@ pub struct PriceEntry {
     pub notes: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewPriceEntry {
     pub product_id: i64,
     pub cost_price_usd: f64,
@@ -64,11 +64,25 @@ mod tests {
 
     #[test]
     fn selling_price_rejects_zero_markup() {
-        assert!(selling_price(100.0, 0.0, 0.0).is_err());
+        assert!(matches!(
+            selling_price(100.0, 0.0, 0.0),
+            Err(PriceEntryError::InvalidMarkup(_))
+        ));
     }
 
     #[test]
     fn selling_price_rejects_negative_cost() {
-        assert!(selling_price(-1.0, 0.0, 30.0).is_err());
+        assert!(matches!(
+            selling_price(-1.0, 0.0, 30.0),
+            Err(PriceEntryError::InvalidCostPrice(_))
+        ));
+    }
+
+    #[test]
+    fn selling_price_rejects_negative_duty() {
+        assert!(matches!(
+            selling_price(100.0, -1.0, 30.0),
+            Err(PriceEntryError::InvalidDuty(_))
+        ));
     }
 }

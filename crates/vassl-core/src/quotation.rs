@@ -31,3 +31,13 @@ pub struct QuotationItem {
     pub unit_price_usd: f64,
     pub total_usd: f64,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NewQuotationItem {
+    pub quotation_id: i64,
+    pub product_id: Option<i64>,
+    pub description: String,
+    pub quantity: f64,
+    pub unit_price_usd: f64,
+    pub total_usd: f64,
+}
