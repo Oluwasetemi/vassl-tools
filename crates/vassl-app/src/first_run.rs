@@ -1,0 +1,110 @@
+use gpui::{Context, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Window,
+           div, prelude::*, px, rgb, rgba, SharedString};
+use vassl_ui::{TextInput, text_field};
+
+use crate::colors;
+
+#[derive(Debug)]
+pub enum FirstRunEvent { Saved }
+
+impl EventEmitter<FirstRunEvent> for FirstRunPrompt {}
+
+pub struct FirstRunPrompt {
+    name_input:   gpui::Entity<TextInput>,
+    error:        Option<String>,
+    focus_handle: FocusHandle,
+}
+
+fn validate_name(name: &str) -> Result<String, String> {
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        Err("Please enter your name.".to_string())
+    } else {
+        Ok(name)
+    }
+}
+
+impl FirstRunPrompt {
+    pub fn new(cx: &mut Context<Self>) -> Self {
+        Self {
+            name_input:   cx.new(|cx| TextInput::with_placeholder("e.g. Alice Kamalu", cx)),
+            error:        None,
+            focus_handle: cx.focus_handle(),
+        }
+    }
+
+    fn save(&mut self, cx: &mut Context<Self>) {
+        let raw = self.name_input.read(cx).text().to_string();
+        match validate_name(&raw) {
+            Err(msg) => { self.error = Some(msg); cx.notify(); }
+            Ok(name) => {
+                let db = vassl_db::AppDatabase::global(&**cx).clone();
+                cx.spawn(async move |this, cx| {
+                    let result = db.write(move |conn| -> anyhow::Result<()> {
+                        vassl_db::shared::set_current_user(conn, &name)
+                    }).await;
+                    if let Err(e) = result {
+                        tracing::error!("set_current_user failed: {e:?}");
+                        return Ok(());
+                    }
+                    this.update(cx, |_, cx| cx.emit(FirstRunEvent::Saved))
+                }).detach();
+            }
+        }
+    }
+}
+
+impl Focusable for FirstRunPrompt {
+    fn focus_handle(&self, _: &gpui::App) -> FocusHandle { self.focus_handle.clone() }
+}
+
+impl Render for FirstRunPrompt {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let name_focused = self.name_input.read(cx).focus_handle.is_focused(window);
+
+        div()
+            .absolute().top_0().left_0().right_0().bottom_0()
+            .flex().items_center().justify_center()
+            .bg(rgba(0x00000099))
+            .child(
+                div()
+                    .w(px(380.)).bg(rgb(colors::CANVAS_BG)).rounded(px(8.)).p(px(28.))
+                    .flex().flex_col().gap(px(14.))
+                    .child(
+                        div().text_size(px(16.)).text_color(rgb(colors::TEXT_DEFAULT))
+                            .child("Welcome to VASSL")
+                    )
+                    .child(
+                        div().text_size(px(12.)).text_color(rgb(colors::TEXT_MUTED))
+                            .child("Enter your name to get started. This will be used for audit logs.")
+                    )
+                    .child(text_field("Your Name", self.name_input.clone(), name_focused, window))
+                    .child(
+                        div().text_size(px(11.)).text_color(rgb(colors::STATUS_RED))
+                            .child(self.error.as_deref().map(SharedString::from).unwrap_or_default())
+                    )
+                    .child(
+                        div().flex().flex_row().justify_end()
+                            .child(
+                                div().id("first-run-btn-save")
+                                    .px(px(20.)).py(px(8.)).rounded(px(4.))
+                                    .bg(rgb(colors::SURFACE_ACTIVE))
+                                    .text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT))
+                                    .cursor_pointer()
+                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
+                                        this.save(cx);
+                                    }))
+                                    .child("Get Started")
+                            )
+                    )
+            )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_name;
+    #[test] fn rejects_empty()      { assert!(validate_name("").is_err()); }
+    #[test] fn rejects_whitespace() { assert!(validate_name("   ").is_err()); }
+    #[test] fn accepts_name()       { assert_eq!(validate_name("  Alice  ").unwrap(), "Alice"); }
+}

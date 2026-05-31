@@ -20,3 +20,5 @@ vassl-db                     = { path = "../vassl-db" }
 vassl-inventory              = { path = "../vassl-inventory" }
 vassl-quotations             = { path = "../vassl-quotations" }
 vassl-pricebook              = { path = "../vassl-pricebook" }
+vassl-ui                     = { path = "../vassl-ui" }
+sqlez.workspace              = true

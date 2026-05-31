@@ -1,6 +1,8 @@
 mod actions;
 mod app;
+mod audit_log;
 mod colors;
+mod first_run;
 mod platform;
 mod root;
 mod sidebar;
