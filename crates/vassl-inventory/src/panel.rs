@@ -2,6 +2,7 @@ use gpui::{Context, Entity, IntoElement, Render, Subscription, Window,
            div, prelude::*, px, rgb};
 
 use crate::colors;
+use crate::product_form::{ProductForm, ProductFormEvent};
 use crate::product_list::ProductList;
 use crate::restock::RestockAlerts;
 use crate::stock_form::{StockEntryForm, StockFormEvent};
@@ -18,6 +19,8 @@ pub struct InventoryPanel {
     active_tab:     Tab,
     stock_form:     Option<Entity<StockEntryForm>>,
     _form_sub:      Option<Subscription>,
+    product_form:   Option<Entity<ProductForm>>,
+    _prod_form_sub: Option<Subscription>,
 }
 
 impl InventoryPanel {
@@ -32,15 +35,16 @@ impl InventoryPanel {
             store,
             product_list,
             restock_alerts,
-            active_tab: Tab::Products,
-            stock_form: None,
-            _form_sub:  None,
+            active_tab:     Tab::Products,
+            stock_form:     None,
+            _form_sub:      None,
+            product_form:   None,
+            _prod_form_sub: None,
         }
     }
 
     fn open_stock_form(&mut self, cx: &mut Context<Self>) {
-        if self.stock_form.is_some() { return; }  // prevent double-open
-        // Read needed data from store — borrow scoped
+        if self.stock_form.is_some() { return; }
         let (product_id, product_name) = {
             let store = self.store.read(cx);
             let Some(pid) = store.selected_product_id else { return; };
@@ -53,19 +57,34 @@ impl InventoryPanel {
         };
 
         let form = cx.new(|cx| StockEntryForm::new(self.store.clone(), product_id, product_name, cx));
-
         let sub = cx.subscribe(&form, |this, _form, ev: &StockFormEvent, cx| {
             match ev {
                 StockFormEvent::Submitted | StockFormEvent::Cancelled => {
-                    this._form_sub  = None;  // drop observer first
-                    this.stock_form = None;  // then release the entity
+                    this._form_sub  = None;
+                    this.stock_form = None;
                     cx.notify();
                 }
             }
         });
-
         self.stock_form = Some(form);
         self._form_sub  = Some(sub);
+        cx.notify();
+    }
+
+    fn open_product_form(&mut self, cx: &mut Context<Self>) {
+        if self.product_form.is_some() { return; }
+        let form = cx.new(|cx| ProductForm::new(self.store.clone(), cx));
+        let sub  = cx.subscribe(&form, |this, _form, ev: &ProductFormEvent, cx| {
+            match ev {
+                ProductFormEvent::Submitted | ProductFormEvent::Cancelled => {
+                    this._prod_form_sub = None;
+                    this.product_form   = None;
+                    cx.notify();
+                }
+            }
+        });
+        self.product_form   = Some(form);
+        self._prod_form_sub = Some(sub);
         cx.notify();
     }
 }
@@ -82,19 +101,18 @@ impl Render for InventoryPanel {
         };
 
         let mut root = div()
-            .relative()        // establishes containing block for absolute overlay
+            .relative()
             .flex_1().flex().flex_col().h_full()
             .child(
                 div()
                     .flex().flex_row().items_center().gap(px(8.))
                     .px(px(16.)).py(px(8.))
                     .bg(rgb(colors::CANVAS_BG))
-                    // Products tab
                     .child(
                         div()
                             .id("tab-products")
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
-                            .bg(rgb(if active_tab == Tab::Products { colors::SURFACE_ACTIVE } else { colors::CANVAS_BG }))
+                            .bg(rgb(if active_tab == Tab::Products { colors::SURFACE_ACTIVE } else { colors::SURFACE_DEFAULT }))
                             .text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT))
                             .cursor_pointer()
                             .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
@@ -103,12 +121,11 @@ impl Render for InventoryPanel {
                             }))
                             .child("Products")
                     )
-                    // Restock Alerts tab
                     .child(
                         div()
                             .id("tab-restock")
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
-                            .bg(rgb(if active_tab == Tab::Restock { colors::SURFACE_ACTIVE } else { colors::CANVAS_BG }))
+                            .bg(rgb(if active_tab == Tab::Restock { colors::SURFACE_ACTIVE } else { colors::SURFACE_DEFAULT }))
                             .text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT))
                             .cursor_pointer()
                             .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
@@ -117,9 +134,21 @@ impl Render for InventoryPanel {
                             }))
                             .child("Restock Alerts")
                     )
-                    // Spacer
                     .child(div().flex_1())
-                    // New Entry button
+                    // New Product button — always enabled
+                    .child(
+                        div()
+                            .id("btn-new-product")
+                            .px(px(12.)).py(px(4.)).rounded(px(4.))
+                            .bg(rgb(colors::SURFACE_DEFAULT))
+                            .text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT))
+                            .cursor_pointer()
+                            .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
+                                this.open_product_form(cx);
+                            }))
+                            .child("+ New Product")
+                    )
+                    // New Entry button (requires product selection)
                     .child({
                         let mut btn = div()
                             .id("btn-new-entry")
@@ -140,8 +169,10 @@ impl Render for InventoryPanel {
             )
             .child(content);
 
-        // Overlay modal if open
         if let Some(form) = &self.stock_form {
+            root = root.child(form.clone());
+        }
+        if let Some(form) = &self.product_form {
             root = root.child(form.clone());
         }
 
