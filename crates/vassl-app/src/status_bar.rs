@@ -11,6 +11,8 @@ impl StatusBar {
         Self { last_action: None }
     }
 
+    /// Called by DB write helpers in future tasks to surface operation feedback in the status bar.
+    #[allow(dead_code)]
     pub fn set_last_action(&mut self, action: impl Into<String>, cx: &mut Context<Self>) {
         self.last_action = Some(action.into());
         cx.notify();
@@ -19,7 +21,7 @@ impl StatusBar {
 
 impl Render for StatusBar {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        let label = self.last_action.as_deref().unwrap_or("Ready").to_string();
+        let label = self.last_action.clone().unwrap_or_else(|| "Ready".to_string());
 
         div()
             .w_full()
@@ -47,7 +49,9 @@ mod tests {
     }
 
     #[test]
-    fn set_last_action_updates_state() {
+    fn last_action_field_holds_string_value() {
+        // set_last_action() requires a GPUI Context — tested via integration.
+        // Verify the field stores and returns the expected string.
         let bar = StatusBar {
             last_action: Some("Stock entry added".into()),
         };
