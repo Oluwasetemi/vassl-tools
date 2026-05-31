@@ -1,1 +1,142 @@
-// stub — implemented in Task 4
+use gpui::{App, Context, Entity, IntoElement, MouseButton, MouseDownEvent, Render, Window,
+           div, prelude::*, px, rgb};
+
+use crate::colors;
+use crate::store::{PriceBookStore, ProductPrice};
+
+pub struct PriceTable {
+    store: Entity<PriceBookStore>,
+}
+
+impl PriceTable {
+    pub fn new(store: Entity<PriceBookStore>, _cx: &mut Context<Self>) -> Self {
+        Self { store }
+    }
+}
+
+pub fn price_display(pp: &ProductPrice) -> String {
+    match &pp.latest {
+        None => "—".to_string(),
+        Some(e) => format!(
+            "${:.2}  +${:.2}  →  {:.0}%  →  ${:.2}",
+            e.cost_price_usd, e.duty_cost_usd, e.markup_percent, e.selling_price_usd
+        ),
+    }
+}
+
+impl Render for PriceTable {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let store = self.store.read(cx);
+
+        if store.loading {
+            return div()
+                .flex_1().flex().items_center().justify_center()
+                .text_color(rgb(colors::TEXT_MUTED))
+                .child("Loading…")
+                .into_any_element();
+        }
+
+        if store.product_prices.is_empty() {
+            return div()
+                .flex_1().flex().items_center().justify_center()
+                .text_color(rgb(colors::TEXT_DEFAULT))
+                .child("No products found.")
+                .into_any_element();
+        }
+
+        let selected = store.selected_product_id;
+        let rows: Vec<_> = store.product_prices.iter().map(|pp| {
+            let is_selected = selected == Some(pp.product_id);
+            price_row(pp, is_selected, self.store.clone())
+        }).collect();
+
+        div()
+            .id("price-table-scroll")
+            .flex_1().flex().flex_col()
+            .overflow_y_scroll()
+            .children(rows)
+            .into_any_element()
+    }
+}
+
+fn price_row(pp: &ProductPrice, selected: bool, store: Entity<PriceBookStore>) -> impl IntoElement {
+    let product_id = pp.product_id;
+    let row_bg = if selected { colors::SURFACE_ACTIVE } else { colors::CANVAS_BG };
+    let price_str = price_display(pp);
+
+    div()
+        .id(format!("pb-row-{product_id}"))
+        .flex().flex_row().items_center().w_full()
+        .px(px(12.)).py(px(6.))
+        .bg(rgb(row_bg))
+        .cursor_pointer()
+        .on_mouse_down(
+            MouseButton::Left,
+            move |_event: &MouseDownEvent, _window: &mut Window, cx: &mut App| {
+                store.update(cx, |s, cx| s.select_product(product_id, cx));
+            },
+        )
+        // SKU
+        .child(
+            div()
+                .w(px(90.)).text_size(px(12.))
+                .text_color(rgb(colors::TEXT_MUTED))
+                .child(pp.sku.clone())
+        )
+        // Name
+        .child(
+            div()
+                .w(px(160.)).text_size(px(13.))
+                .text_color(rgb(colors::TEXT_DEFAULT))
+                .child(pp.name.clone())
+        )
+        // Price summary
+        .child(
+            div()
+                .flex_1().text_size(px(12.))
+                .text_color(rgb(if pp.latest.is_some() { colors::TEXT_DEFAULT } else { colors::TEXT_MUTED }))
+                .child(price_str)
+        )
+        // Effective date
+        .child(
+            div()
+                .w(px(110.)).text_size(px(11.))
+                .text_color(rgb(colors::TEXT_MUTED))
+                .child(pp.latest.as_ref().map(|e| e.effective_date[..10].to_string()).unwrap_or_default())
+        )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vassl_core::PriceEntry;
+
+    fn make_pp(id: i64, name: &str, cost: Option<f64>) -> ProductPrice {
+        let latest = cost.map(|c| PriceEntry {
+            id,
+            product_id:        id,
+            cost_price_usd:    c,
+            duty_cost_usd:     0.0,
+            markup_percent:    30.0,
+            selling_price_usd: vassl_core::selling_price(c, 0.0, 30.0).unwrap_or(0.0),
+            effective_date:    "2026-01-01T00:00:00Z".to_string(),
+            notes:             None,
+        });
+        ProductPrice { product_id: id, sku: format!("SKU-{id}"), name: name.to_string(), latest }
+    }
+
+    #[test]
+    fn format_price_with_entry() {
+        let pp = make_pp(1, "Camera", Some(100.0));
+        let display = price_display(&pp);
+        assert!(display.contains("100"), "should show cost");
+        assert!(display.contains("130"), "should show selling price");
+    }
+
+    #[test]
+    fn format_price_no_entry() {
+        let pp = make_pp(2, "NVR", None);
+        let display = price_display(&pp);
+        assert_eq!(display, "—");
+    }
+}
