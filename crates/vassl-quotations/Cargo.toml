@@ -11,5 +11,11 @@ serde.workspace      = true
 serde_json.workspace = true
 inventory.workspace  = true
 chrono.workspace     = true
+sqlez.workspace      = true
+tracing.workspace    = true
 vassl-core           = { path = "../vassl-core" }
 vassl-db             = { path = "../vassl-db" }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt"] }
+db    = { path = "../db", features = ["test-support"] }
