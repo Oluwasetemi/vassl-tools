@@ -41,6 +41,7 @@ impl Render for VasslRoot {
                     cx.notify();
                 });
             }))
+            // TODO(Plan 5): add on_action handlers for OpenAuditLog, NewRecord, FocusSearch
             .flex()
             .flex_col()
             .w_full()

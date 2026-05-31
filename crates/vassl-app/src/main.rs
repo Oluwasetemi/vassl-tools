@@ -58,7 +58,8 @@ fn main() {
 
         cx.activate(true);
 
-        // Load keybindings
+        // Keybindings are also documented in assets/keymaps/default.json (kept in sync manually).
+        // The JSON is not loaded at runtime — cx.bind_keys is the source of truth.
         cx.bind_keys([
             KeyBinding::new("ctrl-1",       OpenInventory,  Some("VasslRoot")),
             KeyBinding::new("ctrl-2",       OpenQuotations, Some("VasslRoot")),
