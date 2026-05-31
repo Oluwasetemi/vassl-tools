@@ -4756,11 +4756,13 @@ dependencies = [
  "chrono",
  "db",
  "dirs 5.0.1",
+ "gpui",
  "inventory",
  "serde",
  "serde_json",
  "sqlez",
  "thiserror 2.0.18",
+ "tracing",
  "vassl-core",
 ]
 
