@@ -6,7 +6,7 @@ use crate::store::InventoryStore;
 use crate::InventoryStoreHandle;
 
 pub struct InventoryPanel {
-    #[allow(dead_code)]
+    #[allow(dead_code)] // used by Task 5 tab switching and Task 6 form
     store:        Entity<InventoryStore>,
     product_list: Entity<ProductList>,
 }

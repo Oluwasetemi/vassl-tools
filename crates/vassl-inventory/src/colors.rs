@@ -1,7 +1,7 @@
 // Mirror of vassl-app/src/colors.rs — kept in sync manually.
 pub const CANVAS_BG: u32       = 0x1e1e2e;
-pub const SIDEBAR_BG: u32      = 0x181825;
-pub const SURFACE_DEFAULT: u32 = 0x313244;
+pub const SIDEBAR_BG: u32      = 0x181825; // used by future panel header
+pub const SURFACE_DEFAULT: u32 = 0x313244; // used by Task 6 stock form
 pub const SURFACE_ACTIVE: u32  = 0x1a3c5e;
 pub const TEXT_DEFAULT: u32    = 0xcdd6f4;
 pub const TEXT_MUTED: u32      = 0x6c7086;

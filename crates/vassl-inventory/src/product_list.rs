@@ -1,4 +1,4 @@
-use gpui::{Context, Entity, IntoElement, Render, Window, div, prelude::*, px, rgb};
+use gpui::{App, Context, Entity, IntoElement, MouseButton, MouseDownEvent, Render, Window, div, prelude::*, px, rgb};
 
 use crate::store::{InventoryStore, ProductWithStock, StockStatus};
 use crate::colors;
@@ -23,6 +23,7 @@ impl Render for ProductList {
                 .flex()
                 .items_center()
                 .justify_center()
+                .text_color(rgb(colors::TEXT_MUTED))
                 .child("Loading…")
                 .into_any_element();
         }
@@ -39,7 +40,8 @@ impl Render for ProductList {
         }
 
         let rows: Vec<_> = store.products.iter().map(|p| {
-            product_row(p, store.selected_product_id == Some(p.product.id))
+            let selected = store.selected_product_id == Some(p.product.id);
+            product_row(p, selected, self.store.clone())
         }).collect();
 
         div()
@@ -53,7 +55,8 @@ impl Render for ProductList {
     }
 }
 
-fn product_row(p: &ProductWithStock, selected: bool) -> impl IntoElement {
+fn product_row(p: &ProductWithStock, selected: bool, store: Entity<InventoryStore>) -> impl IntoElement {
+    let product_id = p.product.id;
     let badge_color = match p.status {
         StockStatus::Healthy  => colors::STATUS_GREEN,
         StockStatus::Low      => colors::STATUS_AMBER,
@@ -64,6 +67,7 @@ fn product_row(p: &ProductWithStock, selected: bool) -> impl IntoElement {
     let row_bg = if selected { colors::SURFACE_ACTIVE } else { colors::CANVAS_BG };
 
     div()
+        .id(format!("product-{product_id}"))
         .flex()
         .flex_row()
         .items_center()
@@ -72,6 +76,12 @@ fn product_row(p: &ProductWithStock, selected: bool) -> impl IntoElement {
         .py(px(6.))
         .bg(rgb(row_bg))
         .cursor_pointer()
+        .on_mouse_down(
+            MouseButton::Left,
+            move |_event: &MouseDownEvent, _window: &mut Window, cx: &mut App| {
+                store.update(cx, |s, cx| s.select_product(product_id, cx));
+            },
+        )
         // Status badge — 8×8 colored dot
         .child(
             div()
