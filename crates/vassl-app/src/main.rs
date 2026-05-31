@@ -9,10 +9,14 @@ mod root;
 mod sidebar;
 mod status_bar;
 
-use actions::{FocusSearch, NewRecord, OpenAuditLog, OpenInventory, OpenPriceBook, OpenQuotations};
-use vassl_ui::text_input::{Backspace, Copy, Cut, Delete, End, Home, Left, Paste, Right, SelectAll, SelectLeft, SelectRight};
+use actions::{ConfirmSelection, EscapeModal, FocusSearch, NewRecord, OpenAuditLog, OpenInventory, OpenPriceBook, OpenQuotations, SelectNext, SelectPrev};
+use vassl_ui::text_input::{BackTab, Backspace, Copy, Cut, Delete, End, Home, Left, Paste, Right, SelectAll, SelectLeft, SelectRight, Tab as TextTab};
+use vassl_inventory::stock_form::{EscapeForm as StockEscapeForm, TabField as StockTab, BackTabField as StockBackTab};
+use vassl_pricebook::price_form::{EscapeForm as PriceEscapeForm, TabField as PriceTab, BackTabField as PriceBackTab};
+use vassl_quotations::quotation_form::EscapeForm as QuotationEscapeForm;
+use vassl_ui::{ThemeColors, ThemeHandle};
 use app::VasslApp;
-use gpui::{App, AppContext, Bounds, KeyBinding, WindowBounds, WindowOptions, px, size};
+use gpui::{App, AppContext, Bounds, KeyBinding, WindowAppearance, WindowBounds, WindowOptions, px, size};
 use root::VasslRoot;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::{fmt, layer::SubscriberExt as _, util::SubscriberInitExt as _, EnvFilter};
@@ -62,6 +66,13 @@ fn main() {
         vassl_quotations::init(cx);
         vassl_pricebook::init(cx);
 
+        // Initialize theme based on current OS appearance.
+        let initial_dark = matches!(
+            cx.window_appearance(),
+            WindowAppearance::Dark | WindowAppearance::VibrantDark
+        );
+        cx.set_global(ThemeHandle(if initial_dark { ThemeColors::dark() } else { ThemeColors::light() }));
+
         cx.activate(true);
 
         // Keybindings are also documented in assets/keymaps/default.json (kept in sync manually).
@@ -86,7 +97,25 @@ fn main() {
             KeyBinding::new("end",              End,         Some("TextInput")),
             KeyBinding::new("secondary-v",      Paste,       Some("TextInput")),
             KeyBinding::new("secondary-c",      Copy,        Some("TextInput")),
-            KeyBinding::new("secondary-x",      Cut,         Some("TextInput")),
+            KeyBinding::new("secondary-x",      Cut,              Some("TextInput")),
+            KeyBinding::new("tab",               TextTab,          Some("TextInput")),
+            KeyBinding::new("shift-tab",         BackTab,          Some("TextInput")),
+            // Escape closes overlays
+            KeyBinding::new("escape",            EscapeModal,      Some("VasslRoot")),
+            // CommandPalette keyboard navigation
+            KeyBinding::new("down",              SelectNext,       Some("CommandPalette")),
+            KeyBinding::new("up",                SelectPrev,       Some("CommandPalette")),
+            KeyBinding::new("enter",             ConfirmSelection, Some("CommandPalette")),
+            // StockEntryForm escape + tab
+            KeyBinding::new("escape",            StockEscapeForm,  Some("StockEntryForm")),
+            KeyBinding::new("tab",               StockTab,         Some("StockEntryForm")),
+            KeyBinding::new("shift-tab",         StockBackTab,     Some("StockEntryForm")),
+            // PriceEntryForm escape + tab
+            KeyBinding::new("escape",            PriceEscapeForm,  Some("PriceEntryForm")),
+            KeyBinding::new("tab",               PriceTab,         Some("PriceEntryForm")),
+            KeyBinding::new("shift-tab",         PriceBackTab,     Some("PriceEntryForm")),
+            // QuotationForm escape
+            KeyBinding::new("escape",            QuotationEscapeForm, Some("QuotationForm")),
         ]);
 
         let bounds = Bounds::centered(None, size(px(1280.0), px(800.0)), cx);
@@ -97,7 +126,18 @@ fn main() {
                 app_id: Some(platform::app_name().to_string()),
                 ..Default::default()
             },
-            |window, cx| cx.new(|cx| VasslRoot::new(window, cx)),
+            |window, cx| {
+                // Update theme when OS appearance changes.
+                window.observe_window_appearance(|window, cx| {
+                    let dark = matches!(
+                        window.appearance(),
+                        WindowAppearance::Dark | WindowAppearance::VibrantDark
+                    );
+                    cx.set_global(ThemeHandle(if dark { ThemeColors::dark() } else { ThemeColors::light() }));
+                })
+                .detach();
+                cx.new(|cx| VasslRoot::new(window, cx))
+            },
         ) {
             Ok(_handle) => {}
             Err(e) => {
