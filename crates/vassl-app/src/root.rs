@@ -1,6 +1,6 @@
 use gpui::{Context, Entity, IntoElement, Render, Subscription, Window, div, prelude::*, rgb};
 
-use crate::actions::{FocusSearch, OpenAuditLog, OpenInventory, OpenPriceBook, OpenQuotations};
+use crate::actions::{EscapeModal, FocusSearch, OpenAuditLog, OpenInventory, OpenPriceBook, OpenQuotations};
 use crate::audit_log::AuditLogPanel;
 use crate::colors;
 use crate::command_palette::{CommandPalette, PaletteEvent, PaletteCommand};
@@ -136,6 +136,16 @@ impl Render for VasslRoot {
             }))
             .on_action(cx.listener(|this, _: &FocusSearch, window, cx| {
                 this.open_palette(window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &EscapeModal, _w, cx| {
+                if this.palette.is_some() {
+                    this._palette_sub = None;
+                    this.palette = None;
+                    cx.notify();
+                } else if this.audit_log.is_some() {
+                    this.audit_log = None;
+                    cx.notify();
+                }
             }))
             .relative()
             .flex().flex_col().w_full().h_full()

@@ -7,4 +7,8 @@ actions!(vassl, [
     OpenAuditLog,
     NewRecord,
     FocusSearch,
+    EscapeModal,
+    SelectNext,
+    SelectPrev,
+    ConfirmSelection,
 ]);

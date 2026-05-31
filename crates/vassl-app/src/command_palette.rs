@@ -2,6 +2,7 @@ use gpui::{Context, EventEmitter, FocusHandle, Focusable, IntoElement, Render, W
            div, prelude::*, px, rgb, rgba};
 use vassl_ui::{TextInput, text_field};
 
+use crate::actions::{ConfirmSelection, EscapeModal, SelectNext, SelectPrev};
 use crate::colors;
 
 /// The set of top-level commands the palette can dispatch.
@@ -97,6 +98,23 @@ impl Render for CommandPalette {
             .child(
                 div()
                     .id("palette-popup")
+                    .key_context("CommandPalette")
+                    .on_action(cx.listener(|_, _: &EscapeModal, _, cx| {
+                        cx.emit(PaletteEvent::Dismissed);
+                    }))
+                    .on_action(cx.listener(|this, _: &SelectNext, _, cx| {
+                        let max = filter_commands(this.query.read(cx).text()).len().saturating_sub(1);
+                        if this.selected_idx < max { this.selected_idx += 1; cx.notify(); }
+                    }))
+                    .on_action(cx.listener(|this, _: &SelectPrev, _, cx| {
+                        if this.selected_idx > 0 { this.selected_idx -= 1; cx.notify(); }
+                    }))
+                    .on_action(cx.listener(|this, _: &ConfirmSelection, _, cx| {
+                        let matches = filter_commands(this.query.read(cx).text());
+                        if let Some(cmd) = matches.get(this.selected_idx) {
+                            cx.emit(PaletteEvent::Execute((*cmd).clone()));
+                        }
+                    }))
                     .w(px(480.))
                     .bg(rgb(colors::CANVAS_BG)).rounded(px(8.)).p(px(12.))
                     .flex().flex_col().gap(px(8.))

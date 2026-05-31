@@ -1,9 +1,11 @@
 use gpui::{Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Window,
-           div, prelude::*, px, rgb, rgba, SharedString};
+           actions, div, prelude::*, px, rgb, rgba, SharedString};
 use vassl_core::AcquisitionType;
 use vassl_ui::{TextInput, text_field};
 
 use crate::colors;
+
+actions!(stock_form, [EscapeForm, TabField, BackTabField]);
 use crate::db::InventoryDb;
 use crate::store::InventoryStore;
 
@@ -96,6 +98,32 @@ impl Render for StockEntryForm {
             .absolute().top_0().left_0().right_0().bottom_0()
             .flex().items_center().justify_center()
             .bg(rgba(0x00000099))
+            .key_context("StockEntryForm")
+            .on_action(cx.listener(|_, _: &EscapeForm, _, cx| {
+                cx.emit(StockFormEvent::Cancelled);
+            }))
+            .on_action(cx.listener(|this, _: &TabField, window, cx| {
+                let handles = [
+                    this.quantity.read(cx).focus_handle.clone(),
+                    this.unit_cost.read(cx).focus_handle.clone(),
+                    this.supplier.read(cx).focus_handle.clone(),
+                    this.invoice_ref.read(cx).focus_handle.clone(),
+                ];
+                let current = handles.iter().position(|h| h.is_focused(window));
+                let next = handles[(current.map(|i| i + 1).unwrap_or(0)) % handles.len()].clone();
+                window.focus(&next, cx);
+            }))
+            .on_action(cx.listener(|this, _: &BackTabField, window, cx| {
+                let handles = [
+                    this.quantity.read(cx).focus_handle.clone(),
+                    this.unit_cost.read(cx).focus_handle.clone(),
+                    this.supplier.read(cx).focus_handle.clone(),
+                    this.invoice_ref.read(cx).focus_handle.clone(),
+                ];
+                let current = handles.iter().position(|h| h.is_focused(window));
+                let prev = handles[(current.unwrap_or(0) + handles.len() - 1) % handles.len()].clone();
+                window.focus(&prev, cx);
+            }))
             .child(
                 div()
                     .w(px(400.))

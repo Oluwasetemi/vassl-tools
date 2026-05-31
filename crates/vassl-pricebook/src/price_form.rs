@@ -1,9 +1,11 @@
 use gpui::{Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Window,
-           div, prelude::*, px, rgb, rgba, SharedString};
+           actions, div, prelude::*, px, rgb, rgba, SharedString};
 use vassl_core::selling_price;
 use vassl_ui::{TextInput, text_field};
 
 use crate::colors;
+
+actions!(price_form, [EscapeForm, TabField, BackTabField]);
 use crate::db::PriceBookDb;
 use crate::store::PriceBookStore;
 
@@ -102,6 +104,30 @@ impl Render for PriceEntryForm {
             .absolute().top_0().left_0().right_0().bottom_0()
             .flex().items_center().justify_center()
             .bg(rgba(0x00000099))
+            .key_context("PriceEntryForm")
+            .on_action(cx.listener(|_, _: &EscapeForm, _, cx| {
+                cx.emit(PriceFormEvent::Cancelled);
+            }))
+            .on_action(cx.listener(|this, _: &TabField, window, cx| {
+                let handles = [
+                    this.cost.read(cx).focus_handle.clone(),
+                    this.duty.read(cx).focus_handle.clone(),
+                    this.markup.read(cx).focus_handle.clone(),
+                ];
+                let current = handles.iter().position(|h| h.is_focused(window));
+                let next = handles[(current.map(|i| i + 1).unwrap_or(0)) % handles.len()].clone();
+                window.focus(&next, cx);
+            }))
+            .on_action(cx.listener(|this, _: &BackTabField, window, cx| {
+                let handles = [
+                    this.cost.read(cx).focus_handle.clone(),
+                    this.duty.read(cx).focus_handle.clone(),
+                    this.markup.read(cx).focus_handle.clone(),
+                ];
+                let current = handles.iter().position(|h| h.is_focused(window));
+                let prev = handles[(current.unwrap_or(0) + handles.len() - 1) % handles.len()].clone();
+                window.focus(&prev, cx);
+            }))
             .child(
                 div()
                     .w(px(420.)).bg(rgb(colors::CANVAS_BG)).rounded(px(8.)).p(px(24.))

@@ -1,9 +1,11 @@
 use gpui::{Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
-           MouseButton, MouseDownEvent, Render, Window, div, prelude::*, px, rgb, rgba, SharedString};
+           MouseButton, MouseDownEvent, Render, Window, actions, div, prelude::*, px, rgb, rgba, SharedString};
 use vassl_core::Project;
 use vassl_ui::{TextInput, text_field};
 
 use crate::colors;
+
+actions!(quotation_form, [EscapeForm]);
 use crate::db::QuotationDb;
 use crate::store::QuotationStore;
 
@@ -73,6 +75,10 @@ impl Render for QuotationForm {
             .absolute().top_0().left_0().right_0().bottom_0()
             .flex().items_center().justify_center()
             .bg(rgba(0x00000099))
+            .key_context("QuotationForm")
+            .on_action(cx.listener(|_, _: &EscapeForm, _, cx| {
+                cx.emit(QuotationFormEvent::Cancelled);
+            }))
             .child(
                 div()
                     .w(px(460.)).bg(rgb(colors::CANVAS_BG)).rounded(px(8.)).p(px(24.))
