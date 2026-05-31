@@ -1,0 +1,13 @@
+[
+  {
+    "context": "VasslRoot",
+    "bindings": {
+      "ctrl-1":       "vassl::OpenInventory",
+      "ctrl-2":       "vassl::OpenQuotations",
+      "ctrl-3":       "vassl::OpenPriceBook",
+      "ctrl-shift-a": "vassl::OpenAuditLog",
+      "ctrl-n":       "vassl::NewRecord",
+      "ctrl-f":       "vassl::FocusSearch"
+    }
+  }
+]

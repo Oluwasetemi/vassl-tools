@@ -6,8 +6,9 @@ mod root;
 mod sidebar;
 mod status_bar;
 
+use actions::{FocusSearch, NewRecord, OpenAuditLog, OpenInventory, OpenPriceBook, OpenQuotations};
 use app::VasslApp;
-use gpui::{App, AppContext, Bounds, WindowBounds, WindowOptions, px, size};
+use gpui::{App, AppContext, Bounds, KeyBinding, WindowBounds, WindowOptions, px, size};
 use root::VasslRoot;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::{fmt, layer::SubscriberExt as _, util::SubscriberInitExt as _, EnvFilter};
@@ -56,6 +57,16 @@ fn main() {
         vassl_pricebook::init();
 
         cx.activate(true);
+
+        // Load keybindings
+        cx.bind_keys([
+            KeyBinding::new("ctrl-1",       OpenInventory,  Some("VasslRoot")),
+            KeyBinding::new("ctrl-2",       OpenQuotations, Some("VasslRoot")),
+            KeyBinding::new("ctrl-3",       OpenPriceBook,  Some("VasslRoot")),
+            KeyBinding::new("ctrl-shift-a", OpenAuditLog,   Some("VasslRoot")),
+            KeyBinding::new("ctrl-n",       NewRecord,      Some("VasslRoot")),
+            KeyBinding::new("ctrl-f",       FocusSearch,    Some("VasslRoot")),
+        ]);
 
         let bounds = Bounds::centered(None, size(px(1280.0), px(800.0)), cx);
 

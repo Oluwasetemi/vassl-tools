@@ -1,7 +1,8 @@
 use gpui::{Context, Entity, IntoElement, Render, Window, div, prelude::*, rgb};
 
+use crate::actions::{OpenInventory, OpenPriceBook, OpenQuotations};
 use crate::colors;
-use crate::sidebar::Sidebar;
+use crate::sidebar::{ActiveModule, Sidebar};
 use crate::status_bar::StatusBar;
 
 pub struct VasslRoot {
@@ -19,8 +20,27 @@ impl VasslRoot {
 }
 
 impl Render for VasslRoot {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
+            .key_context("VasslRoot")
+            .on_action(cx.listener(|this, _: &OpenInventory, _w, cx| {
+                this.sidebar.update(cx, |s, cx| {
+                    s.active = ActiveModule::Inventory;
+                    cx.notify();
+                });
+            }))
+            .on_action(cx.listener(|this, _: &OpenQuotations, _w, cx| {
+                this.sidebar.update(cx, |s, cx| {
+                    s.active = ActiveModule::Quotations;
+                    cx.notify();
+                });
+            }))
+            .on_action(cx.listener(|this, _: &OpenPriceBook, _w, cx| {
+                this.sidebar.update(cx, |s, cx| {
+                    s.active = ActiveModule::PriceBook;
+                    cx.notify();
+                });
+            }))
             .flex()
             .flex_col()
             .w_full()

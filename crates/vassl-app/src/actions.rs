@@ -1,1 +1,10 @@
-// populated in Task 8
+use gpui::actions;
+
+actions!(vassl, [
+    OpenInventory,
+    OpenQuotations,
+    OpenPriceBook,
+    OpenAuditLog,
+    NewRecord,
+    FocusSearch,
+]);
