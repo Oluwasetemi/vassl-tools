@@ -1,3 +1,4 @@
+pub mod colors;
 pub mod db;
 pub mod panel;
 pub mod product_list;
