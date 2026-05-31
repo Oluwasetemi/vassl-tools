@@ -16,6 +16,7 @@ sqlez.workspace      = true
 vassl-core           = { path = "../vassl-core" }
 vassl-db             = { path = "../vassl-db" }
 vassl-inventory      = { path = "../vassl-inventory" }
+vassl-ui             = { path = "../vassl-ui" }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt"] }
