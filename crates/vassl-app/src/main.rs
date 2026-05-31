@@ -1,1 +1,70 @@
-fn main() { println!("VASSL starting..."); }
+mod actions;
+mod app;
+mod platform;
+mod root;
+mod sidebar;
+mod status_bar;
+
+use app::VasslApp;
+use gpui::{App, AppContext, Bounds, WindowBounds, WindowOptions, px, size};
+use root::VasslRoot;
+use tracing_appender::rolling::{RollingFileAppender, Rotation};
+use tracing_subscriber::{fmt, layer::SubscriberExt as _, util::SubscriberInitExt as _, EnvFilter};
+
+fn init_tracing() -> tracing_appender::non_blocking::WorkerGuard {
+    let log_dir = dirs::data_local_dir()
+        .expect("no local data dir")
+        .join("VASSL")
+        .join("logs");
+    std::fs::create_dir_all(&log_dir).expect("create log dir");
+
+    let appender = RollingFileAppender::builder()
+        .rotation(Rotation::DAILY)
+        .filename_prefix("vassl")
+        .filename_suffix("log")
+        .max_log_files(7)
+        .build(&log_dir)
+        .expect("init log appender");
+
+    let (non_blocking, guard) = tracing_appender::non_blocking(appender);
+
+    tracing_subscriber::registry()
+        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
+        .with(fmt::layer().with_writer(non_blocking).with_ansi(false))
+        .with(fmt::layer().with_writer(std::io::stdout).pretty())
+        .init();
+
+    guard
+}
+
+fn main() {
+    let _tracing_guard = init_tracing();
+    tracing::info!("VASSL starting");
+
+    gpui_platform::application().run(|cx: &mut App| {
+        if let Err(e) = vassl_db::init(cx) {
+            tracing::error!("DB init failed: {e:?}");
+            cx.quit();
+            return;
+        }
+
+        let _app_state = VasslApp::new(cx);
+
+        vassl_inventory::init();
+        vassl_quotations::init();
+        vassl_pricebook::init();
+
+        cx.activate(true);
+
+        let bounds = Bounds::centered(None, size(px(1280.0), px(800.0)), cx);
+
+        cx.open_window(
+            WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(bounds)),
+                ..Default::default()
+            },
+            |window, cx| cx.new(|cx| VasslRoot::new(window, cx)),
+        )
+        .unwrap();
+    });
+}
