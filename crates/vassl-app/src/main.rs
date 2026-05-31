@@ -41,6 +41,8 @@ fn init_tracing() -> tracing_appender::non_blocking::WorkerGuard {
 
 fn main() {
     let _tracing_guard = init_tracing();
+    // Bridge log::warn! / log::error! from GPUI into our tracing pipeline.
+    tracing_log::LogTracer::init().ok();
     tracing::info!("VASSL starting");
 
     gpui_platform::application().run(|cx: &mut App| {

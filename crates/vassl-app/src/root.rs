@@ -5,11 +5,13 @@ use crate::colors;
 use crate::sidebar::{ActiveModule, Sidebar};
 use crate::status_bar::StatusBar;
 use vassl_inventory::panel::InventoryPanel;
+use vassl_pricebook::panel::PriceBookPanel;
 
 pub struct VasslRoot {
-    sidebar:         Entity<Sidebar>,
-    status_bar:      Entity<StatusBar>,
-    inventory_panel: Entity<InventoryPanel>,
+    sidebar:          Entity<Sidebar>,
+    status_bar:       Entity<StatusBar>,
+    inventory_panel:  Entity<InventoryPanel>,
+    pricebook_panel:  Entity<PriceBookPanel>,
 }
 
 impl VasslRoot {
@@ -18,6 +20,7 @@ impl VasslRoot {
             sidebar:         cx.new(Sidebar::new),
             status_bar:      cx.new(StatusBar::new),
             inventory_panel: cx.new(InventoryPanel::new),
+            pricebook_panel: cx.new(PriceBookPanel::new),
         }
     }
 }
@@ -28,9 +31,9 @@ impl Render for VasslRoot {
 
         let content = div().flex_1().h_full().flex().flex_col();
         let content = match active {
-            ActiveModule::Inventory => content.child(self.inventory_panel.clone()),
+            ActiveModule::Inventory  => content.child(self.inventory_panel.clone()),
             ActiveModule::Quotations => content.child(div().child("Quotations — Plan 4")),
-            ActiveModule::PriceBook => content.child(div().child("Price Book — Plan 3")),
+            ActiveModule::PriceBook  => content.child(self.pricebook_panel.clone()),
         };
 
         div()
