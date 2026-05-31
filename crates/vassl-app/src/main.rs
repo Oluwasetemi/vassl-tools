@@ -1,5 +1,6 @@
 mod actions;
 mod app;
+mod colors;
 mod platform;
 mod root;
 mod sidebar;
