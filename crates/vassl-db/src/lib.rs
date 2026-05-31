@@ -2,6 +2,7 @@ pub mod migrations;
 pub mod shared; // populated in Task 4
 
 pub use migrations::{AppMigrator, DomainMigration};
+pub use shared::SharedDomain;
 
 // Re-export write_and_log from the vendored db crate.  Module crates should
 // use this instead of importing `db` directly.

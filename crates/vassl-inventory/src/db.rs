@@ -1,15 +1,7 @@
 use anyhow::Context as _;
 use sqlez::domain::Domain;
 use vassl_core::{AcquisitionType, Product, StockEntry};
-
-// ── Domain marker for "shared" dependency ────────────────────────────────────
-// This lets static_connection! reference the "shared" domain as a dep.
-pub struct SharedDomain;
-impl Domain for SharedDomain {
-    const NAME: &'static str = "shared";
-    const MIGRATIONS: &'static [&'static str] = &[];
-    fn should_allow_migration_change(_: usize, _: &str, _: &str) -> bool { false }
-}
+use vassl_db::SharedDomain;
 
 // ── InventoryDb: typed connection handle ─────────────────────────────────────
 pub struct InventoryDb(pub sqlez::thread_safe_connection::ThreadSafeConnection);
@@ -87,16 +79,22 @@ impl InventoryDb {
         (product_id)
         .context("execute list_stock_entries")
         .map(|rows| {
-            rows.into_iter().map(|(id, product_id, quantity, unit_cost_usd, supplier,
-                                   acquired_at, acquisition_type, project_id, invoice_ref, notes)| {
-                let acquisition_type = match acquisition_type.as_str() {
-                    "project" => AcquisitionType::Project,
-                    _ => AcquisitionType::Restock,
-                };
-                StockEntry { id, product_id, quantity, unit_cost_usd, supplier,
-                             acquired_at, acquisition_type, project_id, invoice_ref, notes }
-            }).collect()
+            rows.into_iter()
+                .map(|(id, product_id, quantity, unit_cost_usd, supplier,
+                        acquired_at, acquisition_type_str, project_id, invoice_ref, notes)| {
+                    let acquisition_type = match acquisition_type_str.as_str() {
+                        "restock" => AcquisitionType::Restock,
+                        "project" => AcquisitionType::Project,
+                        other => return Err(anyhow::anyhow!(
+                            "unknown acquisition_type in DB: {other:?}"
+                        )),
+                    };
+                    Ok(StockEntry { id, product_id, quantity, unit_cost_usd, supplier,
+                                    acquired_at, acquisition_type, project_id, invoice_ref, notes })
+                })
+                .collect::<anyhow::Result<Vec<_>>>()
         })
+        .and_then(|r| r)
     }
 
     /// Products at or below their min_stock_level (min > 0 only).
@@ -104,9 +102,10 @@ impl InventoryDb {
         self.select::<(i64, String, String, Option<String>, String, f64, Option<String>, String)>(
             "SELECT p.id, p.sku, p.name, p.category, p.unit, p.min_stock_level, p.notes, p.created_at
              FROM products p
+             LEFT JOIN stock_entries s ON s.product_id = p.id
              WHERE p.min_stock_level > 0
-               AND (SELECT COALESCE(SUM(quantity), 0) FROM stock_entries WHERE product_id = p.id)
-                   <= p.min_stock_level
+             GROUP BY p.id
+             HAVING COALESCE(SUM(s.quantity), 0) <= p.min_stock_level
              ORDER BY p.name",
         )
         .context("prepare products_below_min_stock")?()
@@ -159,13 +158,17 @@ impl InventoryDb {
         quantity: f64,
         unit_cost_usd: f64,
         supplier: Option<&str>,
-        acquisition_type: &str,
+        acquisition_type: AcquisitionType,
         project_id: Option<i64>,
         invoice_ref: Option<&str>,
         notes: Option<&str>,
     ) -> anyhow::Result<()> {
         let supplier = supplier.map(String::from);
-        let acquisition_type = acquisition_type.to_string();
+        let acq = match acquisition_type {
+            AcquisitionType::Restock => "restock",
+            AcquisitionType::Project => "project",
+        }
+        .to_string();
         let invoice_ref = invoice_ref.map(String::from);
         let notes = notes.map(String::from);
         let now = chrono::Utc::now().to_rfc3339();
@@ -179,7 +182,7 @@ impl InventoryDb {
             )
             .context("prepare insert_stock_entry")?
             ((product_id, quantity, unit_cost_usd, supplier, now,
-              acquisition_type, project_id, invoice_ref, notes))
+              acq, project_id, invoice_ref, notes))
             .context("execute insert_stock_entry")
         })
         .await
@@ -220,8 +223,8 @@ mod tests {
     async fn insert_stock_entry_updates_current_stock() {
         let db = InventoryDb::open_test_db("inv_test_stock_update").await;
         let id = db.insert_product("CAB-001", "Cable", None, "meters", 100.0, None).await.unwrap();
-        db.insert_stock_entry(id, 50.0, 2.5, Some("SupplierA"), "restock", None, None, None).await.unwrap();
-        db.insert_stock_entry(id, 30.0, 2.8, None, "project", None, None, None).await.unwrap();
+        db.insert_stock_entry(id, 50.0, 2.5, Some("SupplierA"), AcquisitionType::Restock, None, None, None).await.unwrap();
+        db.insert_stock_entry(id, 30.0, 2.8, None, AcquisitionType::Project, None, None, None).await.unwrap();
         assert_eq!(db.current_stock(id).unwrap(), 80.0);
     }
 
@@ -229,7 +232,7 @@ mod tests {
     async fn products_below_min_stock_detected() {
         let db = InventoryDb::open_test_db("inv_test_below_min").await;
         let id = db.insert_product("DVR-001", "DVR", None, "pcs", 5.0, None).await.unwrap();
-        db.insert_stock_entry(id, 3.0, 150.0, None, "restock", None, None, None).await.unwrap();
+        db.insert_stock_entry(id, 3.0, 150.0, None, AcquisitionType::Restock, None, None, None).await.unwrap();
         let below = db.products_below_min_stock().unwrap();
         assert_eq!(below.len(), 1);
         assert_eq!(below[0].sku, "DVR-001");
@@ -238,8 +241,7 @@ mod tests {
     #[tokio::test]
     async fn products_at_zero_min_not_alerted() {
         let db = InventoryDb::open_test_db("inv_test_zero_min_ok").await;
-        let id = db.insert_product("MISC-001", "Misc", None, "pcs", 0.0, None).await.unwrap();
-        let _ = id;
+        db.insert_product("MISC-001", "Misc", None, "pcs", 0.0, None).await.unwrap();
         let below = db.products_below_min_stock().unwrap();
         assert!(below.is_empty());
     }

@@ -6,9 +6,9 @@ edition = "2021"
 [dependencies]
 gpui.workspace       = true
 anyhow.workspace     = true
-thiserror.workspace  = true
-serde.workspace      = true
-serde_json.workspace = true
+thiserror.workspace  = true   # used by store.rs (Task 2)
+serde.workspace      = true   # used by store.rs (Task 2)
+serde_json.workspace = true   # used by store.rs (Task 2)
 chrono.workspace     = true
 sqlez.workspace      = true
 vassl-db             = { path = "../vassl-db" }

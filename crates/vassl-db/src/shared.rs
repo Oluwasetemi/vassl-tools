@@ -42,6 +42,26 @@ inventory::submit! {
 }
 
 // ---------------------------------------------------------------------------
+// Named type — lets downstream crates reference "shared" in static_connection!
+// dep lists WITHOUT re-registering migrations (no inventory::submit! here).
+// ---------------------------------------------------------------------------
+
+/// Marker type for the "shared" domain.
+///
+/// Implement `sqlez::domain::Domain` so that `static_connection!` can list it
+/// as a dependency, but do NOT call `inventory::submit!` — the real migration
+/// is already submitted above.
+pub struct SharedDomain;
+
+impl sqlez::domain::Domain for SharedDomain {
+    const NAME: &'static str = "shared";
+    const MIGRATIONS: &'static [&'static str] = &[];
+    fn should_allow_migration_change(_: usize, _: &str, _: &str) -> bool {
+        false
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Helper functions
 // ---------------------------------------------------------------------------
 
