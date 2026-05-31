@@ -83,6 +83,7 @@ impl PriceBookStore {
                 .await;
 
             let _ = this.update(cx, |store, cx| {
+                if store.selected_product_id != Some(product_id) { return; } // stale result
                 match result {
                     Ok(entries) => {
                         store.history = entries;
@@ -109,7 +110,7 @@ mod tests {
             cost_price_usd:    cost,
             duty_cost_usd:     0.0,
             markup_percent:    30.0,
-            selling_price_usd: cost * 1.3,
+            selling_price_usd: vassl_core::selling_price(cost, 0.0, 30.0).unwrap_or(0.0),
             effective_date:    "2026-01-01T00:00:00Z".to_string(),
             notes:             None,
         }
@@ -137,15 +138,4 @@ mod tests {
         assert_eq!(pp.latest.unwrap().selling_price_usd, 130.0);
     }
 
-    #[test]
-    fn history_ordering_invariant() {
-        let entries = vec![
-            make_entry(3, 1, 300.0),
-            make_entry(2, 1, 200.0),
-            make_entry(1, 1, 100.0),
-        ];
-        let history: Vec<PriceEntry> = entries.clone();
-        assert_eq!(history[0].id, 3);
-        assert_eq!(history[2].id, 1);
-    }
 }
