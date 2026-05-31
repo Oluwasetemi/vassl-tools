@@ -1,8 +1,16 @@
+pub mod colors;
 pub mod db;
+pub mod panel;
+pub mod price_form;
+pub mod price_table;
 pub mod store;
 
-pub use db::PriceBookDb;
-pub use store::{PriceBookStore, PriceBookStoreHandle, PriceBookEvent, ProductPrice};
+use gpui::{App, AppContext, Entity};
 
-use gpui::App;
-pub fn init(_cx: &mut App) {}
+pub use db::PriceBookDb;
+pub use store::{PriceBookStore, PriceBookStoreHandle};
+
+pub fn init(cx: &mut App) {
+    let store: Entity<PriceBookStore> = cx.new(PriceBookStore::new);
+    cx.set_global(PriceBookStoreHandle(store));
+}
