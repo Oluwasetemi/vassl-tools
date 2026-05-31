@@ -39,14 +39,15 @@ impl AppDatabase {
 ///
 /// | Platform | Path |
 /// |----------|------|
-/// | macOS    | `~/Library/Application Support/VASSL/vassl.db` |
-/// | Windows  | `%LOCALAPPDATA%\VASSL\vassl.db` |
-/// | Linux    | `$XDG_DATA_HOME/VASSL/vassl.db` |
+/// | macOS    | `~/Library/Application Support/VASSL/0-global/db.sqlite` |
+/// | Windows  | `%LOCALAPPDATA%\VASSL\0-global\db.sqlite` |
+/// | Linux    | `$XDG_DATA_HOME/VASSL/0-global/db.sqlite` |
 pub fn db_path() -> PathBuf {
     dirs::data_local_dir()
         .expect("platform has no local data dir")
         .join("VASSL")
-        .join("vassl.db")
+        .join("0-global")
+        .join("db.sqlite")
 }
 
 /// Opens the VASSL SQLite database, runs all inventory-registered
@@ -56,33 +57,17 @@ pub fn db_path() -> PathBuf {
 /// Must be called once during application startup, before any domain code
 /// accesses the database.
 pub fn init(cx: &mut App) -> anyhow::Result<()> {
-    let path = db_path();
-
-    // Ensure the parent directory exists before handing the path to sqlez.
-    std::fs::create_dir_all(
-        path.parent().context("db path has no parent")?,
-    )
-    .context("failed to create VASSL data directory")?;
-
-    // The vendored `db` crate's `open_db` accepts a directory + scope.
-    // We use `GlobalDbScope` (scope_name = "global") so the file becomes
-    // `<parent>/0-global/db.sqlite`.  To land exactly at `vassl.db` we pass
-    // the parent of our desired path as db_dir and use a custom scope.
-    //
-    // Alternatively, we construct the connection directly via
-    // ThreadSafeConnection::builder, which is the simplest path.
-    let db_dir = path
+    let full_path = db_path();
+    let db_dir = full_path
         .parent()
         .context("db path has no parent")?
+        .parent()
+        .context("db path grandparent missing")?
         .to_path_buf();
-
-    // Block on the async open_db using gpui's block_on helper.
+    // db_dir is now data_local_dir()/VASSL
+    std::fs::create_dir_all(&db_dir).context("failed to create VASSL data directory")?;
     let conn = gpui::block_on(open_db::<AppMigrator>(&db_dir, GlobalDbScope));
-
-    // Wrap in our own AppDatabase global so callers use vassl-db's type, not
-    // the vendored db::AppDatabase.
     cx.set_global(AppDatabase(conn));
-
     Ok(())
 }
 
@@ -92,10 +77,9 @@ mod tests {
 
     #[test]
     fn db_path_contains_vassl() {
-        let p = db_path();
-        // The path should contain "VASSL" and end with "vassl.db".
-        let s = p.to_string_lossy();
-        assert!(s.contains("VASSL"), "expected VASSL in path, got: {s}");
-        assert!(s.ends_with("vassl.db"), "expected vassl.db suffix, got: {s}");
+        let path = db_path();
+        let s = path.to_string_lossy();
+        assert!(s.contains("VASSL"), "db_path should contain VASSL, got: {s}");
+        assert!(s.ends_with("db.sqlite"), "db_path should end with db.sqlite, got: {s}");
     }
 }
