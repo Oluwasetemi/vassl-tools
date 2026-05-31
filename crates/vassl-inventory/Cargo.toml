@@ -11,6 +11,7 @@ serde.workspace      = true   # used by store.rs (Task 2)
 serde_json.workspace = true   # used by store.rs (Task 2)
 chrono.workspace     = true
 sqlez.workspace      = true
+tracing.workspace    = true
 vassl-db             = { path = "../vassl-db" }
 vassl-core           = { path = "../vassl-core" }
 

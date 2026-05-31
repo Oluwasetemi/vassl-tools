@@ -1,15 +1,16 @@
 pub mod db;
-pub mod store;        // stub — populated in Task 2
-pub mod panel;        // stub — populated in Task 5
-pub mod product_list; // stub — populated in Task 4
-pub mod stock_form;   // stub — populated in Task 6
-pub mod restock;      // stub — populated in Task 5
+pub mod panel;
+pub mod product_list;
+pub mod restock;
+pub mod stock_form;
+pub mod store;
 
-use gpui::App;
+use gpui::{App, AppContext, Entity};
 
 pub use db::InventoryDb;
+pub use store::{InventoryStore, InventoryStoreHandle};
 
 pub fn init(cx: &mut App) {
-    // InventoryStore created in Task 2 and registered here
-    let _ = cx;
+    let store: Entity<InventoryStore> = cx.new(InventoryStore::new);
+    cx.set_global(InventoryStoreHandle(store));
 }
