@@ -52,9 +52,9 @@ fn main() {
 
         let _app_state = VasslApp::new(cx);
 
-        vassl_inventory::init();
-        vassl_quotations::init();
-        vassl_pricebook::init();
+        vassl_inventory::init(cx);
+        vassl_quotations::init(cx);
+        vassl_pricebook::init(cx);
 
         cx.activate(true);
 

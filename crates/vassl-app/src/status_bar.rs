@@ -1,4 +1,4 @@
-use gpui::{Context, IntoElement, Render, Window, div, prelude::*, px, rgb};
+use gpui::{Context, IntoElement, Render, SharedString, Window, div, prelude::*, px, rgb};
 
 use crate::colors;
 
@@ -21,7 +21,7 @@ impl StatusBar {
 
 impl Render for StatusBar {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        let label = self.last_action.clone().unwrap_or_else(|| "Ready".to_string());
+        let label: SharedString = self.last_action.as_deref().unwrap_or("Ready").into();
 
         div()
             .w_full()

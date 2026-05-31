@@ -4,23 +4,35 @@ use crate::actions::{OpenInventory, OpenPriceBook, OpenQuotations};
 use crate::colors;
 use crate::sidebar::{ActiveModule, Sidebar};
 use crate::status_bar::StatusBar;
+use vassl_inventory::panel::InventoryPanel;
 
 pub struct VasslRoot {
-    sidebar:    Entity<Sidebar>,
-    status_bar: Entity<StatusBar>,
+    sidebar:         Entity<Sidebar>,
+    status_bar:      Entity<StatusBar>,
+    inventory_panel: Entity<InventoryPanel>,
 }
 
 impl VasslRoot {
     pub fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
-            sidebar:    cx.new(Sidebar::new),
-            status_bar: cx.new(StatusBar::new),
+            sidebar:         cx.new(Sidebar::new),
+            status_bar:      cx.new(StatusBar::new),
+            inventory_panel: cx.new(InventoryPanel::new),
         }
     }
 }
 
 impl Render for VasslRoot {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let active = self.sidebar.read(cx).active;
+
+        let content = div().flex_1().h_full().flex().flex_col();
+        let content = match active {
+            ActiveModule::Inventory => content.child(self.inventory_panel.clone()),
+            ActiveModule::Quotations => content.child(div().child("Quotations — Plan 4")),
+            ActiveModule::PriceBook => content.child(div().child("Price Book — Plan 3")),
+        };
+
         div()
             .key_context("VasslRoot")
             .on_action(cx.listener(|this, _: &OpenInventory, _w, cx| {
@@ -53,12 +65,7 @@ impl Render for VasslRoot {
                     .flex_row()
                     .flex_1()
                     .child(self.sidebar.clone())
-                    .child(
-                        div()
-                            .flex_1()
-                            .h_full()
-                            .child("pane area — Tasks 2-4"),
-                    ),
+                    .child(content),
             )
             .child(self.status_bar.clone())
     }

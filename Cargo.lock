@@ -6132,6 +6132,7 @@ dependencies = [
  "sqlez",
  "thiserror 2.0.18",
  "tokio",
+ "tracing",
  "vassl-core",
  "vassl-db",
 ]
@@ -6142,6 +6143,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "gpui",
  "inventory",
  "serde",
  "serde_json",
@@ -6156,6 +6158,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "gpui",
  "inventory",
  "serde",
  "serde_json",
