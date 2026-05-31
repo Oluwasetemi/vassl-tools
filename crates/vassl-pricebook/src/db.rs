@@ -2,6 +2,7 @@ use anyhow::Context as _;
 use sqlez::domain::Domain;
 use vassl_core::PriceEntry;
 use vassl_db::SharedDomain;
+use vassl_inventory::db::InventoryDb;
 
 pub struct PriceBookDb(pub sqlez::thread_safe_connection::ThreadSafeConnection);
 
@@ -35,7 +36,7 @@ impl Domain for PriceBookDb {
     fn should_allow_migration_change(_: usize, _: &str, _: &str) -> bool { false }
 }
 
-vassl_db::static_connection!(PriceBookDb, [SharedDomain]);
+vassl_db::static_connection!(PriceBookDb, [SharedDomain, InventoryDb]);
 
 impl PriceBookDb {
     pub fn list_entries_for_product(&self, product_id: i64) -> anyhow::Result<Vec<PriceEntry>> {
@@ -107,25 +108,11 @@ impl PriceBookDb {
         selling_price_usd: f64,
         notes:             Option<&str>,
     ) -> anyhow::Result<i64> {
-        let notes = notes.map(String::from);
-        let now   = chrono::Utc::now().to_rfc3339();
-        self.write(move |conn| {
-            conn.exec_bound::<(i64, f64, f64, f64, f64, String, Option<String>)>(
-                "INSERT INTO price_book_entries
-                 (product_id, cost_price_usd, duty_cost_usd, markup_percent,
-                  selling_price_usd, effective_date, notes)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            )
-            .context("prepare insert_entry")?
-            ((product_id, cost_price_usd, duty_cost_usd, markup_percent,
-              selling_price_usd, now, notes))
-            .context("execute insert_entry")?;
-            conn.select_row::<i64>("SELECT last_insert_rowid()")
-                .context("prepare last_insert_rowid")?()
-                .context("execute last_insert_rowid")?
-                .context("last_insert_rowid returned None")
-        })
-        .await
+        let now = chrono::Utc::now().to_rfc3339();
+        self.insert_entry_with_date(
+            product_id, cost_price_usd, duty_cost_usd, markup_percent,
+            selling_price_usd, notes, &now,
+        ).await
     }
 
     pub async fn insert_entry_with_date(
@@ -168,21 +155,6 @@ mod tests {
         let sku = sku.to_string();
         let name = name.to_string();
         db.write(move |conn| {
-            conn.exec(
-                "CREATE TABLE IF NOT EXISTS products (
-                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                    sku             TEXT UNIQUE NOT NULL,
-                    name            TEXT NOT NULL,
-                    category        TEXT,
-                    unit            TEXT NOT NULL,
-                    min_stock_level REAL NOT NULL DEFAULT 0,
-                    notes           TEXT,
-                    created_at      TEXT NOT NULL
-                )",
-            )
-            .context("create products table")?()
-            .context("exec create products")?;
-
             conn.exec_bound::<(String, String)>(
                 "INSERT INTO products (sku, name, unit, created_at)
                  VALUES (?1, ?2, 'pcs', datetime('now'))",
