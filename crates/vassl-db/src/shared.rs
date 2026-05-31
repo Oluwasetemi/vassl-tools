@@ -1,1 +1,164 @@
-// populated in Task 4
+use anyhow::Result;
+use sqlez::connection::Connection;
+
+use crate::migrations::DomainMigration;
+
+// ---------------------------------------------------------------------------
+// Migration registration
+// ---------------------------------------------------------------------------
+
+const SHARED_MIGRATIONS: &[&str] = &[
+    "CREATE TABLE IF NOT EXISTS settings (
+        key   TEXT PRIMARY KEY NOT NULL,
+        value TEXT NOT NULL
+    )",
+    "CREATE TABLE IF NOT EXISTS projects (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        name        TEXT NOT NULL,
+        client_name TEXT NOT NULL,
+        description TEXT,
+        status      TEXT NOT NULL DEFAULT 'active',
+        created_at  TEXT NOT NULL
+    )",
+    "CREATE TABLE IF NOT EXISTS audit_log (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        table_name TEXT NOT NULL,
+        record_id  INTEGER NOT NULL,
+        action     TEXT NOT NULL,
+        changed_by TEXT NOT NULL,
+        changed_at TEXT NOT NULL,
+        old_value  TEXT,
+        new_value  TEXT
+    )",
+];
+
+inventory::submit! {
+    DomainMigration {
+        name: "shared",
+        dependencies: &[],
+        migrations: SHARED_MIGRATIONS,
+        should_allow_migration_change: |_index, _old, _new| false,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Helper functions
+// ---------------------------------------------------------------------------
+
+/// Read a setting from the `settings` table.
+pub fn get_setting(conn: &Connection, key: &str) -> Result<Option<String>> {
+    conn.select_row_bound::<&str, String>("SELECT value FROM settings WHERE key = (?)")?
+        (key)
+}
+
+/// Write (upsert) a setting into the `settings` table.
+pub fn set_setting(conn: &Connection, key: &str, value: &str) -> Result<()> {
+    conn.exec_bound::<(&str, &str)>(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES ((?), (?))",
+    )?((key, value))
+}
+
+/// Read the `current_user` setting (returns `None` when not yet set).
+pub fn current_user(conn: &Connection) -> Result<Option<String>> {
+    get_setting(conn, "current_user")
+}
+
+/// Persist the `current_user` setting.
+pub fn set_current_user(conn: &Connection, name: &str) -> Result<()> {
+    set_setting(conn, "current_user", name)
+}
+
+/// Append a row to the `audit_log` table.
+#[allow(clippy::too_many_arguments)]
+pub fn log_audit(
+    conn: &Connection,
+    table_name: &str,
+    record_id: i64,
+    action: &str,
+    changed_by: &str,
+    old_value: Option<&str>,
+    new_value: Option<&str>,
+) -> Result<()> {
+    let changed_at = chrono::Utc::now().to_rfc3339();
+    conn.exec_bound::<(&str, i64, &str, &str, &str, Option<&str>, Option<&str>)>(
+        "INSERT INTO audit_log \
+            (table_name, record_id, action, changed_by, changed_at, old_value, new_value) \
+            VALUES ((?), (?), (?), (?), (?), (?), (?))",
+    )?((table_name, record_id, action, changed_by, &changed_at, old_value, new_value))
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Open an in-memory SQLite connection and run the three shared migrations
+    /// directly (without going through the full inventory machinery, which
+    /// requires all registered crates to be linked).
+    ///
+    /// Each call uses a unique URI so parallel tests do not share the same
+    /// named in-memory database (which would cause schema-locked errors).
+    fn open_test_conn(name: &str) -> Connection {
+        let conn = Connection::open_memory(Some(name));
+        conn.migrate("shared", SHARED_MIGRATIONS, &mut |_, _, _| false)
+            .expect("shared migrations failed");
+        conn
+    }
+
+    #[test]
+    fn test_settings_roundtrip() {
+        let conn = open_test_conn("shared_settings_test");
+
+        // Initially absent
+        assert_eq!(get_setting(&conn, "current_user").unwrap(), None);
+
+        // Set once
+        set_setting(&conn, "current_user", "Alice").unwrap();
+        assert_eq!(
+            get_setting(&conn, "current_user").unwrap(),
+            Some("Alice".to_string())
+        );
+
+        // Overwrite
+        set_setting(&conn, "current_user", "Bob").unwrap();
+        assert_eq!(
+            get_setting(&conn, "current_user").unwrap(),
+            Some("Bob".to_string())
+        );
+    }
+
+    #[test]
+    fn test_audit_log_insert() {
+        let conn = open_test_conn("shared_audit_test");
+
+        log_audit(&conn, "projects", 1, "CREATE", "Alice", None, Some("{\"name\":\"Proj\"}")).unwrap();
+
+        let count: Option<i64> = conn
+            .select_row("SELECT COUNT(*) FROM audit_log")
+            .unwrap()()
+            .unwrap();
+        assert_eq!(count, Some(1));
+    }
+
+    #[test]
+    fn test_projects_table_exists() {
+        let conn = open_test_conn("shared_projects_test");
+
+        let now = chrono::Utc::now().to_rfc3339();
+        conn.exec_bound::<(&str, &str, &str, &str)>(
+            "INSERT INTO projects (name, client_name, status, created_at) \
+             VALUES ((?), (?), (?), (?))",
+        )
+        .unwrap()(("Test Project", "Test Client", "active", now.as_str()))
+        .unwrap();
+
+        let count: Option<i64> = conn
+            .select_row("SELECT COUNT(*) FROM projects")
+            .unwrap()()
+            .unwrap();
+        assert_eq!(count, Some(1));
+    }
+}
