@@ -38,6 +38,7 @@ pub struct InventoryStore {
     pub loading: bool,
 }
 
+#[derive(Debug)]
 pub enum InventoryEvent {
     ProductsLoaded,
     StockEntriesLoaded,
@@ -57,6 +58,7 @@ impl InventoryStore {
 
     /// Async: fetch all products with current stock from DB, update self, notify.
     pub fn load_products(&mut self, cx: &mut Context<Self>) {
+        if self.loading { return; }
         self.loading = true;
         cx.notify();
 
@@ -64,16 +66,10 @@ impl InventoryStore {
         cx.spawn(async move |this, cx| {
             let result = cx.background_executor()
                 .spawn(async move {
-                    let products = db.list_products()?;
-                    let with_stock: anyhow::Result<Vec<ProductWithStock>> = products
-                        .into_iter()
-                        .map(|p| {
-                            let current = db.current_stock(p.id)?;
-                            let status = StockStatus::from_levels(current, p.min_stock_level);
-                            Ok(ProductWithStock { product: p, current_stock: current, status })
-                        })
-                        .collect();
-                    with_stock
+                    db.list_products_with_stock()?.into_iter().map(|(p, current_stock)| {
+                        let status = StockStatus::from_levels(current_stock, p.min_stock_level);
+                        Ok(ProductWithStock { product: p, current_stock, status })
+                    }).collect::<anyhow::Result<Vec<_>>>()
                 })
                 .await;
 
@@ -94,7 +90,9 @@ impl InventoryStore {
 
     /// Async: select a product and load its stock entries.
     pub fn select_product(&mut self, product_id: i64, cx: &mut Context<Self>) {
+        if self.selected_product_id == Some(product_id) { return; }
         self.selected_product_id = Some(product_id);
+        self.stock_entries.clear();  // prevent stale entries showing for new product
         cx.notify();
 
         let db = InventoryDb::global(&**cx);
@@ -117,8 +115,6 @@ impl InventoryStore {
         .detach();
     }
 }
-
-impl Global for InventoryStore {}
 
 /// Newtype wrapper so `Entity<InventoryStore>` can be stored as a GPUI global.
 ///
@@ -153,5 +149,11 @@ mod tests {
     #[test]
     fn stock_status_no_alert_when_min_zero() {
         assert_eq!(StockStatus::from_levels(0.0, 0.0), StockStatus::NoAlert);
+    }
+
+    #[test]
+    fn stock_status_low_at_exact_boundary() {
+        // 6.0 == 5.0 * 1.2, which is exactly at the Low/Healthy boundary (<=), so Low
+        assert_eq!(StockStatus::from_levels(6.0, 5.0), StockStatus::Low);
     }
 }

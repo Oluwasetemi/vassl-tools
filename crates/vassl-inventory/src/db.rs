@@ -97,6 +97,25 @@ impl InventoryDb {
         .and_then(|r| r)
     }
 
+    /// All products with current stock level, in a single JOIN query.
+    pub fn list_products_with_stock(&self) -> anyhow::Result<Vec<(Product, f64)>> {
+        self.select::<(i64, String, String, Option<String>, String, f64, Option<String>, String, f64)>(
+            "SELECT p.id, p.sku, p.name, p.category, p.unit, p.min_stock_level, p.notes, p.created_at,
+                    COALESCE(SUM(s.quantity), 0.0) AS current_stock
+             FROM products p
+             LEFT JOIN stock_entries s ON s.product_id = p.id
+             GROUP BY p.id
+             ORDER BY p.name",
+        )
+        .context("prepare list_products_with_stock")?()
+        .context("execute list_products_with_stock")
+        .map(|rows| {
+            rows.into_iter().map(|(id, sku, name, category, unit, min_stock_level, notes, created_at, current_stock)| {
+                (Product { id, sku, name, category, unit, min_stock_level, notes, created_at }, current_stock)
+            }).collect()
+        })
+    }
+
     /// Products at or below their min_stock_level (min > 0 only).
     pub fn products_below_min_stock(&self) -> anyhow::Result<Vec<Product>> {
         self.select::<(i64, String, String, Option<String>, String, f64, Option<String>, String)>(
@@ -244,5 +263,16 @@ mod tests {
         db.insert_product("MISC-001", "Misc", None, "pcs", 0.0, None).await.unwrap();
         let below = db.products_below_min_stock().unwrap();
         assert!(below.is_empty());
+    }
+
+    #[tokio::test]
+    async fn list_products_with_stock_aggregates_correctly() {
+        let db = InventoryDb::open_test_db("inv_test_list_with_stock_xyz").await;
+        let id = db.insert_product("PTZ-001", "PTZ Camera", None, "pcs", 2.0, None).await.unwrap();
+        db.insert_stock_entry(id, 5.0, 100.0, None, AcquisitionType::Restock, None, None, None).await.unwrap();
+        db.insert_stock_entry(id, 3.0, 95.0, None, AcquisitionType::Restock, None, None, None).await.unwrap();
+        let results = db.list_products_with_stock().unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].1, 8.0); // 5 + 3
     }
 }
