@@ -58,13 +58,19 @@ fn main() {
 
         let bounds = Bounds::centered(None, size(px(1280.0), px(800.0)), cx);
 
-        cx.open_window(
+        match cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
+                app_id: Some(platform::app_name().to_string()),
                 ..Default::default()
             },
             |window, cx| cx.new(|cx| VasslRoot::new(window, cx)),
-        )
-        .unwrap();
+        ) {
+            Ok(_handle) => {}
+            Err(e) => {
+                tracing::error!("failed to open main window: {e:?}");
+                cx.quit();
+            }
+        }
     });
 }
