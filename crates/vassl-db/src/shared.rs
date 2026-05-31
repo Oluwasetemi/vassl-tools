@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use sqlez::connection::Connection;
 
 use crate::migrations::DomainMigration;
@@ -47,7 +47,8 @@ inventory::submit! {
 
 /// Read a setting from the `settings` table.
 pub fn get_setting(conn: &Connection, key: &str) -> Result<Option<String>> {
-    conn.select_row_bound::<&str, String>("SELECT value FROM settings WHERE key = (?)")?
+    conn.select_row_bound::<&str, String>("SELECT value FROM settings WHERE key = (?)")
+        .context("failed to prepare settings SELECT")?
         (key)
 }
 
@@ -55,7 +56,9 @@ pub fn get_setting(conn: &Connection, key: &str) -> Result<Option<String>> {
 pub fn set_setting(conn: &Connection, key: &str, value: &str) -> Result<()> {
     conn.exec_bound::<(&str, &str)>(
         "INSERT OR REPLACE INTO settings (key, value) VALUES ((?), (?))",
-    )?((key, value))
+    )
+    .context("failed to prepare settings UPSERT")?
+    ((key, value))
 }
 
 /// Read the `current_user` setting (returns `None` when not yet set).
@@ -84,7 +87,9 @@ pub fn log_audit(
         "INSERT INTO audit_log \
             (table_name, record_id, action, changed_by, changed_at, old_value, new_value) \
             VALUES ((?), (?), (?), (?), (?), (?), (?))",
-    )?((table_name, record_id, action, changed_by, &changed_at, old_value, new_value))
+    )
+    .context("failed to prepare audit_log INSERT")?
+    ((table_name, record_id, action, changed_by, &changed_at, old_value, new_value))
 }
 
 // ---------------------------------------------------------------------------
@@ -141,6 +146,23 @@ mod tests {
             .unwrap()()
             .unwrap();
         assert_eq!(count, Some(1));
+
+        // Also verify the stored column values
+        let row = conn
+            .select_row_bound::<i64, (String, String, String)>(
+                "SELECT table_name, action, changed_by FROM audit_log WHERE record_id = ?1",
+            )
+            .context("prepare audit select")
+            .unwrap()(1)
+            .unwrap();
+        assert_eq!(
+            row,
+            Some((
+                "projects".to_string(),
+                "CREATE".to_string(),
+                "Alice".to_string()
+            ))
+        );
     }
 
     #[test]
