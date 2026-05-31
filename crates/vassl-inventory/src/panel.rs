@@ -8,7 +8,7 @@ use crate::store::InventoryStore;
 use crate::InventoryStoreHandle;
 
 #[derive(Clone, Copy, PartialEq)]
-enum Tab { Products, RestockAlerts }
+enum Tab { Products, Restock }
 
 pub struct InventoryPanel {
     #[allow(dead_code)] // used by Task 6 form
@@ -37,7 +37,7 @@ impl Render for InventoryPanel {
         let content = div().flex_1().h_full().flex().flex_col();
         let content = match active_tab {
             Tab::Products      => content.child(self.product_list.clone()),
-            Tab::RestockAlerts => content.child(self.restock_alerts.clone()),
+            Tab::Restock => content.child(self.restock_alerts.clone()),
         };
 
         div()
@@ -67,11 +67,11 @@ impl Render for InventoryPanel {
                         div()
                             .id("tab-restock")
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
-                            .bg(rgb(if active_tab == Tab::RestockAlerts { colors::SURFACE_ACTIVE } else { colors::CANVAS_BG }))
+                            .bg(rgb(if active_tab == Tab::Restock { colors::SURFACE_ACTIVE } else { colors::CANVAS_BG }))
                             .text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT))
                             .cursor_pointer()
                             .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
-                                this.active_tab = Tab::RestockAlerts;
+                                this.active_tab = Tab::Restock;
                                 cx.notify();
                             }))
                             .child("Restock Alerts")
