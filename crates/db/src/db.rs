@@ -292,7 +292,7 @@ where
         .detach()
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "zed-test-harness"))]
 mod tests {
     use std::thread;
 

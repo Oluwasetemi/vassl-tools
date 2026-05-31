@@ -145,7 +145,7 @@ impl ScopedKeyValueStore<'_> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "zed-test-harness"))]
 mod tests {
     use crate::kvp::KeyValueStore;
 
