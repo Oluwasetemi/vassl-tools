@@ -31,7 +31,7 @@ impl AppDatabase {
     /// Returns a reference to the underlying connection stored in the per-App
     /// global.  Panics if [`init`] has not been called.
     pub fn global(cx: &App) -> &ThreadSafeConnection {
-        db::AppDatabase::global(cx)
+        &cx.global::<AppDatabase>().0
     }
 }
 
