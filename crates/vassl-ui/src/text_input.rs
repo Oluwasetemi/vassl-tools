@@ -11,7 +11,8 @@ use unicode_segmentation::UnicodeSegmentation;
 
 actions!(
     text_input,
-    [Backspace, Delete, Left, Right, SelectLeft, SelectRight, SelectAll, Home, End, Paste, Cut, Copy]
+    [Backspace, Delete, Left, Right, SelectLeft, SelectRight, SelectAll,
+     Home, End, Paste, Cut, Copy, Tab, BackTab]
 );
 
 pub struct TextInput {
@@ -298,6 +299,8 @@ impl Render for TextInput {
             .on_action(cx.listener(Self::paste))
             .on_action(cx.listener(Self::cut))
             .on_action(cx.listener(Self::copy))
+            .on_action(cx.listener(|_, _: &Tab, _, _| {}))
+            .on_action(cx.listener(|_, _: &BackTab, _, _| {}))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up))
