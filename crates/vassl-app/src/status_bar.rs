@@ -1,4 +1,5 @@
 use gpui::{Context, IntoElement, Render, SharedString, Window, div, prelude::*, px, rgb};
+use vassl_ui::ThemeHandle;
 
 use crate::colors;
 
@@ -20,19 +21,20 @@ impl StatusBar {
 }
 
 impl Render for StatusBar {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let c = cx.global::<ThemeHandle>().0.clone();
         let label: SharedString = self.last_action.as_deref().unwrap_or("Ready").into();
 
         div()
             .w_full()
             .h(px(24.))
-            .bg(rgb(colors::SIDEBAR_BG))
+            .bg(rgb(c.sidebar_bg))
             .border_t_1()
-            .border_color(rgb(colors::SURFACE_DEFAULT))
+            .border_color(rgb(c.surface_default))
             .px(px(12.))
             .flex()
             .items_center()
-            .text_color(rgb(colors::TEXT_MUTED))
+            .text_color(rgb(c.text_muted))
             .text_size(px(11.))
             .child(label)
     }

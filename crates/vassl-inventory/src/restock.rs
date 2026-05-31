@@ -1,4 +1,5 @@
 use gpui::{Context, Entity, IntoElement, Render, Window, div, prelude::*, px, rgb};
+use vassl_ui::ThemeHandle;
 
 use crate::store::{InventoryStore, StockStatus};
 use crate::colors;
@@ -15,6 +16,7 @@ impl RestockAlerts {
 
 impl Render for RestockAlerts {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let c = cx.global::<ThemeHandle>().0.clone();
         // Extract owned data — borrow ends after this block
         let items: Vec<(String, f64, f64, String, bool)> = {
             let store = self.store.read(cx);
@@ -36,13 +38,13 @@ impl Render for RestockAlerts {
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_color(rgb(colors::TEXT_MUTED))
+                .text_color(rgb(c.text_muted))
                 .child("All stock levels healthy.")
                 .into_any_element();
         }
 
         let rows: Vec<_> = items.iter().map(|(name, current, min, unit, is_critical)| {
-            let badge = if *is_critical { colors::STATUS_RED } else { colors::STATUS_AMBER };
+            let badge = if *is_critical { c.status_red } else { c.status_amber };
 
             div()
                 .flex()
@@ -54,7 +56,7 @@ impl Render for RestockAlerts {
                     div().w(px(8.)).h(px(8.)).rounded_full().bg(rgb(badge)).mr(px(8.))
                 )
                 .child(
-                    div().flex_1().text_size(px(13.)).text_color(rgb(colors::TEXT_DEFAULT))
+                    div().flex_1().text_size(px(13.)).text_color(rgb(c.text_default))
                         .child(name.clone())
                 )
                 .child(

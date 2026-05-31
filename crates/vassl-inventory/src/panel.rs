@@ -1,5 +1,6 @@
 use gpui::{Context, Entity, IntoElement, Render, Subscription, Window,
            div, prelude::*, px, rgb};
+use vassl_ui::ThemeHandle;
 
 use crate::colors;
 use crate::product_form::{ProductForm, ProductFormEvent};
@@ -91,6 +92,7 @@ impl InventoryPanel {
 
 impl Render for InventoryPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let c = cx.global::<ThemeHandle>().0.clone();
         let active_tab    = self.active_tab;
         let has_selection = { self.store.read(cx).selected_product_id.is_some() };
 
@@ -107,13 +109,13 @@ impl Render for InventoryPanel {
                 div()
                     .flex().flex_row().items_center().gap(px(8.))
                     .px(px(16.)).py(px(8.))
-                    .bg(rgb(colors::CANVAS_BG))
+                    .bg(rgb(c.canvas_bg))
                     .child(
                         div()
                             .id("tab-products")
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
-                            .bg(rgb(if active_tab == Tab::Products { colors::SURFACE_ACTIVE } else { colors::SURFACE_DEFAULT }))
-                            .text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT))
+                            .bg(rgb(if active_tab == Tab::Products { c.surface_active } else { c.surface_default }))
+                            .text_size(px(12.)).text_color(rgb(c.text_default))
                             .cursor_pointer()
                             .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
                                 this.active_tab = Tab::Products;
@@ -125,8 +127,8 @@ impl Render for InventoryPanel {
                         div()
                             .id("tab-restock")
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
-                            .bg(rgb(if active_tab == Tab::Restock { colors::SURFACE_ACTIVE } else { colors::SURFACE_DEFAULT }))
-                            .text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT))
+                            .bg(rgb(if active_tab == Tab::Restock { c.surface_active } else { c.surface_default }))
+                            .text_size(px(12.)).text_color(rgb(c.text_default))
                             .cursor_pointer()
                             .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
                                 this.active_tab = Tab::Restock;
@@ -140,8 +142,8 @@ impl Render for InventoryPanel {
                         div()
                             .id("btn-new-product")
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
-                            .bg(rgb(colors::SURFACE_DEFAULT))
-                            .text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT))
+                            .bg(rgb(c.surface_default))
+                            .text_size(px(12.)).text_color(rgb(c.text_default))
                             .cursor_pointer()
                             .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
                                 this.open_product_form(cx);
@@ -153,8 +155,8 @@ impl Render for InventoryPanel {
                         let mut btn = div()
                             .id("btn-new-entry")
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
-                            .bg(rgb(if has_selection { colors::SURFACE_ACTIVE } else { colors::SURFACE_DEFAULT }))
-                            .text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT))
+                            .bg(rgb(if has_selection { c.surface_active } else { c.surface_default }))
+                            .text_size(px(12.)).text_color(rgb(c.text_default))
                             .child("+ New Entry");
 
                         if has_selection {

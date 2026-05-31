@@ -1,5 +1,6 @@
 use gpui::{App, Context, Entity, IntoElement, MouseButton, MouseDownEvent, Render, Window,
            div, prelude::*, px, rgb};
+use vassl_ui::{ThemeColors, ThemeHandle};
 
 use crate::colors;
 use crate::db::QuotationRow;
@@ -21,12 +22,13 @@ pub fn format_total(usd: f64) -> String {
 
 impl Render for QuotationList {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let c = cx.global::<ThemeHandle>().0.clone();
         let store = self.store.read(cx);
 
         if store.loading {
             return div()
                 .flex_1().flex().items_center().justify_center()
-                .text_color(rgb(colors::TEXT_MUTED))
+                .text_color(rgb(c.text_muted))
                 .child("Loading…")
                 .into_any_element();
         }
@@ -34,14 +36,14 @@ impl Render for QuotationList {
         if store.quotations.is_empty() {
             return div()
                 .flex_1().flex().items_center().justify_center()
-                .text_color(rgb(colors::TEXT_DEFAULT))
+                .text_color(rgb(c.text_default))
                 .child("No quotations yet — click \"+ New Quotation\" to create one.")
                 .into_any_element();
         }
 
         let selected = store.selected_id;
         let rows: Vec<_> = store.quotations.iter().map(|q| {
-            quotation_row(q, selected == Some(q.id), self.store.clone())
+            quotation_row(q, selected == Some(q.id), self.store.clone(), &c)
         }).collect();
 
         div()
@@ -53,9 +55,9 @@ impl Render for QuotationList {
     }
 }
 
-fn quotation_row(q: &QuotationRow, selected: bool, store: Entity<QuotationStore>) -> impl IntoElement {
+fn quotation_row(q: &QuotationRow, selected: bool, store: Entity<QuotationStore>, c: &ThemeColors) -> impl IntoElement {
     let id        = q.id;
-    let row_bg    = if selected { colors::SURFACE_ACTIVE } else { colors::CANVAS_BG };
+    let row_bg    = if selected { c.surface_active } else { c.canvas_bg };
     let badge_col = status_badge_color(q.status.clone());
     let date_str  = q.created_at.get(..10).unwrap_or("").to_string();
 
@@ -75,22 +77,22 @@ fn quotation_row(q: &QuotationRow, selected: bool, store: Entity<QuotationStore>
         .child(div().w(px(8.)).h(px(8.)).rounded_full().bg(rgb(badge_col)).mr(px(8.)))
         // Reference number
         .child(
-            div().w(px(130.)).text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT))
+            div().w(px(130.)).text_size(px(12.)).text_color(rgb(c.text_default))
                 .child(q.reference_number.clone())
         )
         // Project + client
         .child(
-            div().flex_1().text_size(px(12.)).text_color(rgb(colors::TEXT_MUTED))
+            div().flex_1().text_size(px(12.)).text_color(rgb(c.text_muted))
                 .child(format!("{} / {}", q.project_name, q.client_name))
         )
         // Total
         .child(
-            div().w(px(90.)).text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT))
+            div().w(px(90.)).text_size(px(12.)).text_color(rgb(c.text_default))
                 .child(format_total(q.total_usd))
         )
         // Date
         .child(
-            div().w(px(90.)).text_size(px(11.)).text_color(rgb(colors::TEXT_MUTED))
+            div().w(px(90.)).text_size(px(11.)).text_color(rgb(c.text_muted))
                 .child(date_str)
         )
 }

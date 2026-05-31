@@ -1,7 +1,7 @@
 use gpui::{Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Window,
            actions, div, prelude::*, px, rgb, rgba, SharedString};
 use vassl_core::selling_price;
-use vassl_ui::{TextInput, text_field};
+use vassl_ui::{TextInput, ThemeHandle, text_field};
 
 use crate::colors;
 
@@ -95,6 +95,7 @@ impl Focusable for PriceEntryForm {
 
 impl Render for PriceEntryForm {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let c = cx.global::<ThemeHandle>().0.clone();
         let selling      = self.computed_selling_price(cx);
         let cost_focused = self.cost.read(cx).focus_handle.is_focused(window);
         let duty_focused = self.duty.read(cx).focus_handle.is_focused(window);
@@ -130,30 +131,30 @@ impl Render for PriceEntryForm {
             }))
             .child(
                 div()
-                    .w(px(420.)).bg(rgb(colors::CANVAS_BG)).rounded(px(8.)).p(px(24.))
+                    .w(px(420.)).bg(rgb(c.canvas_bg)).rounded(px(8.)).p(px(24.))
                     .flex().flex_col().gap(px(12.))
-                    .child(div().text_size(px(14.)).text_color(rgb(colors::TEXT_DEFAULT))
+                    .child(div().text_size(px(14.)).text_color(rgb(c.text_default))
                         .child(format!("New Price Entry — {}", self.product_name)))
                     .child(text_field("Cost Price (USD)", self.cost.clone(),   cost_focused, window))
                     .child(text_field("Duty Cost (USD)",  self.duty.clone(),   duty_focused, window))
                     .child(text_field("Markup %",         self.markup.clone(), mrkp_focused, window))
                     .child(
                         div().flex().flex_col().gap(px(4.))
-                            .child(div().text_size(px(11.)).text_color(rgb(colors::TEXT_MUTED)).child("Selling Price (computed)"))
-                            .child(div().px(px(8.)).py(px(6.)).bg(rgb(colors::SURFACE_DEFAULT)).rounded(px(4.))
-                                .text_size(px(13.)).text_color(rgb(colors::STATUS_GREEN)).child(selling))
+                            .child(div().text_size(px(11.)).text_color(rgb(c.text_muted)).child("Selling Price (computed)"))
+                            .child(div().px(px(8.)).py(px(6.)).bg(rgb(c.surface_default)).rounded(px(4.))
+                                .text_size(px(13.)).text_color(rgb(c.status_green)).child(selling))
                     )
-                    .child(div().text_size(px(11.)).text_color(rgb(colors::STATUS_RED))
+                    .child(div().text_size(px(11.)).text_color(rgb(c.status_red))
                         .child(self.error.as_deref().map(SharedString::from).unwrap_or_default()))
                     .child(
                         div().flex().flex_row().justify_end().gap(px(8.))
                             .child(div().id("pb-btn-cancel").px(px(16.)).py(px(6.)).rounded(px(4.))
-                                .bg(rgb(colors::SURFACE_DEFAULT)).text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT))
+                                .bg(rgb(c.surface_default)).text_size(px(12.)).text_color(rgb(c.text_default))
                                 .cursor_pointer()
                                 .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| { cx.emit(PriceFormEvent::Cancelled); }))
                                 .child("Cancel"))
                             .child(div().id("pb-btn-save").px(px(16.)).py(px(6.)).rounded(px(4.))
-                                .bg(rgb(colors::SURFACE_ACTIVE)).text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT))
+                                .bg(rgb(c.surface_active)).text_size(px(12.)).text_color(rgb(c.text_default))
                                 .cursor_pointer()
                                 .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| { this.submit(cx); }))
                                 .child("Save"))

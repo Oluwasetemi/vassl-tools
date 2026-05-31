@@ -1,7 +1,7 @@
 use gpui::{Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Window,
            actions, div, prelude::*, px, rgb, rgba, SharedString};
 use vassl_core::AcquisitionType;
-use vassl_ui::{TextInput, text_field};
+use vassl_ui::{TextInput, ThemeHandle, text_field};
 
 use crate::colors;
 
@@ -89,6 +89,7 @@ impl Focusable for StockEntryForm {
 
 impl Render for StockEntryForm {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let c = cx.global::<ThemeHandle>().0.clone();
         let qty_focused  = self.quantity.read(cx).focus_handle.is_focused(window);
         let cost_focused = self.unit_cost.read(cx).focus_handle.is_focused(window);
         let sup_focused  = self.supplier.read(cx).focus_handle.is_focused(window);
@@ -127,25 +128,25 @@ impl Render for StockEntryForm {
             .child(
                 div()
                     .w(px(400.))
-                    .bg(rgb(colors::CANVAS_BG)).rounded(px(8.)).p(px(24.))
+                    .bg(rgb(c.canvas_bg)).rounded(px(8.)).p(px(24.))
                     .flex().flex_col().gap(px(12.))
-                    .child(div().text_size(px(14.)).text_color(rgb(colors::TEXT_DEFAULT))
+                    .child(div().text_size(px(14.)).text_color(rgb(c.text_default))
                         .child(format!("New Stock Entry — {}", self.product_name)))
                     .child(text_field("Quantity",         self.quantity.clone(),    qty_focused,  window))
                     .child(text_field("Unit Cost (USD)",  self.unit_cost.clone(),   cost_focused, window))
                     .child(text_field("Supplier",         self.supplier.clone(),    sup_focused,  window))
                     .child(text_field("Invoice Ref",      self.invoice_ref.clone(), inv_focused,  window))
-                    .child(div().text_size(px(11.)).text_color(rgb(colors::STATUS_RED))
+                    .child(div().text_size(px(11.)).text_color(rgb(c.status_red))
                         .child(self.error.as_deref().map(SharedString::from).unwrap_or_default()))
                     .child(
                         div().flex().flex_row().justify_end().gap(px(8.))
                             .child(div().id("btn-cancel").px(px(16.)).py(px(6.)).rounded(px(4.))
-                                .bg(rgb(colors::SURFACE_DEFAULT)).text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT))
+                                .bg(rgb(c.surface_default)).text_size(px(12.)).text_color(rgb(c.text_default))
                                 .cursor_pointer()
                                 .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| { cx.emit(StockFormEvent::Cancelled); }))
                                 .child("Cancel"))
                             .child(div().id("btn-save").px(px(16.)).py(px(6.)).rounded(px(4.))
-                                .bg(rgb(colors::SURFACE_ACTIVE)).text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT))
+                                .bg(rgb(c.surface_active)).text_size(px(12.)).text_color(rgb(c.text_default))
                                 .cursor_pointer()
                                 .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| { this.submit(cx); }))
                                 .child("Save"))

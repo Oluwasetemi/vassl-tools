@@ -1,6 +1,6 @@
 use gpui::{Context, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Window,
            div, prelude::*, px, rgb, rgba};
-use vassl_ui::{TextInput, text_field};
+use vassl_ui::{TextInput, ThemeHandle, text_field};
 
 use crate::actions::{ConfirmSelection, EscapeModal, SelectNext, SelectPrev};
 use crate::colors;
@@ -77,6 +77,7 @@ impl Focusable for CommandPalette {
 
 impl Render for CommandPalette {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let c = cx.global::<ThemeHandle>().0.clone();
         let query_text = self.query.read(cx).text().to_string();
         let matches    = filter_commands(&query_text);
 
@@ -116,7 +117,7 @@ impl Render for CommandPalette {
                         }
                     }))
                     .w(px(480.))
-                    .bg(rgb(colors::CANVAS_BG)).rounded(px(8.)).p(px(12.))
+                    .bg(rgb(c.canvas_bg)).rounded(px(8.)).p(px(12.))
                     .flex().flex_col().gap(px(8.))
                     // Prevent click-through to the backdrop dismiss handler.
                     .on_mouse_down(gpui::MouseButton::Left, |_, _, _| {})
@@ -127,19 +128,19 @@ impl Render for CommandPalette {
                         if matches.is_empty() {
                             results.child(
                                 div().px(px(10.)).py(px(8.))
-                                    .text_size(px(12.)).text_color(rgb(colors::TEXT_MUTED))
+                                    .text_size(px(12.)).text_color(rgb(c.text_muted))
                                     .child("No commands match.")
                             )
                         } else {
                             results.children(matches.iter().enumerate().map(|(idx, cmd)| {
                                 let selected = idx == self.selected_idx;
-                                let bg = if selected { colors::SURFACE_ACTIVE } else { colors::SURFACE_DEFAULT };
+                                let bg = if selected { c.surface_active } else { c.surface_default };
                                 let cmd_clone = (*cmd).clone();
                                 div()
                                     .id(format!("palette-item-{idx}"))
                                     .px(px(10.)).py(px(7.)).rounded(px(4.))
                                     .bg(rgb(bg))
-                                    .text_size(px(13.)).text_color(rgb(colors::TEXT_DEFAULT))
+                                    .text_size(px(13.)).text_color(rgb(c.text_default))
                                     .cursor_pointer()
                                     .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |_, _, _, cx| {
                                         cx.emit(PaletteEvent::Execute(cmd_clone.clone()));

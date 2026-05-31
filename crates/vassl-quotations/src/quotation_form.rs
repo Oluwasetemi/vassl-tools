@@ -1,7 +1,7 @@
 use gpui::{Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
            MouseButton, MouseDownEvent, Render, Window, actions, div, prelude::*, px, rgb, rgba, SharedString};
 use vassl_core::Project;
-use vassl_ui::{TextInput, text_field};
+use vassl_ui::{TextInput, ThemeHandle, text_field};
 
 use crate::colors;
 
@@ -69,6 +69,7 @@ impl Focusable for QuotationForm {
 
 impl Render for QuotationForm {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let c = cx.global::<ThemeHandle>().0.clone();
         let notes_focused = self.notes.read(cx).focus_handle.is_focused(window);
 
         div()
@@ -81,26 +82,26 @@ impl Render for QuotationForm {
             }))
             .child(
                 div()
-                    .w(px(460.)).bg(rgb(colors::CANVAS_BG)).rounded(px(8.)).p(px(24.))
+                    .w(px(460.)).bg(rgb(c.canvas_bg)).rounded(px(8.)).p(px(24.))
                     .flex().flex_col().gap(px(12.))
-                    .child(div().text_size(px(14.)).text_color(rgb(colors::TEXT_DEFAULT)).child("New Quotation"))
+                    .child(div().text_size(px(14.)).text_color(rgb(c.text_default)).child("New Quotation"))
                     .child(
                         div().flex().flex_col().gap(px(4.))
-                            .child(div().text_size(px(11.)).text_color(rgb(colors::TEXT_MUTED)).child("Reference Number"))
-                            .child(div().px(px(8.)).py(px(6.)).bg(rgb(colors::SURFACE_DEFAULT)).rounded(px(4.))
-                                .text_size(px(13.)).text_color(rgb(colors::TEXT_DEFAULT))
+                            .child(div().text_size(px(11.)).text_color(rgb(c.text_muted)).child("Reference Number"))
+                            .child(div().px(px(8.)).py(px(6.)).bg(rgb(c.surface_default)).rounded(px(4.))
+                                .text_size(px(13.)).text_color(rgb(c.text_default))
                                 .child(self.reference_number.clone()))
                     )
                     .child(
                         div().flex().flex_col().gap(px(4.))
-                            .child(div().text_size(px(11.)).text_color(rgb(colors::TEXT_MUTED)).child("Select Project"))
+                            .child(div().text_size(px(11.)).text_color(rgb(c.text_muted)).child("Select Project"))
                             .child(
                                 div().id("project-picker").h(px(120.)).overflow_y_scroll()
-                                    .bg(rgb(colors::SURFACE_DEFAULT)).rounded(px(4.))
+                                    .bg(rgb(c.surface_default)).rounded(px(4.))
                                     .children(self.projects.iter().map(|p| {
                                         let pid      = p.id;
                                         let selected = self.selected_project == Some(pid);
-                                        let bg       = if selected { colors::SURFACE_ACTIVE } else { colors::SURFACE_DEFAULT };
+                                        let bg       = if selected { c.surface_active } else { c.surface_default };
                                         div()
                                             .id(format!("pick-project-{pid}"))
                                             .flex().flex_row().items_center()
@@ -111,23 +112,23 @@ impl Render for QuotationForm {
                                                 this.error = None;
                                                 cx.notify();
                                             }))
-                                            .child(div().flex_1().text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT)).child(p.name.clone()))
-                                            .child(div().text_size(px(11.)).text_color(rgb(colors::TEXT_MUTED)).child(p.client_name.clone()))
+                                            .child(div().flex_1().text_size(px(12.)).text_color(rgb(c.text_default)).child(p.name.clone()))
+                                            .child(div().text_size(px(11.)).text_color(rgb(c.text_muted)).child(p.client_name.clone()))
                                     }))
                             )
                     )
                     .child(text_field("Notes (optional)", self.notes.clone(), notes_focused, window))
-                    .child(div().text_size(px(11.)).text_color(rgb(colors::STATUS_RED))
+                    .child(div().text_size(px(11.)).text_color(rgb(c.status_red))
                         .child(self.error.as_deref().map(SharedString::from).unwrap_or_default()))
                     .child(
                         div().flex().flex_row().justify_end().gap(px(8.))
                             .child(div().id("quot-btn-cancel").px(px(16.)).py(px(6.)).rounded(px(4.))
-                                .bg(rgb(colors::SURFACE_DEFAULT)).text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT))
+                                .bg(rgb(c.surface_default)).text_size(px(12.)).text_color(rgb(c.text_default))
                                 .cursor_pointer()
                                 .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| { cx.emit(QuotationFormEvent::Cancelled); }))
                                 .child("Cancel"))
                             .child(div().id("quot-btn-create").px(px(16.)).py(px(6.)).rounded(px(4.))
-                                .bg(rgb(colors::SURFACE_ACTIVE)).text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT))
+                                .bg(rgb(c.surface_active)).text_size(px(12.)).text_color(rgb(c.text_default))
                                 .cursor_pointer()
                                 .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| { this.submit(cx); }))
                                 .child("Create"))

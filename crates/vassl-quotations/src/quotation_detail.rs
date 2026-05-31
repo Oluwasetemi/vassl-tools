@@ -1,5 +1,6 @@
 use gpui::{Context, Entity, IntoElement, Render, Window, div, prelude::*, px, rgb};
 use vassl_core::QuotationStatus;
+use vassl_ui::ThemeHandle;
 
 use crate::colors;
 use crate::store::{QuotationStore, status_badge_color};
@@ -34,6 +35,7 @@ pub fn transition_label(status: &QuotationStatus) -> &'static str {
 
 impl Render for QuotationDetail {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let c = cx.global::<ThemeHandle>().0.clone();
         let (selected_id, current_status, items, total) = {
             let store = self.store.read(cx);
             let sid   = store.selected_id;
@@ -47,7 +49,7 @@ impl Render for QuotationDetail {
         if selected_id.is_none() {
             return div()
                 .flex_1().flex().items_center().justify_center()
-                .text_color(rgb(colors::TEXT_MUTED))
+                .text_color(rgb(c.text_muted))
                 .child("Select a quotation to view its line items.")
                 .into_any_element();
         }
@@ -69,7 +71,7 @@ impl Render for QuotationDetail {
                             .id(format!("status-btn-{}", transition_label(&next_status)))
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
                             .bg(rgb(status_badge_color(next_status.clone())))
-                            .text_size(px(12.)).text_color(rgb(colors::CANVAS_BG))
+                            .text_size(px(12.)).text_color(rgb(c.canvas_bg))
                             .cursor_pointer()
                             .on_mouse_down(gpui::MouseButton::Left,
                                 move |_, _, cx: &mut gpui::App| {
@@ -86,18 +88,18 @@ impl Render for QuotationDetail {
             div()
                 .flex().flex_row().items_center()
                 .px(px(12.)).py(px(4.))
-                .bg(rgb(colors::SURFACE_DEFAULT))
-                .child(div().flex_1().text_size(px(11.)).text_color(rgb(colors::TEXT_MUTED)).child("Description"))
-                .child(div().w(px(70.)).text_size(px(11.)).text_color(rgb(colors::TEXT_MUTED)).child("Qty"))
-                .child(div().w(px(90.)).text_size(px(11.)).text_color(rgb(colors::TEXT_MUTED)).child("Unit Price"))
-                .child(div().w(px(90.)).text_size(px(11.)).text_color(rgb(colors::TEXT_MUTED)).child("Total"))
+                .bg(rgb(c.surface_default))
+                .child(div().flex_1().text_size(px(11.)).text_color(rgb(c.text_muted)).child("Description"))
+                .child(div().w(px(70.)).text_size(px(11.)).text_color(rgb(c.text_muted)).child("Qty"))
+                .child(div().w(px(90.)).text_size(px(11.)).text_color(rgb(c.text_muted)).child("Unit Price"))
+                .child(div().w(px(90.)).text_size(px(11.)).text_color(rgb(c.text_muted)).child("Total"))
         );
 
         if items.is_empty() {
             root = root.child(
                 div()
                     .flex_1().flex().items_center().justify_center()
-                    .text_color(rgb(colors::TEXT_MUTED))
+                    .text_color(rgb(c.text_muted))
                     .child("No line items. (Add items in Plan 5 once text input is available.)")
             );
         } else {
@@ -107,10 +109,10 @@ impl Render for QuotationDetail {
                     div()
                         .flex().flex_row().items_center().w_full()
                         .px(px(12.)).py(px(6.))
-                        .child(div().flex_1().text_size(px(13.)).text_color(rgb(colors::TEXT_DEFAULT)).child(item.description.clone()))
-                        .child(div().w(px(70.)).text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT)).child(format!("{:.2}", item.quantity)))
-                        .child(div().w(px(90.)).text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT)).child(format!("${:.2}", item.unit_price_usd)))
-                        .child(div().w(px(90.)).text_size(px(12.)).text_color(rgb(colors::STATUS_GREEN)).child(format!("${:.2}", item.total_usd)))
+                        .child(div().flex_1().text_size(px(13.)).text_color(rgb(c.text_default)).child(item.description.clone()))
+                        .child(div().w(px(70.)).text_size(px(12.)).text_color(rgb(c.text_default)).child(format!("{:.2}", item.quantity)))
+                        .child(div().w(px(90.)).text_size(px(12.)).text_color(rgb(c.text_default)).child(format!("${:.2}", item.unit_price_usd)))
+                        .child(div().w(px(90.)).text_size(px(12.)).text_color(rgb(c.status_green)).child(format!("${:.2}", item.total_usd)))
                 }));
             root = root.child(item_rows);
         }
@@ -120,9 +122,9 @@ impl Render for QuotationDetail {
             div()
                 .flex().flex_row().justify_end()
                 .px(px(12.)).py(px(8.))
-                .bg(rgb(colors::SURFACE_DEFAULT))
+                .bg(rgb(c.surface_default))
                 .child(
-                    div().text_size(px(13.)).text_color(rgb(colors::STATUS_GREEN))
+                    div().text_size(px(13.)).text_color(rgb(c.status_green))
                         .child(format!("Total: ${total:.2}"))
                 )
         )

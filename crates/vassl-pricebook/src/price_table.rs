@@ -1,5 +1,6 @@
 use gpui::{App, Context, Entity, IntoElement, MouseButton, MouseDownEvent, Render, Window,
            div, prelude::*, px, rgb};
+use vassl_ui::{ThemeColors, ThemeHandle};
 
 use crate::colors;
 use crate::store::{PriceBookStore, ProductPrice};
@@ -26,12 +27,13 @@ pub fn price_display(pp: &ProductPrice) -> String {
 
 impl Render for PriceTable {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let c = cx.global::<ThemeHandle>().0.clone();
         let store = self.store.read(cx);
 
         if store.loading {
             return div()
                 .flex_1().flex().items_center().justify_center()
-                .text_color(rgb(colors::TEXT_MUTED))
+                .text_color(rgb(c.text_muted))
                 .child("Loading…")
                 .into_any_element();
         }
@@ -39,7 +41,7 @@ impl Render for PriceTable {
         if store.product_prices.is_empty() {
             return div()
                 .flex_1().flex().items_center().justify_center()
-                .text_color(rgb(colors::TEXT_DEFAULT))
+                .text_color(rgb(c.text_default))
                 .child("No products found.")
                 .into_any_element();
         }
@@ -47,7 +49,7 @@ impl Render for PriceTable {
         let selected = store.selected_product_id;
         let rows: Vec<_> = store.product_prices.iter().map(|pp| {
             let is_selected = selected == Some(pp.product_id);
-            price_row(pp, is_selected, self.store.clone())
+            price_row(pp, is_selected, self.store.clone(), &c)
         }).collect();
 
         div()
@@ -59,10 +61,11 @@ impl Render for PriceTable {
     }
 }
 
-fn price_row(pp: &ProductPrice, selected: bool, store: Entity<PriceBookStore>) -> impl IntoElement {
+fn price_row(pp: &ProductPrice, selected: bool, store: Entity<PriceBookStore>, c: &ThemeColors) -> impl IntoElement {
     let product_id = pp.product_id;
-    let row_bg = if selected { colors::SURFACE_ACTIVE } else { colors::CANVAS_BG };
+    let row_bg = if selected { c.surface_active } else { c.canvas_bg };
     let price_str = price_display(pp);
+    let price_color = if pp.latest.is_some() { c.text_default } else { c.text_muted };
 
     div()
         .id(format!("pb-row-{product_id}"))
@@ -80,28 +83,28 @@ fn price_row(pp: &ProductPrice, selected: bool, store: Entity<PriceBookStore>) -
         .child(
             div()
                 .w(px(90.)).text_size(px(12.))
-                .text_color(rgb(colors::TEXT_MUTED))
+                .text_color(rgb(c.text_muted))
                 .child(pp.sku.clone())
         )
         // Name
         .child(
             div()
                 .w(px(160.)).text_size(px(13.))
-                .text_color(rgb(colors::TEXT_DEFAULT))
+                .text_color(rgb(c.text_default))
                 .child(pp.name.clone())
         )
         // Price summary
         .child(
             div()
                 .flex_1().text_size(px(12.))
-                .text_color(rgb(if pp.latest.is_some() { colors::TEXT_DEFAULT } else { colors::TEXT_MUTED }))
+                .text_color(rgb(price_color))
                 .child(price_str)
         )
         // Effective date
         .child(
             div()
                 .w(px(110.)).text_size(px(11.))
-                .text_color(rgb(colors::TEXT_MUTED))
+                .text_color(rgb(c.text_muted))
                 .child(pp.latest.as_ref().map(|e| e.effective_date[..10].to_string()).unwrap_or_default())
         )
 }

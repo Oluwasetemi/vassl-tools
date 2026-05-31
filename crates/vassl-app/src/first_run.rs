@@ -1,6 +1,6 @@
 use gpui::{Context, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Window,
            div, prelude::*, px, rgb, rgba, SharedString};
-use vassl_ui::{TextInput, text_field};
+use vassl_ui::{TextInput, ThemeHandle, text_field};
 
 use crate::colors;
 
@@ -60,6 +60,7 @@ impl Focusable for FirstRunPrompt {
 
 impl Render for FirstRunPrompt {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let c = cx.global::<ThemeHandle>().0.clone();
         let name_focused = self.name_input.read(cx).focus_handle.is_focused(window);
 
         div()
@@ -68,19 +69,19 @@ impl Render for FirstRunPrompt {
             .bg(rgba(0x00000099))
             .child(
                 div()
-                    .w(px(380.)).bg(rgb(colors::CANVAS_BG)).rounded(px(8.)).p(px(28.))
+                    .w(px(380.)).bg(rgb(c.canvas_bg)).rounded(px(8.)).p(px(28.))
                     .flex().flex_col().gap(px(14.))
                     .child(
-                        div().text_size(px(16.)).text_color(rgb(colors::TEXT_DEFAULT))
+                        div().text_size(px(16.)).text_color(rgb(c.text_default))
                             .child("Welcome to VASSL")
                     )
                     .child(
-                        div().text_size(px(12.)).text_color(rgb(colors::TEXT_MUTED))
+                        div().text_size(px(12.)).text_color(rgb(c.text_muted))
                             .child("Enter your name to get started. This will be used for audit logs.")
                     )
                     .child(text_field("Your Name", self.name_input.clone(), name_focused, window))
                     .child(
-                        div().text_size(px(11.)).text_color(rgb(colors::STATUS_RED))
+                        div().text_size(px(11.)).text_color(rgb(c.status_red))
                             .child(self.error.as_deref().map(SharedString::from).unwrap_or_default())
                     )
                     .child(
@@ -88,8 +89,8 @@ impl Render for FirstRunPrompt {
                             .child(
                                 div().id("first-run-btn-save")
                                     .px(px(20.)).py(px(8.)).rounded(px(4.))
-                                    .bg(rgb(colors::SURFACE_ACTIVE))
-                                    .text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT))
+                                    .bg(rgb(c.surface_active))
+                                    .text_size(px(12.)).text_color(rgb(c.text_default))
                                     .cursor_pointer()
                                     .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
                                         this.save(cx);

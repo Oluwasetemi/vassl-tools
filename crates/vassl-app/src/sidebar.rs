@@ -1,6 +1,7 @@
 use gpui::{
     Context, IntoElement, MouseButton, Render, Window, div, prelude::*, px, rgb,
 };
+use vassl_ui::ThemeHandle;
 
 use crate::colors;
 
@@ -25,19 +26,20 @@ impl Sidebar {
 
 impl Render for Sidebar {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let c = cx.global::<ThemeHandle>().0.clone();
         let active = self.active;
 
         let make_btn = |module: ActiveModule, label: &'static str, id: &'static str| {
             let is_active = active == module;
             let bg = if is_active {
-                rgb(colors::SURFACE_ACTIVE)
+                rgb(c.surface_active)
             } else {
-                rgb(colors::SURFACE_DEFAULT)
+                rgb(c.surface_default)
             };
             let fg = if is_active {
-                rgb(colors::TEXT_DEFAULT)
+                rgb(c.text_default)
             } else {
-                rgb(colors::TEXT_MUTED)
+                rgb(c.text_muted)
             };
             div()
                 .id(id)
@@ -64,7 +66,7 @@ impl Render for Sidebar {
         div()
             .w(px(48.))
             .h_full()
-            .bg(rgb(colors::SIDEBAR_BG))
+            .bg(rgb(c.sidebar_bg))
             .flex()
             .flex_col()
             .justify_between()
@@ -83,8 +85,8 @@ impl Render for Sidebar {
                     .h(px(36.))
                     .m(px(6.))
                     .rounded(px(6.))
-                    .bg(rgb(colors::SURFACE_DEFAULT))
-                    .text_color(rgb(colors::TEXT_MUTED))
+                    .bg(rgb(c.surface_default))
+                    .text_color(rgb(c.text_muted))
                     .flex()
                     .items_center()
                     .justify_center()

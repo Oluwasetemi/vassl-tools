@@ -1,5 +1,6 @@
 use gpui::{Context, Entity, IntoElement, Render, Subscription, Window,
            div, prelude::*, px, rgb};
+use vassl_ui::ThemeHandle;
 
 use crate::colors;
 use crate::price_form::{PriceEntryForm, PriceFormEvent};
@@ -62,6 +63,7 @@ impl PriceBookPanel {
 
 impl Render for PriceBookPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let c = cx.global::<ThemeHandle>().0.clone();
         let active_tab    = self.active_tab;
         let has_selection = self.store.read(cx).selected_product_id.is_some();
 
@@ -88,14 +90,14 @@ impl Render for PriceBookPanel {
                     content.child(
                         div()
                             .flex_1().flex().items_center().justify_center()
-                            .text_color(rgb(colors::TEXT_MUTED))
+                            .text_color(rgb(c.text_muted))
                             .child("Select a product row to view pricing history.")
                     )
                 } else if history_is_empty {
                     content.child(
                         div()
                             .flex_1().flex().items_center().justify_center()
-                            .text_color(rgb(colors::TEXT_MUTED))
+                            .text_color(rgb(c.text_muted))
                             .child("No price history for this product.")
                     )
                 } else {
@@ -103,11 +105,11 @@ impl Render for PriceBookPanel {
                         div()
                             .flex().flex_row().items_center().w_full()
                             .px(px(12.)).py(px(6.))
-                            .child(div().w(px(100.)).text_size(px(12.)).text_color(rgb(colors::TEXT_MUTED)).child(date.clone()))
-                            .child(div().w(px(90.)).text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT)).child(format!("${cost:.2}")))
-                            .child(div().w(px(80.)).text_size(px(12.)).text_color(rgb(colors::TEXT_MUTED)).child(format!("+${duty:.2}")))
-                            .child(div().w(px(70.)).text_size(px(12.)).text_color(rgb(colors::TEXT_MUTED)).child(format!("{markup:.0}%")))
-                            .child(div().flex_1().text_size(px(13.)).text_color(rgb(colors::STATUS_GREEN)).child(format!("${sell:.2}")))
+                            .child(div().w(px(100.)).text_size(px(12.)).text_color(rgb(c.text_muted)).child(date.clone()))
+                            .child(div().w(px(90.)).text_size(px(12.)).text_color(rgb(c.text_default)).child(format!("${cost:.2}")))
+                            .child(div().w(px(80.)).text_size(px(12.)).text_color(rgb(c.text_muted)).child(format!("+${duty:.2}")))
+                            .child(div().w(px(70.)).text_size(px(12.)).text_color(rgb(c.text_muted)).child(format!("{markup:.0}%")))
+                            .child(div().flex_1().text_size(px(13.)).text_color(rgb(c.status_green)).child(format!("${sell:.2}")))
                     }).collect();
 
                     content.child(
@@ -129,14 +131,14 @@ impl Render for PriceBookPanel {
                 div()
                     .flex().flex_row().items_center().gap(px(8.))
                     .px(px(16.)).py(px(8.))
-                    .bg(rgb(colors::CANVAS_BG))
+                    .bg(rgb(c.canvas_bg))
                     // Price Book tab
                     .child(
                         div()
                             .id("pb-tab-pricebook")
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
-                            .bg(rgb(if active_tab == Tab::PriceBook { colors::SURFACE_ACTIVE } else { colors::SURFACE_DEFAULT }))
-                            .text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT))
+                            .bg(rgb(if active_tab == Tab::PriceBook { c.surface_active } else { c.surface_default }))
+                            .text_size(px(12.)).text_color(rgb(c.text_default))
                             .cursor_pointer()
                             .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
                                 this.active_tab = Tab::PriceBook;
@@ -149,8 +151,8 @@ impl Render for PriceBookPanel {
                         div()
                             .id("pb-tab-history")
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
-                            .bg(rgb(if active_tab == Tab::History { colors::SURFACE_ACTIVE } else { colors::SURFACE_DEFAULT }))
-                            .text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT))
+                            .bg(rgb(if active_tab == Tab::History { c.surface_active } else { c.surface_default }))
+                            .text_size(px(12.)).text_color(rgb(c.text_default))
                             .cursor_pointer()
                             .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
                                 this.active_tab = Tab::History;
@@ -165,8 +167,8 @@ impl Render for PriceBookPanel {
                         let mut btn = div()
                             .id("pb-btn-new-entry")
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
-                            .bg(rgb(if has_selection { colors::SURFACE_ACTIVE } else { colors::SURFACE_DEFAULT }))
-                            .text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT))
+                            .bg(rgb(if has_selection { c.surface_active } else { c.surface_default }))
+                            .text_size(px(12.)).text_color(rgb(c.text_default))
                             .child("+ New Entry");
                         if has_selection {
                             btn = btn

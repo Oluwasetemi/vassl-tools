@@ -1,4 +1,5 @@
 use gpui::{App, Context, Entity, IntoElement, MouseButton, MouseDownEvent, Render, Window, div, prelude::*, px, rgb};
+use vassl_ui::{ThemeColors, ThemeHandle};
 
 use crate::store::{InventoryStore, ProductWithStock, StockStatus};
 use crate::colors;
@@ -15,6 +16,7 @@ impl ProductList {
 
 impl Render for ProductList {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let c = cx.global::<ThemeHandle>().0.clone();
         let store = self.store.read(cx);
 
         if store.loading {
@@ -23,7 +25,7 @@ impl Render for ProductList {
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_color(rgb(colors::TEXT_MUTED))
+                .text_color(rgb(c.text_muted))
                 .child("Loading…")
                 .into_any_element();
         }
@@ -34,14 +36,14 @@ impl Render for ProductList {
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_color(rgb(colors::TEXT_MUTED))
+                .text_color(rgb(c.text_default))
                 .child("No products — add stock entries to get started.")
                 .into_any_element();
         }
 
         let rows: Vec<_> = store.products.iter().map(|p| {
             let selected = store.selected_product_id == Some(p.product.id);
-            product_row(p, selected, self.store.clone())
+            product_row(p, selected, self.store.clone(), &c)
         }).collect();
 
         div()
@@ -55,16 +57,16 @@ impl Render for ProductList {
     }
 }
 
-fn product_row(p: &ProductWithStock, selected: bool, store: Entity<InventoryStore>) -> impl IntoElement {
+fn product_row(p: &ProductWithStock, selected: bool, store: Entity<InventoryStore>, c: &ThemeColors) -> impl IntoElement {
     let product_id = p.product.id;
     let badge_color = match p.status {
-        StockStatus::Healthy  => colors::STATUS_GREEN,
-        StockStatus::Low      => colors::STATUS_AMBER,
-        StockStatus::Critical => colors::STATUS_RED,
-        StockStatus::NoAlert  => colors::STATUS_GREY,
+        StockStatus::Healthy  => c.status_green,
+        StockStatus::Low      => c.status_amber,
+        StockStatus::Critical => c.status_red,
+        StockStatus::NoAlert  => c.status_grey,
     };
 
-    let row_bg = if selected { colors::SURFACE_ACTIVE } else { colors::CANVAS_BG };
+    let row_bg = if selected { c.surface_active } else { c.canvas_bg };
 
     div()
         .id(format!("product-{product_id}"))
@@ -95,7 +97,7 @@ fn product_row(p: &ProductWithStock, selected: bool, store: Entity<InventoryStor
             div()
                 .w(px(80.))
                 .text_size(px(12.))
-                .text_color(rgb(colors::TEXT_MUTED))
+                .text_color(rgb(c.text_muted))
                 .child(p.product.sku.clone())
         )
         // Name
@@ -103,7 +105,7 @@ fn product_row(p: &ProductWithStock, selected: bool, store: Entity<InventoryStor
             div()
                 .flex_1()
                 .text_size(px(13.))
-                .text_color(rgb(colors::TEXT_DEFAULT))
+                .text_color(rgb(c.text_default))
                 .child(p.product.name.clone())
         )
         // Current qty
@@ -111,7 +113,7 @@ fn product_row(p: &ProductWithStock, selected: bool, store: Entity<InventoryStor
             div()
                 .w(px(70.))
                 .text_size(px(12.))
-                .text_color(rgb(colors::TEXT_DEFAULT))
+                .text_color(rgb(c.text_default))
                 .child(format!("{:.1} {}", p.current_stock, p.product.unit))
         )
         // Min level
@@ -119,7 +121,7 @@ fn product_row(p: &ProductWithStock, selected: bool, store: Entity<InventoryStor
             div()
                 .w(px(70.))
                 .text_size(px(12.))
-                .text_color(rgb(colors::TEXT_MUTED))
+                .text_color(rgb(c.text_muted))
                 .child(format!("min {:.1}", p.product.min_stock_level))
         )
 }

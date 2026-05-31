@@ -1,5 +1,6 @@
 use gpui::{Context, Entity, IntoElement, Render, Subscription, Window,
            div, prelude::*, px, rgb};
+use vassl_ui::ThemeHandle;
 
 use crate::colors;
 use crate::quotation_detail::QuotationDetail;
@@ -62,6 +63,7 @@ impl QuotationPanel {
 
 impl Render for QuotationPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let c = cx.global::<ThemeHandle>().0.clone();
         let active_tab = self.active_tab;
 
         let content = div().flex_1().h_full().flex().flex_col();
@@ -77,13 +79,13 @@ impl Render for QuotationPanel {
                 div()
                     .flex().flex_row().items_center().gap(px(8.))
                     .px(px(16.)).py(px(8.))
-                    .bg(rgb(colors::CANVAS_BG))
+                    .bg(rgb(c.canvas_bg))
                     .child(
                         div()
                             .id("quot-tab-quotations")
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
-                            .bg(rgb(if active_tab == Tab::Quotations { colors::SURFACE_ACTIVE } else { colors::SURFACE_DEFAULT }))
-                            .text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT))
+                            .bg(rgb(if active_tab == Tab::Quotations { c.surface_active } else { c.surface_default }))
+                            .text_size(px(12.)).text_color(rgb(c.text_default))
                             .cursor_pointer()
                             .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
                                 this.active_tab = Tab::Quotations;
@@ -95,8 +97,8 @@ impl Render for QuotationPanel {
                         div()
                             .id("quot-tab-items")
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
-                            .bg(rgb(if active_tab == Tab::Items { colors::SURFACE_ACTIVE } else { colors::SURFACE_DEFAULT }))
-                            .text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT))
+                            .bg(rgb(if active_tab == Tab::Items { c.surface_active } else { c.surface_default }))
+                            .text_size(px(12.)).text_color(rgb(c.text_default))
                             .cursor_pointer()
                             .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
                                 this.active_tab = Tab::Items;
@@ -110,8 +112,8 @@ impl Render for QuotationPanel {
                         div()
                             .id("quot-btn-new")
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
-                            .bg(rgb(colors::SURFACE_ACTIVE))
-                            .text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT))
+                            .bg(rgb(c.surface_active))
+                            .text_size(px(12.)).text_color(rgb(c.text_default))
                             .cursor_pointer()
                             .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
                                 this.open_form(cx);

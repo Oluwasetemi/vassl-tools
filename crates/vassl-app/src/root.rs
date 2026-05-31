@@ -1,4 +1,5 @@
 use gpui::{Context, Entity, IntoElement, Render, Subscription, Window, div, prelude::*, rgb};
+use vassl_ui::ThemeHandle;
 
 use crate::actions::{EscapeModal, FocusSearch, OpenAuditLog, OpenInventory, OpenPriceBook, OpenQuotations};
 use crate::audit_log::AuditLogPanel;
@@ -106,6 +107,7 @@ impl VasslRoot {
 
 impl Render for VasslRoot {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let c = cx.global::<ThemeHandle>().0.clone();
         let active = self.sidebar.read(cx).active;
 
         let content = div().flex_1().h_full().flex().flex_col();
@@ -149,7 +151,7 @@ impl Render for VasslRoot {
             }))
             .relative()
             .flex().flex_col().w_full().h_full()
-            .bg(rgb(colors::CANVAS_BG))
+            .bg(rgb(c.canvas_bg))
             .child(
                 div().flex().flex_row().flex_1()
                     .child(self.sidebar.clone())

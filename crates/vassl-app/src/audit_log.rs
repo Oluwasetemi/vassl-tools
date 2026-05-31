@@ -1,5 +1,6 @@
 use gpui::{Context, IntoElement, Render, Window, div, prelude::*, px, rgb, rgba};
 use sqlez::thread_safe_connection::ThreadSafeConnection;
+use vassl_ui::ThemeHandle;
 
 use crate::colors;
 
@@ -59,6 +60,7 @@ impl AuditLogPanel {
 
 impl Render for AuditLogPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let c = cx.global::<ThemeHandle>().0.clone();
         div()
             .absolute().top_0().left_0().right_0().bottom_0()
             .flex().items_center().justify_center()
@@ -66,16 +68,16 @@ impl Render for AuditLogPanel {
             .child(
                 div()
                     .w(px(700.)).h(px(520.))
-                    .bg(rgb(colors::CANVAS_BG)).rounded(px(8.)).p(px(20.))
+                    .bg(rgb(c.canvas_bg)).rounded(px(8.)).p(px(20.))
                     .flex().flex_col().gap(px(10.))
                     .child(
                         div().flex().flex_row().items_center()
-                            .child(div().flex_1().text_size(px(14.)).text_color(rgb(colors::TEXT_DEFAULT)).child("Audit Log"))
+                            .child(div().flex_1().text_size(px(14.)).text_color(rgb(c.text_default)).child("Audit Log"))
                             .child(
                                 div().id("audit-btn-refresh")
                                     .px(px(10.)).py(px(4.)).rounded(px(4.))
-                                    .bg(rgb(colors::SURFACE_DEFAULT))
-                                    .text_size(px(11.)).text_color(rgb(colors::TEXT_MUTED))
+                                    .bg(rgb(c.surface_default))
+                                    .text_size(px(11.)).text_color(rgb(c.text_muted))
                                     .cursor_pointer()
                                     .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
                                         this.load(cx);
@@ -87,13 +89,13 @@ impl Render for AuditLogPanel {
                         // Column headers
                         div().flex().flex_row().gap(px(8.))
                             .px(px(8.)).py(px(4.))
-                            .bg(rgb(colors::SIDEBAR_BG)).rounded(px(4.))
-                            .child(div().w(px(40.)).text_size(px(10.)).text_color(rgb(colors::TEXT_MUTED)).child("ID"))
-                            .child(div().w(px(90.)).text_size(px(10.)).text_color(rgb(colors::TEXT_MUTED)).child("Table"))
-                            .child(div().w(px(50.)).text_size(px(10.)).text_color(rgb(colors::TEXT_MUTED)).child("Record"))
-                            .child(div().w(px(60.)).text_size(px(10.)).text_color(rgb(colors::TEXT_MUTED)).child("Action"))
-                            .child(div().w(px(80.)).text_size(px(10.)).text_color(rgb(colors::TEXT_MUTED)).child("By"))
-                            .child(div().flex_1().text_size(px(10.)).text_color(rgb(colors::TEXT_MUTED)).child("At"))
+                            .bg(rgb(c.sidebar_bg)).rounded(px(4.))
+                            .child(div().w(px(40.)).text_size(px(10.)).text_color(rgb(c.text_muted)).child("ID"))
+                            .child(div().w(px(90.)).text_size(px(10.)).text_color(rgb(c.text_muted)).child("Table"))
+                            .child(div().w(px(50.)).text_size(px(10.)).text_color(rgb(c.text_muted)).child("Record"))
+                            .child(div().w(px(60.)).text_size(px(10.)).text_color(rgb(c.text_muted)).child("Action"))
+                            .child(div().w(px(80.)).text_size(px(10.)).text_color(rgb(c.text_muted)).child("By"))
+                            .child(div().flex_1().text_size(px(10.)).text_color(rgb(c.text_muted)).child("At"))
                     )
                     .child({
                         let body = div().id("audit-scroll").flex_1().overflow_y_scroll()
@@ -101,26 +103,26 @@ impl Render for AuditLogPanel {
                         if self.rows.is_empty() {
                             body.child(
                                 div().flex().items_center().justify_center().p(px(20.))
-                                    .text_size(px(12.)).text_color(rgb(colors::TEXT_MUTED))
+                                    .text_size(px(12.)).text_color(rgb(c.text_muted))
                                     .child("No audit entries yet.")
                             )
                         } else {
                             body.children(self.rows.iter().map(|row| {
                                 let action_color = match row.action.as_str() {
-                                    "CREATE" => colors::STATUS_GREEN,
-                                    "UPDATE" => colors::STATUS_AMBER,
-                                    "DELETE" => colors::STATUS_RED,
-                                    _        => colors::TEXT_MUTED,
+                                    "CREATE" => c.status_green,
+                                    "UPDATE" => c.status_amber,
+                                    "DELETE" => c.status_red,
+                                    _        => c.text_muted,
                                 };
                                 div().flex().flex_row().gap(px(8.))
                                     .px(px(8.)).py(px(4.)).rounded(px(2.))
-                                    .bg(rgb(colors::SURFACE_DEFAULT))
-                                    .child(div().w(px(40.)).text_size(px(11.)).text_color(rgb(colors::TEXT_MUTED)).child(row.id.to_string()))
-                                    .child(div().w(px(90.)).text_size(px(11.)).text_color(rgb(colors::TEXT_DEFAULT)).child(row.table_name.clone()))
-                                    .child(div().w(px(50.)).text_size(px(11.)).text_color(rgb(colors::TEXT_MUTED)).child(row.record_id.to_string()))
+                                    .bg(rgb(c.surface_default))
+                                    .child(div().w(px(40.)).text_size(px(11.)).text_color(rgb(c.text_muted)).child(row.id.to_string()))
+                                    .child(div().w(px(90.)).text_size(px(11.)).text_color(rgb(c.text_default)).child(row.table_name.clone()))
+                                    .child(div().w(px(50.)).text_size(px(11.)).text_color(rgb(c.text_muted)).child(row.record_id.to_string()))
                                     .child(div().w(px(60.)).text_size(px(11.)).text_color(rgb(action_color)).child(row.action.clone()))
-                                    .child(div().w(px(80.)).text_size(px(11.)).text_color(rgb(colors::TEXT_DEFAULT)).child(row.changed_by.clone()))
-                                    .child(div().flex_1().text_size(px(11.)).text_color(rgb(colors::TEXT_MUTED)).child(row.changed_at.chars().take(19).collect::<String>()))
+                                    .child(div().w(px(80.)).text_size(px(11.)).text_color(rgb(c.text_default)).child(row.changed_by.clone()))
+                                    .child(div().flex_1().text_size(px(11.)).text_color(rgb(c.text_muted)).child(row.changed_at.chars().take(19).collect::<String>()))
                             }))
                         }
                     })
