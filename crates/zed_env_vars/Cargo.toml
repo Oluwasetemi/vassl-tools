@@ -1,0 +1,9 @@
+[package]
+name = "zed_env_vars"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "GPL-3.0-or-later"
+description = "Minimal zed_env_vars stub for vassl"
+
+[dependencies]

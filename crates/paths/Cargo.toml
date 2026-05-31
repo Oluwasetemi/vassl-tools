@@ -1,0 +1,10 @@
+[package]
+name = "paths"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "GPL-3.0-or-later"
+description = "Minimal paths stub for vassl — provides database_dir"
+
+[dependencies]
+dirs = "5"

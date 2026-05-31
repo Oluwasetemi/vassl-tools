@@ -6,6 +6,15 @@ members = [
     "crates/vassl-inventory",
     "crates/vassl-quotations",
     "crates/vassl-pricebook",
+    # Vendored from Zed monorepo
+    "crates/collections",
+    "crates/util",
+    "crates/paths",
+    "crates/release_channel",
+    "crates/zed_env_vars",
+    "crates/sqlez",
+    "crates/sqlez_macros",
+    "crates/db",
 ]
 default-members = ["crates/vassl-app"]
 resolver = "2"
@@ -36,3 +45,13 @@ chrono = { version = "0.4", features = ["serde"] }
 
 # Live config reload
 arc-swap = "1"
+
+# Vendored Zed crates
+collections    = { path = "crates/collections" }
+util           = { path = "crates/util" }
+paths          = { path = "crates/paths" }
+release_channel = { path = "crates/release_channel" }
+zed_env_vars   = { path = "crates/zed_env_vars" }
+sqlez          = { path = "crates/sqlez" }
+sqlez_macros   = { path = "crates/sqlez_macros" }
+db             = { path = "crates/db" }

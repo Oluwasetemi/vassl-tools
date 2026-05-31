@@ -1,0 +1,9 @@
+[package]
+name = "release_channel"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "GPL-3.0-or-later"
+description = "Minimal release_channel stub for vassl"
+
+[dependencies]
