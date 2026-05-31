@@ -2,6 +2,7 @@ mod actions;
 mod app;
 mod audit_log;
 mod colors;
+mod command_palette;
 mod first_run;
 mod platform;
 mod root;

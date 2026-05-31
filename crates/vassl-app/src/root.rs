@@ -3,6 +3,7 @@ use gpui::{Context, Entity, IntoElement, Render, Subscription, Window, div, prel
 use crate::actions::{FocusSearch, OpenAuditLog, OpenInventory, OpenPriceBook, OpenQuotations};
 use crate::audit_log::AuditLogPanel;
 use crate::colors;
+use crate::command_palette::{CommandPalette, PaletteEvent, PaletteCommand};
 use crate::first_run::{FirstRunEvent, FirstRunPrompt};
 use crate::sidebar::{ActiveModule, Sidebar};
 use crate::status_bar::StatusBar;
@@ -19,6 +20,8 @@ pub struct VasslRoot {
     first_run:        Option<Entity<FirstRunPrompt>>,
     _first_run_sub:   Option<Subscription>,
     audit_log:        Option<Entity<AuditLogPanel>>,
+    palette:          Option<Entity<CommandPalette>>,
+    _palette_sub:     Option<Subscription>,
 }
 
 impl VasslRoot {
@@ -57,7 +60,44 @@ impl VasslRoot {
             first_run,
             _first_run_sub,
             audit_log: None,
+            palette:   None,
+            _palette_sub: None,
         }
+    }
+
+    fn open_palette(&mut self, cx: &mut Context<Self>) {
+        if self.palette.is_some() { return; }
+        let pal = cx.new(|cx| CommandPalette::new(cx));
+        let sub = cx.subscribe(&pal, |this, _pal, ev: &PaletteEvent, cx| {
+            match ev {
+                PaletteEvent::Dismissed => {
+                    this._palette_sub = None;
+                    this.palette = None;
+                    cx.notify();
+                }
+                PaletteEvent::Execute(cmd) => {
+                    match cmd {
+                        PaletteCommand::OpenInventory =>
+                            this.sidebar.update(cx, |s, cx| { s.active = ActiveModule::Inventory; cx.notify(); }),
+                        PaletteCommand::OpenQuotations =>
+                            this.sidebar.update(cx, |s, cx| { s.active = ActiveModule::Quotations; cx.notify(); }),
+                        PaletteCommand::OpenPriceBook =>
+                            this.sidebar.update(cx, |s, cx| { s.active = ActiveModule::PriceBook; cx.notify(); }),
+                        PaletteCommand::OpenAuditLog => {
+                            if this.audit_log.is_none() {
+                                this.audit_log = Some(cx.new(|cx| AuditLogPanel::new(cx)));
+                            }
+                        }
+                    }
+                    this._palette_sub = None;
+                    this.palette = None;
+                    cx.notify();
+                }
+            }
+        });
+        self.palette      = Some(pal);
+        self._palette_sub = Some(sub);
+        cx.notify();
     }
 }
 
@@ -85,15 +125,14 @@ impl Render for VasslRoot {
             }))
             .on_action(cx.listener(|this, _: &OpenAuditLog, _w, cx| {
                 if this.audit_log.is_some() {
-                    // Toggle off
                     this.audit_log = None;
                 } else {
                     this.audit_log = Some(cx.new(|cx| AuditLogPanel::new(cx)));
                 }
                 cx.notify();
             }))
-            .on_action(cx.listener(|_this, _: &FocusSearch, _w, _cx| {
-                // TODO(Plan 5 Task 8): open command palette
+            .on_action(cx.listener(|this, _: &FocusSearch, _w, cx| {
+                this.open_palette(cx);
             }))
             .relative()
             .flex().flex_col().w_full().h_full()
@@ -110,6 +149,9 @@ impl Render for VasslRoot {
         }
         if let Some(panel) = &self.audit_log {
             root = root.child(panel.clone());
+        }
+        if let Some(pal) = &self.palette {
+            root = root.child(pal.clone());
         }
 
         root
