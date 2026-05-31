@@ -1,0 +1,38 @@
+[workspace]
+members = [
+    "crates/vassl-core",
+    "crates/vassl-db",
+    "crates/vassl-app",
+    "crates/vassl-inventory",
+    "crates/vassl-quotations",
+    "crates/vassl-pricebook",
+]
+default-members = ["crates/vassl-app"]
+resolver = "2"
+
+[workspace.dependencies]
+# UI
+gpui = { git = "https://github.com/zed-industries/zed" }
+
+# Error handling
+anyhow    = "1"
+thiserror = "2"
+
+# Serialization
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Logging
+tracing             = "0.1"
+tracing-subscriber  = { version = "0.3", features = ["env-filter"] }
+tracing-appender    = "0.2"
+
+# DB / migration
+inventory = "0.3"
+
+# Platform paths + time
+dirs   = "5"
+chrono = { version = "0.4", features = ["serde"] }
+
+# Live config reload
+arc-swap = "1"

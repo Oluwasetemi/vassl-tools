@@ -1,0 +1,14 @@
+[package]
+name    = "vassl-pricebook"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow.workspace     = true
+thiserror.workspace  = true
+serde.workspace      = true
+serde_json.workspace = true
+inventory.workspace  = true
+chrono.workspace     = true
+vassl-core           = { path = "../vassl-core" }
+vassl-db             = { path = "../vassl-db" }

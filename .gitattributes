@@ -1,0 +1,2 @@
+# Keep SQL migration hashes stable across Windows/Unix
+*.sql text eol=lf
