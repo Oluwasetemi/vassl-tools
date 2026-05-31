@@ -65,9 +65,12 @@ impl VasslRoot {
         }
     }
 
-    fn open_palette(&mut self, cx: &mut Context<Self>) {
+    fn open_palette(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.palette.is_some() { return; }
         let pal = cx.new(|cx| CommandPalette::new(cx));
+        // Auto-focus the query text input so the user can type immediately.
+        let query_focus = pal.read(cx).query.read(cx).focus_handle.clone();
+        window.focus(&query_focus, cx);
         let sub = cx.subscribe(&pal, |this, _pal, ev: &PaletteEvent, cx| {
             match ev {
                 PaletteEvent::Dismissed => {
@@ -131,8 +134,8 @@ impl Render for VasslRoot {
                 }
                 cx.notify();
             }))
-            .on_action(cx.listener(|this, _: &FocusSearch, _w, cx| {
-                this.open_palette(cx);
+            .on_action(cx.listener(|this, _: &FocusSearch, window, cx| {
+                this.open_palette(window, cx);
             }))
             .relative()
             .flex().flex_col().w_full().h_full()

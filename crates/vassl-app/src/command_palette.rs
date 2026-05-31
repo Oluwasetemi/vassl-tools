@@ -42,7 +42,7 @@ pub enum PaletteEvent {
 impl EventEmitter<PaletteEvent> for CommandPalette {}
 
 pub struct CommandPalette {
-    query:        gpui::Entity<TextInput>,
+    pub query:    gpui::Entity<TextInput>,
     selected_idx: usize,
     focus_handle: FocusHandle,
 }

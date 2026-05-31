@@ -10,6 +10,7 @@ mod sidebar;
 mod status_bar;
 
 use actions::{FocusSearch, NewRecord, OpenAuditLog, OpenInventory, OpenPriceBook, OpenQuotations};
+use vassl_ui::text_input::{Backspace, Copy, Cut, Delete, End, Home, Left, Paste, Right, SelectAll, SelectLeft, SelectRight};
 use app::VasslApp;
 use gpui::{App, AppContext, Bounds, KeyBinding, WindowBounds, WindowOptions, px, size};
 use root::VasslRoot;
@@ -66,12 +67,26 @@ fn main() {
         // Keybindings are also documented in assets/keymaps/default.json (kept in sync manually).
         // The JSON is not loaded at runtime — cx.bind_keys is the source of truth.
         cx.bind_keys([
+            // App-level shortcuts
             KeyBinding::new("ctrl-1",       OpenInventory,  Some("VasslRoot")),
             KeyBinding::new("ctrl-2",       OpenQuotations, Some("VasslRoot")),
             KeyBinding::new("ctrl-3",       OpenPriceBook,  Some("VasslRoot")),
             KeyBinding::new("ctrl-shift-a", OpenAuditLog,   Some("VasslRoot")),
             KeyBinding::new("ctrl-n",       NewRecord,      Some("VasslRoot")),
             KeyBinding::new("ctrl-f",       FocusSearch,    Some("VasslRoot")),
+            // TextInput editing keys
+            KeyBinding::new("backspace",   Backspace,   Some("TextInput")),
+            KeyBinding::new("delete",      Delete,      Some("TextInput")),
+            KeyBinding::new("left",        Left,        Some("TextInput")),
+            KeyBinding::new("right",       Right,       Some("TextInput")),
+            KeyBinding::new("shift-left",  SelectLeft,  Some("TextInput")),
+            KeyBinding::new("shift-right", SelectRight, Some("TextInput")),
+            KeyBinding::new("ctrl-a",      SelectAll,   Some("TextInput")),
+            KeyBinding::new("home",        Home,        Some("TextInput")),
+            KeyBinding::new("end",         End,         Some("TextInput")),
+            KeyBinding::new("ctrl-v",      Paste,       Some("TextInput")),
+            KeyBinding::new("ctrl-c",      Copy,        Some("TextInput")),
+            KeyBinding::new("ctrl-x",      Cut,         Some("TextInput")),
         ]);
 
         let bounds = Bounds::centered(None, size(px(1280.0), px(800.0)), cx);

@@ -182,8 +182,9 @@ impl TextInput {
         }
         self.replace_text_in_range(None, "", window, cx);
     }
-    fn on_mouse_down(&mut self, event: &MouseDownEvent, _: &mut Window, cx: &mut Context<Self>) {
+    fn on_mouse_down(&mut self, event: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         self.is_selecting = true;
+        window.focus(&self.focus_handle, cx);
         if event.modifiers.shift {
             self.select_to(self.index_for_mouse_position(event.position), cx);
         } else {
