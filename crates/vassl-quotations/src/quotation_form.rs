@@ -1,6 +1,7 @@
 use gpui::{Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
-           MouseButton, MouseDownEvent, Render, Window, actions, div, prelude::*, px, rgb, rgba, SharedString};
-use vassl_ui::{TextInput, ThemeHandle, text_field};
+           Render, Window, actions, div, prelude::*, px, rgb, rgba, SharedString};
+use vassl_core::Project;
+use vassl_ui::{Dropdown, DropdownItem, TextInput, ThemeHandle, text_field};
 
 use crate::colors;
 
@@ -14,42 +15,71 @@ pub enum QuotationFormEvent { Submitted, Cancelled }
 impl EventEmitter<QuotationFormEvent> for QuotationForm {}
 
 pub struct QuotationForm {
-    store:                 Entity<QuotationStore>,
-    reference_number:      String,
-    selected_project:      Option<i64>,
-    project_dropdown_open: bool,
-    pub notes:             Entity<TextInput>,
-    error:                 Option<String>,
-    focus_handle:          FocusHandle,
+    store:              Entity<QuotationStore>,
+    reference_number:   String,
+    project_dropdown:   Entity<Dropdown>,
+    pub notes:          Entity<TextInput>,
+    error:              Option<String>,
+    focus_handle:       FocusHandle,
 }
 
 pub fn validate_form(selected_project: Option<i64>) -> Option<String> {
     if selected_project.is_none() { Some("Please select a project.".to_string()) } else { None }
 }
 
+fn projects_to_items(projects: &[Project]) -> Vec<DropdownItem> {
+    projects.iter().map(|p| DropdownItem {
+        id:       p.id,
+        label:    p.name.clone(),
+        sublabel: Some(p.client_name.clone()),
+    }).collect()
+}
+
 impl QuotationForm {
     pub fn new(store: Entity<QuotationStore>, reference_number: String, cx: &mut Context<Self>) -> Self {
+        let project_dropdown = cx.new(|_| {
+            Dropdown::new("Select a project…", "No projects yet — create one first.")
+        });
+
+        // Populate dropdown from current store state immediately
+        {
+            let (items, loading) = {
+                let s = store.read(cx);
+                (projects_to_items(&s.projects), s.loading)
+            };
+            project_dropdown.update(cx, |d, _| { d.items = items; d.loading = loading; });
+        }
+
+        // Keep dropdown fresh as the store changes (projects may load after form opens)
+        cx.observe(&store, |this, store_entity, cx| {
+            let (items, loading) = {
+                let s = store_entity.read(cx);
+                (projects_to_items(&s.projects), s.loading)
+            };
+            this.project_dropdown.update(cx, |d, cx| d.set_items(items, loading, cx));
+        }).detach();
+
         Self {
             store,
             reference_number,
-            selected_project:      None,
-            project_dropdown_open: false,
-            notes:                 cx.new(|cx| TextInput::with_placeholder("optional", cx)),
-            error:                 None,
-            focus_handle:          cx.focus_handle(),
+            project_dropdown,
+            notes:        cx.new(|cx| TextInput::with_placeholder("optional", cx)),
+            error:        None,
+            focus_handle: cx.focus_handle(),
         }
     }
 
     fn submit(&mut self, cx: &mut Context<Self>) {
-        match validate_form(self.selected_project) {
+        let selected = self.project_dropdown.read(cx).selected_id;
+        match validate_form(selected) {
             Some(msg) => { self.error = Some(msg); cx.notify(); }
             None => {
-                let pid      = self.selected_project.unwrap();
-                let ref_num  = self.reference_number.clone();
-                let notes_s  = self.notes.read(cx).text().trim().to_string();
-                let notes    = if notes_s.is_empty() { None } else { Some(notes_s) };
-                let store    = self.store.clone();
-                let db       = QuotationDb::global(&**cx);
+                let pid     = selected.unwrap();
+                let ref_num = self.reference_number.clone();
+                let notes_s = self.notes.read(cx).text().trim().to_string();
+                let notes   = if notes_s.is_empty() { None } else { Some(notes_s) };
+                let store   = self.store.clone();
+                let db      = QuotationDb::global(&**cx);
 
                 cx.spawn(async move |this, cx| {
                     let result = db.insert_quotation_with_notes(pid, ref_num, "user", notes.as_deref()).await;
@@ -70,17 +100,6 @@ impl Render for QuotationForm {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = cx.global::<ThemeHandle>().0.clone();
         let notes_focused = self.notes.read(cx).focus_handle.is_focused(window);
-
-        let (projects, store_loading) = {
-            let store = self.store.read(cx);
-            (store.projects.clone(), store.loading)
-        };
-
-        let selected_name: Option<String> = self.selected_project
-            .and_then(|pid| projects.iter().find(|p| p.id == pid))
-            .map(|p| format!("{} / {}", p.name, p.client_name));
-
-        let dropdown_open = self.project_dropdown_open;
 
         div()
             .absolute().top_0().left_0().right_0().bottom_0()
@@ -113,7 +132,7 @@ impl Render for QuotationForm {
                     // ── fields ──────────────────────────────────────────
                     .child(
                         div().flex().flex_col().px(px(20.)).pt(px(8.)).pb(px(4.))
-                            // Reference number row (read-only)
+                            // Reference number (read-only)
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Reference"))
@@ -123,85 +142,14 @@ impl Render for QuotationForm {
                                         .child(self.reference_number.clone()))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
-                            // Project dropdown row
+                            // Project dropdown
                             .child(
-                                div().flex().flex_col().py(px(10.))
-                                    // Trigger — Zed-style: value + ◇ indicator
-                                    .child(
-                                        div().flex().flex_row().items_center()
-                                            .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Project"))
-                                            .child(
-                                                div()
-                                                    .id("project-dropdown-trigger")
-                                                    .flex_1()
-                                                    .flex().flex_row().items_center().gap(px(6.))
-                                                    .px(px(12.)).py(px(7.))
-                                                    .bg(rgb(c.surface_default)).rounded(px(5.))
-                                                    .border_1().border_color(rgb(c.surface_active))
-                                                    .cursor_pointer()
-                                                    .on_mouse_down(MouseButton::Left, cx.listener(|this, _: &MouseDownEvent, _, cx| {
-                                                        this.project_dropdown_open = !this.project_dropdown_open;
-                                                        cx.notify();
-                                                    }))
-                                                    .child(
-                                                        div().flex_1().text_size(px(12.))
-                                                            .text_color(rgb(if selected_name.is_some() { c.text_default } else { c.text_muted }))
-                                                            .child(selected_name.clone().unwrap_or_else(|| "Select a project…".to_string()))
-                                                    )
-                                                    .child(
-                                                        div().text_size(px(11.)).text_color(rgb(c.text_muted))
-                                                            .child("◇")
-                                                    )
-                                            )
-                                    )
-                                    // Inline list — only rendered when open
-                                    .when(dropdown_open, |this| {
-                                        let list = div()
-                                            .id("project-dropdown-list")
-                                            .ml(px(160.))
-                                            .mt(px(2.))
-                                            .max_h(px(150.)).overflow_y_scroll()
-                                            .bg(rgb(c.surface_default)).rounded(px(4.))
-                                            .border_1().border_color(rgb(c.surface_active));
-
-                                        let list = if store_loading {
-                                            list.child(
-                                                div().px(px(10.)).py(px(8.))
-                                                    .text_size(px(12.)).text_color(rgb(c.text_muted))
-                                                    .child("Loading…")
-                                            )
-                                        } else if projects.is_empty() {
-                                            list.child(
-                                                div().px(px(10.)).py(px(8.))
-                                                    .text_size(px(12.)).text_color(rgb(c.text_muted))
-                                                    .child("No projects yet — create one first.")
-                                            )
-                                        } else {
-                                            list.children(projects.iter().map(|p| {
-                                                let pid      = p.id;
-                                                let selected = self.selected_project == Some(pid);
-                                                let bg       = if selected { c.surface_active } else { c.surface_default };
-                                                div()
-                                                    .id(format!("pick-project-{pid}"))
-                                                    .flex().flex_row().items_center()
-                                                    .px(px(10.)).py(px(6.))
-                                                    .bg(rgb(bg)).cursor_pointer()
-                                                    .on_mouse_down(MouseButton::Left, cx.listener(move |this, _: &MouseDownEvent, _, cx| {
-                                                        this.selected_project      = Some(pid);
-                                                        this.project_dropdown_open = false;
-                                                        this.error                 = None;
-                                                        cx.notify();
-                                                    }))
-                                                    .child(div().flex_1().text_size(px(12.)).text_color(rgb(c.text_default)).child(p.name.clone()))
-                                                    .child(div().text_size(px(11.)).text_color(rgb(c.text_muted)).child(p.client_name.clone()))
-                                            }))
-                                        };
-
-                                        this.child(list)
-                                    })
+                                div().flex().flex_row().items_center().py(px(10.))
+                                    .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Project"))
+                                    .child(div().flex_1().child(self.project_dropdown.clone()))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
-                            // Notes row
+                            // Notes
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Notes"))
@@ -241,4 +189,17 @@ mod tests {
     #[test] fn reference_number_format()       { let r = "VASSL-2026-0001"; assert!(r.starts_with("VASSL-")); assert_eq!(r.len(), 15); }
     #[test] fn form_requires_project()         { assert!(validate_form(None).is_some()); }
     #[test] fn form_valid_with_project()       { assert!(validate_form(Some(1)).is_none()); }
+    #[test] fn projects_to_items_maps_correctly() {
+        use vassl_core::{Project, ProjectStatus};
+        let projects = vec![Project {
+            id: 1, name: "Alpha".into(), client_name: "Acme".into(),
+            description: None, status: ProjectStatus::Active,
+            created_at: "2026-01-01".into(),
+        }];
+        let items = projects_to_items(&projects);
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id, 1);
+        assert_eq!(items[0].label, "Alpha");
+        assert_eq!(items[0].sublabel.as_deref(), Some("Acme"));
+    }
 }
