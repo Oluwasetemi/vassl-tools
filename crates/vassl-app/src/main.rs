@@ -4,13 +4,14 @@ mod audit_log;
 mod colors;
 mod command_palette;
 mod first_run;
+mod global_search;
 mod platform;
 mod root;
 mod settings_panel;
 mod sidebar;
 mod status_bar;
 
-use actions::{ConfirmSelection, EscapeModal, FocusSearch, NewRecord, OpenAuditLog, OpenInventory, OpenPriceBook, OpenQuotations, OpenSettings, SelectNext, SelectPrev};
+use actions::{ConfirmSelection, EscapeModal, FocusSearch, NewRecord, OpenAuditLog, OpenGlobalSearch, OpenInventory, OpenPriceBook, OpenQuotations, OpenSettings, SelectNext, SelectPrev};
 use vassl_ui::text_input::{BackTab, Backspace, Copy, Cut, Delete, End, Home, Left, Paste, Right, SelectAll, SelectLeft, SelectRight, ShowCharacterPalette, Tab as TextTab};
 use vassl_inventory::product_form::{EscapeForm as ProductEscapeForm, TabField as ProductTab, BackTabField as ProductBackTab};
 use vassl_inventory::stock_form::{EscapeForm as StockEscapeForm, TabField as StockTab, BackTabField as StockBackTab};
@@ -90,7 +91,8 @@ fn main() {
             KeyBinding::new("secondary-3",       OpenPriceBook,  Some("VasslRoot")),
             KeyBinding::new("secondary-shift-a", OpenAuditLog,   Some("VasslRoot")),
             KeyBinding::new("secondary-n",       NewRecord,      Some("VasslRoot")),
-            KeyBinding::new("secondary-f",       FocusSearch,    Some("VasslRoot")),
+            KeyBinding::new("secondary-f",       FocusSearch,      Some("VasslRoot")),
+            KeyBinding::new("secondary-shift-f", OpenGlobalSearch, Some("VasslRoot")),
             KeyBinding::new("secondary-comma",   OpenSettings,   Some("VasslRoot")),
             // TextInput editing keys
             KeyBinding::new("backspace",        Backspace,   Some("TextInput")),
@@ -114,6 +116,10 @@ fn main() {
             KeyBinding::new("down",              SelectNext,       Some("CommandPalette")),
             KeyBinding::new("up",                SelectPrev,       Some("CommandPalette")),
             KeyBinding::new("enter",             ConfirmSelection, Some("CommandPalette")),
+            // GlobalSearch keyboard navigation
+            KeyBinding::new("down",              SelectNext,       Some("GlobalSearch")),
+            KeyBinding::new("up",                SelectPrev,       Some("GlobalSearch")),
+            KeyBinding::new("enter",             ConfirmSelection, Some("GlobalSearch")),
             // ProductForm escape + tab
             KeyBinding::new("escape",            ProductEscapeForm, Some("ProductForm")),
             KeyBinding::new("tab",               ProductTab,        Some("ProductForm")),

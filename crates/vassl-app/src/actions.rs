@@ -12,4 +12,5 @@ actions!(vassl, [
     SelectNext,
     SelectPrev,
     ConfirmSelection,
+    OpenGlobalSearch,
 ]);

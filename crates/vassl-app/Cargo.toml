@@ -16,6 +16,7 @@ tracing-subscriber.workspace = true
 tracing-appender.workspace   = true
 dirs.workspace               = true
 tracing-log                  = "0.2"
+vassl-core                   = { path = "../vassl-core" }
 vassl-db                     = { path = "../vassl-db" }
 vassl-inventory              = { path = "../vassl-inventory" }
 vassl-quotations             = { path = "../vassl-quotations" }
