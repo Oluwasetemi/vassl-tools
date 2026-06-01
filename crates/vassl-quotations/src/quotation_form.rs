@@ -15,13 +15,14 @@ pub enum QuotationFormEvent { Submitted, Cancelled }
 impl EventEmitter<QuotationFormEvent> for QuotationForm {}
 
 pub struct QuotationForm {
-    store:            Entity<QuotationStore>,
-    reference_number: String,
-    projects:         Vec<Project>,
-    selected_project: Option<i64>,
-    pub notes:        Entity<TextInput>,
-    error:            Option<String>,
-    focus_handle:     FocusHandle,
+    store:                Entity<QuotationStore>,
+    reference_number:     String,
+    projects:             Vec<Project>,
+    selected_project:     Option<i64>,
+    project_dropdown_open: bool,
+    pub notes:            Entity<TextInput>,
+    error:                Option<String>,
+    focus_handle:         FocusHandle,
 }
 
 pub fn validate_form(selected_project: Option<i64>) -> Option<String> {
@@ -34,10 +35,11 @@ impl QuotationForm {
             store,
             reference_number,
             projects,
-            selected_project: None,
-            notes:            cx.new(|cx| TextInput::with_placeholder("optional", cx)),
-            error:            None,
-            focus_handle:     cx.focus_handle(),
+            selected_project:      None,
+            project_dropdown_open: false,
+            notes:                 cx.new(|cx| TextInput::with_placeholder("optional", cx)),
+            error:                 None,
+            focus_handle:          cx.focus_handle(),
         }
     }
 
@@ -71,6 +73,12 @@ impl Render for QuotationForm {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = cx.global::<ThemeHandle>().0.clone();
         let notes_focused = self.notes.read(cx).focus_handle.is_focused(window);
+
+        let selected_name: Option<String> = self.selected_project
+            .and_then(|pid| self.projects.iter().find(|p| p.id == pid))
+            .map(|p| format!("{} / {}", p.name, p.client_name));
+
+        let dropdown_open = self.project_dropdown_open;
 
         div()
             .absolute().top_0().left_0().right_0().bottom_0()
@@ -113,31 +121,66 @@ impl Render for QuotationForm {
                                         .child(self.reference_number.clone()))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
-                            // Project picker row
+                            // Project dropdown row
                             .child(
-                                div().flex().flex_row().py(px(10.))
-                                    .child(div().w(px(160.)).pt(px(2.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Project"))
+                                div().flex().flex_col().py(px(10.))
+                                    // Trigger
                                     .child(
-                                        div().id("project-picker").flex_1().h(px(130.)).overflow_y_scroll()
-                                            .bg(rgb(c.surface_default)).rounded(px(4.))
-                                            .children(self.projects.iter().map(|p| {
-                                                let pid      = p.id;
-                                                let selected = self.selected_project == Some(pid);
-                                                let bg       = if selected { c.surface_active } else { c.surface_default };
+                                        div().flex().flex_row().items_center()
+                                            .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Project"))
+                                            .child(
                                                 div()
-                                                    .id(format!("pick-project-{pid}"))
-                                                    .flex().flex_row().items_center()
-                                                    .px(px(10.)).py(px(6.))
-                                                    .bg(rgb(bg)).cursor_pointer()
-                                                    .on_mouse_down(MouseButton::Left, cx.listener(move |this, _: &MouseDownEvent, _, cx| {
-                                                        this.selected_project = Some(pid);
-                                                        this.error = None;
+                                                    .id("project-dropdown-trigger")
+                                                    .flex_1()
+                                                    .flex().flex_row().items_center().justify_between()
+                                                    .px(px(8.)).py(px(6.))
+                                                    .bg(rgb(c.surface_default)).rounded(px(4.))
+                                                    .cursor_pointer()
+                                                    .on_mouse_down(MouseButton::Left, cx.listener(|this, _: &MouseDownEvent, _, cx| {
+                                                        this.project_dropdown_open = !this.project_dropdown_open;
                                                         cx.notify();
                                                     }))
-                                                    .child(div().flex_1().text_size(px(12.)).text_color(rgb(c.text_default)).child(p.name.clone()))
-                                                    .child(div().text_size(px(11.)).text_color(rgb(c.text_muted)).child(p.client_name.clone()))
-                                            }))
+                                                    .child(
+                                                        div().flex_1().text_size(px(12.))
+                                                            .text_color(rgb(if selected_name.is_some() { c.text_default } else { c.text_muted }))
+                                                            .child(selected_name.clone().unwrap_or_else(|| "Select a project…".to_string()))
+                                                    )
+                                                    .child(
+                                                        div().text_size(px(10.)).text_color(rgb(c.text_muted))
+                                                            .child(if dropdown_open { "▴" } else { "▾" })
+                                                    )
+                                            )
                                     )
+                                    // Inline list — only rendered when open
+                                    .when(dropdown_open, |this| {
+                                        this.child(
+                                            div()
+                                                .id("project-dropdown-list")
+                                                .ml(px(160.))
+                                                .mt(px(2.))
+                                                .max_h(px(150.)).overflow_y_scroll()
+                                                .bg(rgb(c.surface_default)).rounded(px(4.))
+                                                .border_1().border_color(rgb(c.surface_active))
+                                                .children(self.projects.iter().map(|p| {
+                                                    let pid      = p.id;
+                                                    let selected = self.selected_project == Some(pid);
+                                                    let bg       = if selected { c.surface_active } else { c.surface_default };
+                                                    div()
+                                                        .id(format!("pick-project-{pid}"))
+                                                        .flex().flex_row().items_center()
+                                                        .px(px(10.)).py(px(6.))
+                                                        .bg(rgb(bg)).cursor_pointer()
+                                                        .on_mouse_down(MouseButton::Left, cx.listener(move |this, _: &MouseDownEvent, _, cx| {
+                                                            this.selected_project     = Some(pid);
+                                                            this.project_dropdown_open = false;
+                                                            this.error                = None;
+                                                            cx.notify();
+                                                        }))
+                                                        .child(div().flex_1().text_size(px(12.)).text_color(rgb(c.text_default)).child(p.name.clone()))
+                                                        .child(div().text_size(px(11.)).text_color(rgb(c.text_muted)).child(p.client_name.clone()))
+                                                }))
+                                        )
+                                    })
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             // Notes row
