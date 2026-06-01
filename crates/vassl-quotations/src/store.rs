@@ -90,6 +90,22 @@ impl QuotationStore {
         }).detach();
     }
 
+    pub fn load_line_items(&mut self, quotation_id: i64, cx: &mut Context<Self>) {
+        let db = QuotationDb::global(&**cx);
+        cx.spawn(async move |this, cx| {
+            let result = cx.background_executor()
+                .spawn(async move { db.list_items_for_quotation(quotation_id) })
+                .await;
+            let _ = this.update(cx, |store, cx| {
+                match result {
+                    Ok(items) => { store.line_items = items; cx.emit(QuotationEvent::ItemsLoaded); }
+                    Err(e)    => tracing::error!("load_line_items failed: {e:?}"),
+                }
+                cx.notify();
+            });
+        }).detach();
+    }
+
     pub fn transition_status(&mut self, id: i64, new_status: QuotationStatus, cx: &mut Context<Self>) {
         let db = QuotationDb::global(&**cx);
         cx.spawn(async move |this, cx| {

@@ -16,6 +16,7 @@ use vassl_inventory::stock_form::{EscapeForm as StockEscapeForm, TabField as Sto
 use vassl_pricebook::price_form::{EscapeForm as PriceEscapeForm, TabField as PriceTab, BackTabField as PriceBackTab};
 use vassl_quotations::quotation_form::EscapeForm as QuotationEscapeForm;
 use vassl_quotations::project_form::{EscapeForm as ProjectEscapeForm, TabField as ProjectTab, BackTabField as ProjectBackTab};
+use vassl_quotations::line_item_form::{EscapeForm as LineItemEscapeForm, TabField as LineItemTab, BackTabField as LineItemBackTab};
 use vassl_ui::{ThemeColors, ThemeHandle};
 use app::VasslApp;
 use gpui::{App, AppContext, Bounds, KeyBinding, WindowAppearance, WindowBounds, WindowOptions, px, size};
@@ -126,6 +127,10 @@ fn main() {
             KeyBinding::new("escape",            ProjectEscapeForm,   Some("ProjectForm")),
             KeyBinding::new("tab",               ProjectTab,          Some("ProjectForm")),
             KeyBinding::new("shift-tab",         ProjectBackTab,      Some("ProjectForm")),
+            // LineItemForm escape + tab
+            KeyBinding::new("escape",            LineItemEscapeForm,  Some("LineItemForm")),
+            KeyBinding::new("tab",               LineItemTab,         Some("LineItemForm")),
+            KeyBinding::new("shift-tab",         LineItemBackTab,     Some("LineItemForm")),
         ]);
 
         let bounds = Bounds::centered(None, size(px(1280.0), px(800.0)), cx);

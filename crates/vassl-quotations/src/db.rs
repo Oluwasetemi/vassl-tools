@@ -247,6 +247,32 @@ impl QuotationDb {
         .await
     }
 
+    pub async fn insert_item(
+        &self,
+        quotation_id:   i64,
+        product_id:     Option<i64>,
+        description:    String,
+        quantity:       f64,
+        unit_price_usd: f64,
+        total_usd:      f64,
+    ) -> anyhow::Result<i64> {
+        self.write(move |conn| {
+            conn.exec_bound::<(i64, Option<i64>, String, f64, f64, f64)>(
+                "INSERT INTO quotation_items
+                 (quotation_id, product_id, description, quantity, unit_price_usd, total_usd)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            )
+            .context("prepare insert_item")?
+            ((quotation_id, product_id, description, quantity, unit_price_usd, total_usd))
+            .context("execute insert_item")?;
+            conn.select_row::<i64>("SELECT last_insert_rowid()")
+                .context("prepare rowid")?()
+                .context("execute rowid")?
+                .context("rowid was None")
+        })
+        .await
+    }
+
     pub async fn update_status(&self, id: i64, status: QuotationStatus) -> anyhow::Result<()> {
         let status_str = status_to_str(&status).to_string();
         let now        = chrono::Utc::now().to_rfc3339();

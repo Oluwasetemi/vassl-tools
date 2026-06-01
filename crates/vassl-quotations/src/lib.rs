@@ -1,5 +1,6 @@
 pub mod colors;
 pub mod db;
+pub mod line_item_form;
 pub mod panel;
 pub mod project_form;
 pub mod quotation_detail;

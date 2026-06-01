@@ -6180,6 +6180,7 @@ dependencies = [
  "tracing",
  "vassl-core",
  "vassl-db",
+ "vassl-pricebook",
  "vassl-ui",
 ]
 
