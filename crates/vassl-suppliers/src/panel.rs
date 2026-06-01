@@ -5,21 +5,19 @@ use vassl_ui::ThemeHandle;
 use crate::store::SupplierStore;
 use crate::supplier_form::{SupplierForm, SupplierFormEvent};
 use crate::supplier_list::SupplierList;
-use crate::SupplierStoreHandle;
 
 pub struct SupplierPanel {
-    store:         Entity<SupplierStore>,
-    supplier_list: Entity<SupplierList>,
-    form:          Option<Entity<SupplierForm>>,
-    _form_sub:     Option<Subscription>,
+    store:     Entity<SupplierStore>,
+    list:      Entity<SupplierList>,
+    form:      Option<Entity<SupplierForm>>,
+    _form_sub: Option<Subscription>,
 }
 
 impl SupplierPanel {
-    pub fn new(cx: &mut Context<Self>) -> Self {
-        let store         = cx.global::<SupplierStoreHandle>().0.clone();
-        let supplier_list = cx.new(|cx| SupplierList::new(store.clone(), cx));
+    pub fn new(store: Entity<SupplierStore>, cx: &mut Context<Self>) -> Self {
+        let list = cx.new(|cx| SupplierList::new(store.clone(), cx));
         store.update(cx, |s, cx| s.load_suppliers(cx));
-        Self { store, supplier_list, form: None, _form_sub: None }
+        Self { store, list, form: None, _form_sub: None }
     }
 
     fn open_new_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -103,7 +101,7 @@ impl Render for SupplierPanel {
                         btn
                     })
             )
-            .child(self.supplier_list.clone());
+            .child(self.list.clone());
 
         if let Some(form) = &self.form {
             root = root.child(form.clone());
