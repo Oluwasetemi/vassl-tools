@@ -18,7 +18,7 @@ impl EventEmitter<PriceBookPanelEvent> for PriceBookPanel {}
 enum Tab { PriceBook, History }
 
 pub struct PriceBookPanel {
-    store:       Entity<PriceBookStore>,
+    pub store:   Entity<PriceBookStore>,
     price_table: Entity<PriceTable>,
     active_tab:  Tab,
     form:        Option<Entity<PriceEntryForm>>,

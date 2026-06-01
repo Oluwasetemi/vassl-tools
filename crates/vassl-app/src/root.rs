@@ -8,8 +8,9 @@ use crate::command_palette::{CommandPalette, PaletteEvent, PaletteCommand};
 use crate::first_run::{FirstRunEvent, FirstRunPrompt};
 use crate::sidebar::{ActiveModule, Sidebar};
 use crate::status_bar::StatusBar;
-use vassl_inventory::panel::InventoryPanel;
-use vassl_pricebook::panel::PriceBookPanel;
+use vassl_inventory::panel::{InventoryPanel, InventoryPanelEvent};
+use vassl_pricebook::panel::{PriceBookPanel, PriceBookPanelEvent};
+use vassl_pricebook::price_history::{PriceHistoryEvent, PriceHistoryPanel};
 use vassl_quotations::panel::QuotationPanel;
 
 pub struct VasslRoot {
@@ -19,12 +20,16 @@ pub struct VasslRoot {
     pricebook_panel:  Entity<PriceBookPanel>,
     quotation_panel:  Entity<QuotationPanel>,
     settings_panel:   Entity<SettingsPanel>,
-    first_run:        Option<Entity<FirstRunPrompt>>,
-    _first_run_sub:   Option<Subscription>,
-    audit_log:        Option<Entity<AuditLogPanel>>,
-    palette:          Option<Entity<CommandPalette>>,
-    _palette_sub:     Option<Subscription>,
-    focus_handle:     FocusHandle,
+    first_run:             Option<Entity<FirstRunPrompt>>,
+    _first_run_sub:        Option<Subscription>,
+    audit_log:             Option<Entity<AuditLogPanel>>,
+    palette:               Option<Entity<CommandPalette>>,
+    _palette_sub:          Option<Subscription>,
+    price_history:         Option<Entity<PriceHistoryPanel>>,
+    _price_history_sub:    Option<Subscription>,
+    _inventory_panel_sub:  Subscription,
+    _pricebook_panel_sub:  Subscription,
+    focus_handle:          FocusHandle,
 }
 
 impl Focusable for VasslRoot {
@@ -81,21 +86,81 @@ impl VasslRoot {
         // fire immediately without requiring the user to click a text field first.
         window.focus(&focus_handle, cx);
 
-        let settings_panel = cx.new(SettingsPanel::new);
+        let settings_panel   = cx.new(SettingsPanel::new);
         settings_panel.update(cx, |panel, cx| panel.wire_observers(cx));
+
+        let inventory_panel  = cx.new(InventoryPanel::new);
+        let pricebook_panel  = cx.new(PriceBookPanel::new);
+
+        let _inventory_panel_sub = cx.subscribe(
+            &inventory_panel,
+            |this, _panel, ev: &InventoryPanelEvent, cx| {
+                match ev {
+                    InventoryPanelEvent::ShowPriceHistory { product_id, name } => {
+                        let ph  = cx.new(|cx| PriceHistoryPanel::new(*product_id, name.clone(), cx));
+                        let sub = cx.subscribe(&ph, |this, _, ev: &PriceHistoryEvent, cx| {
+                            match ev {
+                                PriceHistoryEvent::Dismissed => {
+                                    this._price_history_sub = None;
+                                    this.price_history      = None;
+                                    cx.notify();
+                                }
+                            }
+                        });
+                        this.price_history      = Some(ph);
+                        this._price_history_sub = Some(sub);
+                        cx.notify();
+                    }
+                    InventoryPanelEvent::ShowPriceEntryForm { product_id, .. } => {
+                        let pid = *product_id;
+                        this.sidebar.update(cx, |s, cx| { s.active = ActiveModule::PriceBook; cx.notify(); });
+                        this.pricebook_panel.update(cx, |panel, cx| {
+                            panel.store.update(cx, |s, cx| s.select_product(pid, cx));
+                        });
+                    }
+                }
+            },
+        );
+
+        let _pricebook_panel_sub = cx.subscribe(
+            &pricebook_panel,
+            |this, _panel, ev: &PriceBookPanelEvent, cx| {
+                match ev {
+                    PriceBookPanelEvent::ShowPriceHistory { product_id, name } => {
+                        let ph  = cx.new(|cx| PriceHistoryPanel::new(*product_id, name.clone(), cx));
+                        let sub = cx.subscribe(&ph, |this, _, ev: &PriceHistoryEvent, cx| {
+                            match ev {
+                                PriceHistoryEvent::Dismissed => {
+                                    this._price_history_sub = None;
+                                    this.price_history      = None;
+                                    cx.notify();
+                                }
+                            }
+                        });
+                        this.price_history      = Some(ph);
+                        this._price_history_sub = Some(sub);
+                        cx.notify();
+                    }
+                }
+            },
+        );
 
         Self {
             sidebar:          cx.new(Sidebar::new),
             status_bar:       cx.new(StatusBar::new),
-            inventory_panel:  cx.new(InventoryPanel::new),
-            pricebook_panel:  cx.new(PriceBookPanel::new),
+            inventory_panel,
+            pricebook_panel,
             quotation_panel:  cx.new(QuotationPanel::new),
             settings_panel,
             first_run,
             _first_run_sub,
-            audit_log: None,
-            palette:   None,
-            _palette_sub: None,
+            audit_log:            None,
+            palette:              None,
+            _palette_sub:         None,
+            price_history:        None,
+            _price_history_sub:   None,
+            _inventory_panel_sub,
+            _pricebook_panel_sub,
             focus_handle,
         }
     }
@@ -188,6 +253,11 @@ impl Render for VasslRoot {
                     this.audit_log = None;
                     w.focus(&this.focus_handle, cx);
                     cx.notify();
+                } else if this.price_history.is_some() {
+                    this._price_history_sub = None;
+                    this.price_history      = None;
+                    w.focus(&this.focus_handle, cx);
+                    cx.notify();
                 }
             }))
             .relative()
@@ -209,7 +279,34 @@ impl Render for VasslRoot {
         if let Some(pal) = &self.palette {
             root = root.child(pal.clone());
         }
+        if let Some(ph) = &self.price_history {
+            root = root.child(ph.clone());
+        }
 
         root
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use vassl_inventory::panel::InventoryPanelEvent;
+    use vassl_pricebook::panel::PriceBookPanelEvent;
+
+    #[test]
+    fn inventory_panel_event_variants_are_accessible() {
+        let ev = InventoryPanelEvent::ShowPriceHistory {
+            product_id: 1,
+            name:       "Test".to_string(),
+        };
+        assert!(matches!(ev, InventoryPanelEvent::ShowPriceHistory { .. }));
+    }
+
+    #[test]
+    fn pricebook_panel_event_variants_are_accessible() {
+        let ev = PriceBookPanelEvent::ShowPriceHistory {
+            product_id: 2,
+            name:       "Test".to_string(),
+        };
+        assert!(matches!(ev, PriceBookPanelEvent::ShowPriceHistory { .. }));
     }
 }
