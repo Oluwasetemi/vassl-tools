@@ -2,6 +2,7 @@ pub mod colors;
 pub mod db;
 pub mod panel;
 pub mod price_form;
+pub mod price_history;
 pub mod price_table;
 pub mod store;
 
