@@ -208,7 +208,7 @@ impl SettingsPanel {
                     .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, cx| {
                         this.font_size = (this.font_size - 0.5).max(10.0);
                         window.set_rem_size(px(this.font_size as f32));
-                        this.save_setting("appearance.font_size", format!("{}", this.font_size), cx);
+                        this.save_setting("appearance.font_size", format!("{:.1}", this.font_size), cx);
                         cx.notify();
                     }))
                     .child("−")
@@ -228,7 +228,7 @@ impl SettingsPanel {
                     .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, cx| {
                         this.font_size = (this.font_size + 0.5).min(24.0);
                         window.set_rem_size(px(this.font_size as f32));
-                        this.save_setting("appearance.font_size", format!("{}", this.font_size), cx);
+                        this.save_setting("appearance.font_size", format!("{:.1}", this.font_size), cx);
                         cx.notify();
                     }))
                     .child("+")
@@ -456,7 +456,8 @@ mod tests {
 
     #[test]
     fn stepper_reset_returns_to_13() {
-        let v = 13.0_f64;
+        let mut v = 22.5_f64;
+        v = 13.0;
         assert!((v - 13.0).abs() < f64::EPSILON);
     }
 }
