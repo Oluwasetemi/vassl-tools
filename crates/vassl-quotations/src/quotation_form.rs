@@ -82,56 +82,93 @@ impl Render for QuotationForm {
             }))
             .child(
                 div()
-                    .w(px(460.)).bg(rgb(c.canvas_bg)).rounded(px(8.)).p(px(24.))
-                    .flex().flex_col().gap(px(12.))
-                    .child(div().text_size(px(14.)).text_color(rgb(c.text_default)).child("New Quotation"))
+                    .w(px(580.))
+                    .bg(rgb(c.canvas_bg))
+                    .rounded(px(10.))
+                    .border_1()
+                    .border_color(rgb(c.surface_default))
+                    .overflow_hidden()
+                    .flex().flex_col()
+                    // ── header ──────────────────────────────────────────
                     .child(
-                        div().flex().flex_col().gap(px(4.))
-                            .child(div().text_size(px(11.)).text_color(rgb(c.text_muted)).child("Reference Number"))
-                            .child(div().px(px(8.)).py(px(6.)).bg(rgb(c.surface_default)).rounded(px(4.))
+                        div()
+                            .px(px(20.)).py(px(14.))
+                            .bg(rgb(c.sidebar_bg))
+                            .flex().flex_row().items_center()
+                            .child(div().flex_1()
                                 .text_size(px(13.)).text_color(rgb(c.text_default))
-                                .child(self.reference_number.clone()))
+                                .child("New Quotation"))
+                            .child(div().text_size(px(11.)).text_color(rgb(c.text_muted)).child("Esc to cancel"))
                     )
+                    // ── fields ──────────────────────────────────────────
                     .child(
-                        div().flex().flex_col().gap(px(4.))
-                            .child(div().text_size(px(11.)).text_color(rgb(c.text_muted)).child("Select Project"))
+                        div().flex().flex_col().px(px(20.)).pt(px(8.)).pb(px(4.))
+                            // Reference number row (read-only)
                             .child(
-                                div().id("project-picker").h(px(120.)).overflow_y_scroll()
-                                    .bg(rgb(c.surface_default)).rounded(px(4.))
-                                    .children(self.projects.iter().map(|p| {
-                                        let pid      = p.id;
-                                        let selected = self.selected_project == Some(pid);
-                                        let bg       = if selected { c.surface_active } else { c.surface_default };
-                                        div()
-                                            .id(format!("pick-project-{pid}"))
-                                            .flex().flex_row().items_center()
-                                            .px(px(8.)).py(px(5.))
-                                            .bg(rgb(bg)).cursor_pointer()
-                                            .on_mouse_down(MouseButton::Left, cx.listener(move |this, _: &MouseDownEvent, _, cx| {
-                                                this.selected_project = Some(pid);
-                                                this.error = None;
-                                                cx.notify();
+                                div().flex().flex_row().items_center().py(px(10.))
+                                    .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Reference"))
+                                    .child(div().flex_1()
+                                        .px(px(8.)).py(px(6.)).bg(rgb(c.surface_default)).rounded(px(4.))
+                                        .text_size(px(12.)).text_color(rgb(c.text_muted))
+                                        .child(self.reference_number.clone()))
+                            )
+                            .child(div().h(px(1.)).bg(rgb(c.surface_default)))
+                            // Project picker row
+                            .child(
+                                div().flex().flex_row().py(px(10.))
+                                    .child(div().w(px(160.)).pt(px(2.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Project"))
+                                    .child(
+                                        div().id("project-picker").flex_1().h(px(130.)).overflow_y_scroll()
+                                            .bg(rgb(c.surface_default)).rounded(px(4.))
+                                            .children(self.projects.iter().map(|p| {
+                                                let pid      = p.id;
+                                                let selected = self.selected_project == Some(pid);
+                                                let bg       = if selected { c.surface_active } else { c.surface_default };
+                                                div()
+                                                    .id(format!("pick-project-{pid}"))
+                                                    .flex().flex_row().items_center()
+                                                    .px(px(10.)).py(px(6.))
+                                                    .bg(rgb(bg)).cursor_pointer()
+                                                    .on_mouse_down(MouseButton::Left, cx.listener(move |this, _: &MouseDownEvent, _, cx| {
+                                                        this.selected_project = Some(pid);
+                                                        this.error = None;
+                                                        cx.notify();
+                                                    }))
+                                                    .child(div().flex_1().text_size(px(12.)).text_color(rgb(c.text_default)).child(p.name.clone()))
+                                                    .child(div().text_size(px(11.)).text_color(rgb(c.text_muted)).child(p.client_name.clone()))
                                             }))
-                                            .child(div().flex_1().text_size(px(12.)).text_color(rgb(c.text_default)).child(p.name.clone()))
-                                            .child(div().text_size(px(11.)).text_color(rgb(c.text_muted)).child(p.client_name.clone()))
-                                    }))
+                                    )
+                            )
+                            .child(div().h(px(1.)).bg(rgb(c.surface_default)))
+                            // Notes row
+                            .child(
+                                div().flex().flex_row().items_center().py(px(10.))
+                                    .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Notes"))
+                                    .child(div().flex_1().child(text_field("", self.notes.clone(), notes_focused, window)))
+                            )
+                            .child(
+                                div().h(px(18.)).flex().items_center()
+                                    .child(div().text_size(px(11.)).text_color(rgb(c.status_red))
+                                        .child(self.error.as_deref().map(SharedString::from).unwrap_or_default()))
                             )
                     )
-                    .child(text_field("Notes (optional)", self.notes.clone(), notes_focused, window))
-                    .child(div().text_size(px(11.)).text_color(rgb(c.status_red))
-                        .child(self.error.as_deref().map(SharedString::from).unwrap_or_default()))
+                    // ── footer ──────────────────────────────────────────
                     .child(
-                        div().flex().flex_row().justify_end().gap(px(8.))
-                            .child(div().id("quot-btn-cancel").px(px(16.)).py(px(6.)).rounded(px(4.))
+                        div()
+                            .px(px(20.)).py(px(14.))
+                            .border_t_1()
+                            .border_color(rgb(c.surface_default))
+                            .flex().flex_row().justify_end().gap(px(8.))
+                            .child(div().id("quot-btn-cancel").px(px(18.)).py(px(7.)).rounded(px(5.))
                                 .bg(rgb(c.surface_default)).text_size(px(12.)).text_color(rgb(c.text_default))
                                 .cursor_pointer()
                                 .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| { cx.emit(QuotationFormEvent::Cancelled); }))
                                 .child("Cancel"))
-                            .child(div().id("quot-btn-create").px(px(16.)).py(px(6.)).rounded(px(4.))
+                            .child(div().id("quot-btn-create").px(px(18.)).py(px(7.)).rounded(px(5.))
                                 .bg(rgb(c.surface_active)).text_size(px(12.)).text_color(rgb(c.text_default))
                                 .cursor_pointer()
                                 .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| { this.submit(cx); }))
-                                .child("Create"))
+                                .child("Create Quotation"))
                     )
             )
     }

@@ -69,33 +69,54 @@ impl Render for FirstRunPrompt {
             .bg(rgba(0x00000099))
             .child(
                 div()
-                    .w(px(380.)).bg(rgb(c.canvas_bg)).rounded(px(8.)).p(px(28.))
-                    .flex().flex_col().gap(px(14.))
+                    .w(px(480.))
+                    .bg(rgb(c.canvas_bg))
+                    .rounded(px(10.))
+                    .border_1()
+                    .border_color(rgb(c.surface_default))
+                    .overflow_hidden()
+                    .flex().flex_col()
+                    // ── header ──────────────────────────────────────────
                     .child(
-                        div().text_size(px(16.)).text_color(rgb(c.text_default))
-                            .child("Welcome to VASSL")
+                        div()
+                            .px(px(20.)).py(px(16.))
+                            .bg(rgb(c.sidebar_bg))
+                            .flex().flex_col().gap(px(4.))
+                            .child(div().text_size(px(15.)).text_color(rgb(c.text_default)).child("Welcome to VASSL"))
+                            .child(div().text_size(px(12.)).text_color(rgb(c.text_muted))
+                                .child("Enter your name to get started. It will be used for audit logs."))
                     )
+                    // ── field ────────────────────────────────────────────
                     .child(
-                        div().text_size(px(12.)).text_color(rgb(c.text_muted))
-                            .child("Enter your name to get started. This will be used for audit logs.")
+                        div().flex().flex_col().px(px(20.)).pt(px(8.)).pb(px(4.))
+                            .child(
+                                div().flex().flex_row().items_center().py(px(12.))
+                                    .child(div().w(px(120.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Your Name"))
+                                    .child(div().flex_1().child(text_field("", self.name_input.clone(), name_focused, window)))
+                            )
+                            .child(
+                                div().h(px(18.)).flex().items_center()
+                                    .child(div().text_size(px(11.)).text_color(rgb(c.status_red))
+                                        .child(self.error.as_deref().map(SharedString::from).unwrap_or_default()))
+                            )
                     )
-                    .child(text_field("Your Name", self.name_input.clone(), name_focused, window))
+                    // ── footer ────────────────────────────────────────────
                     .child(
-                        div().text_size(px(11.)).text_color(rgb(c.status_red))
-                            .child(self.error.as_deref().map(SharedString::from).unwrap_or_default())
-                    )
-                    .child(
-                        div().flex().flex_row().justify_end()
+                        div()
+                            .px(px(20.)).py(px(14.))
+                            .border_t_1()
+                            .border_color(rgb(c.surface_default))
+                            .flex().flex_row().justify_end()
                             .child(
                                 div().id("first-run-btn-save")
-                                    .px(px(20.)).py(px(8.)).rounded(px(4.))
+                                    .px(px(20.)).py(px(8.)).rounded(px(5.))
                                     .bg(rgb(c.surface_active))
                                     .text_size(px(12.)).text_color(rgb(c.text_default))
                                     .cursor_pointer()
                                     .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
                                         this.save(cx);
                                     }))
-                                    .child("Get Started")
+                                    .child("Get Started →")
                             )
                     )
             )

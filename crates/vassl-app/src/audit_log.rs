@@ -67,15 +67,23 @@ impl Render for AuditLogPanel {
             .bg(rgba(0x00000099))
             .child(
                 div()
-                    .w(px(700.)).h(px(520.))
-                    .bg(rgb(c.canvas_bg)).rounded(px(8.)).p(px(20.))
-                    .flex().flex_col().gap(px(10.))
+                    .w(px(760.)).h(px(560.))
+                    .bg(rgb(c.canvas_bg))
+                    .rounded(px(10.))
+                    .border_1()
+                    .border_color(rgb(c.surface_default))
+                    .overflow_hidden()
+                    .flex().flex_col()
+                    // ── header ──────────────────────────────────────────
                     .child(
-                        div().flex().flex_row().items_center()
-                            .child(div().flex_1().text_size(px(14.)).text_color(rgb(c.text_default)).child("Audit Log"))
+                        div()
+                            .px(px(20.)).py(px(14.))
+                            .bg(rgb(c.sidebar_bg))
+                            .flex().flex_row().items_center()
+                            .child(div().flex_1().text_size(px(13.)).text_color(rgb(c.text_default)).child("Audit Log"))
                             .child(
                                 div().id("audit-btn-refresh")
-                                    .px(px(10.)).py(px(4.)).rounded(px(4.))
+                                    .px(px(12.)).py(px(5.)).rounded(px(5.))
                                     .bg(rgb(c.surface_default))
                                     .text_size(px(11.)).text_color(rgb(c.text_muted))
                                     .cursor_pointer()
@@ -85,24 +93,27 @@ impl Render for AuditLogPanel {
                                     .child("Refresh")
                             )
                     )
+                    // ── column headers ───────────────────────────────────
                     .child(
-                        // Column headers
                         div().flex().flex_row().gap(px(8.))
-                            .px(px(8.)).py(px(4.))
-                            .bg(rgb(c.sidebar_bg)).rounded(px(4.))
+                            .px(px(20.)).py(px(8.))
+                            .border_b_1()
+                            .border_color(rgb(c.surface_default))
+                            .bg(rgb(c.sidebar_bg))
                             .child(div().w(px(40.)).text_size(px(10.)).text_color(rgb(c.text_muted)).child("ID"))
-                            .child(div().w(px(90.)).text_size(px(10.)).text_color(rgb(c.text_muted)).child("Table"))
-                            .child(div().w(px(50.)).text_size(px(10.)).text_color(rgb(c.text_muted)).child("Record"))
-                            .child(div().w(px(60.)).text_size(px(10.)).text_color(rgb(c.text_muted)).child("Action"))
-                            .child(div().w(px(80.)).text_size(px(10.)).text_color(rgb(c.text_muted)).child("By"))
+                            .child(div().w(px(100.)).text_size(px(10.)).text_color(rgb(c.text_muted)).child("Table"))
+                            .child(div().w(px(60.)).text_size(px(10.)).text_color(rgb(c.text_muted)).child("Record"))
+                            .child(div().w(px(70.)).text_size(px(10.)).text_color(rgb(c.text_muted)).child("Action"))
+                            .child(div().w(px(90.)).text_size(px(10.)).text_color(rgb(c.text_muted)).child("By"))
                             .child(div().flex_1().text_size(px(10.)).text_color(rgb(c.text_muted)).child("At"))
                     )
+                    // ── rows ─────────────────────────────────────────────
                     .child({
                         let body = div().id("audit-scroll").flex_1().overflow_y_scroll()
-                            .flex().flex_col().gap(px(2.));
+                            .flex().flex_col();
                         if self.rows.is_empty() {
                             body.child(
-                                div().flex().items_center().justify_center().p(px(20.))
+                                div().flex().items_center().justify_center().p(px(40.))
                                     .text_size(px(12.)).text_color(rgb(c.text_muted))
                                     .child("No audit entries yet.")
                             )
@@ -115,17 +126,30 @@ impl Render for AuditLogPanel {
                                     _        => c.text_muted,
                                 };
                                 div().flex().flex_row().gap(px(8.))
-                                    .px(px(8.)).py(px(4.)).rounded(px(2.))
-                                    .bg(rgb(c.surface_default))
+                                    .px(px(20.)).py(px(7.))
+                                    .border_b_1()
+                                    .border_color(rgb(c.surface_default))
                                     .child(div().w(px(40.)).text_size(px(11.)).text_color(rgb(c.text_muted)).child(row.id.to_string()))
-                                    .child(div().w(px(90.)).text_size(px(11.)).text_color(rgb(c.text_default)).child(row.table_name.clone()))
-                                    .child(div().w(px(50.)).text_size(px(11.)).text_color(rgb(c.text_muted)).child(row.record_id.to_string()))
-                                    .child(div().w(px(60.)).text_size(px(11.)).text_color(rgb(action_color)).child(row.action.clone()))
-                                    .child(div().w(px(80.)).text_size(px(11.)).text_color(rgb(c.text_default)).child(row.changed_by.clone()))
+                                    .child(div().w(px(100.)).text_size(px(11.)).text_color(rgb(c.text_default)).child(row.table_name.clone()))
+                                    .child(div().w(px(60.)).text_size(px(11.)).text_color(rgb(c.text_muted)).child(row.record_id.to_string()))
+                                    .child(div().w(px(70.)).text_size(px(11.)).text_color(rgb(action_color)).child(row.action.clone()))
+                                    .child(div().w(px(90.)).text_size(px(11.)).text_color(rgb(c.text_default)).child(row.changed_by.clone()))
                                     .child(div().flex_1().text_size(px(11.)).text_color(rgb(c.text_muted)).child(row.changed_at.chars().take(19).collect::<String>()))
                             }))
                         }
                     })
+                    // ── footer ────────────────────────────────────────────
+                    .child(
+                        div()
+                            .px(px(20.)).py(px(10.))
+                            .border_t_1()
+                            .border_color(rgb(c.surface_default))
+                            .bg(rgb(c.sidebar_bg))
+                            .flex().flex_row().items_center()
+                            .child(div().flex_1().text_size(px(11.)).text_color(rgb(c.text_muted))
+                                .child(format!("{} entries", self.rows.len())))
+                            .child(div().text_size(px(11.)).text_color(rgb(c.text_muted)).child("Esc to close"))
+                    )
             )
     }
 }
