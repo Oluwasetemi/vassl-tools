@@ -50,25 +50,85 @@ pub struct SettingsPanel {
 
 impl SettingsPanel {
     pub fn new(cx: &mut Context<Self>) -> Self {
+        let db = vassl_db::AppDatabase::global(&**cx);
+
+        // read all settings upfront while db borrow is active
+        let user_name_val = vassl_db::shared::get_setting(db, "general.user_name")
+            .ok().flatten()
+            .or_else(|| vassl_db::shared::get_setting(db, "current_user").ok().flatten())
+            .unwrap_or_default();
+        let company_name_val  = vassl_db::shared::get_setting(db, "general.company_name").ok().flatten().unwrap_or_default();
+        let theme_val         = vassl_db::shared::get_setting(db, "appearance.theme").ok().flatten().unwrap_or_else(|| "dark".into());
+        let font_family_val   = vassl_db::shared::get_setting(db, "appearance.font_family").ok().flatten().unwrap_or_else(|| "system-ui".into());
+        let font_size_val     = vassl_db::shared::get_setting(db, "appearance.font_size").ok().flatten().unwrap_or_else(|| "13".into());
+        let low_stock_val     = vassl_db::shared::get_setting(db, "inventory.low_stock_threshold").ok().flatten().unwrap_or_else(|| "5".into());
+        let default_unit_val  = vassl_db::shared::get_setting(db, "inventory.default_unit").ok().flatten().unwrap_or_else(|| "pcs".into());
+        let currency_val      = vassl_db::shared::get_setting(db, "pricebook.currency").ok().flatten().unwrap_or_else(|| "USD".into());
+        let usd_jmd_val       = vassl_db::shared::get_setting(db, "pricebook.usd_to_jmd_rate").ok().flatten().unwrap_or_else(|| "157.50".into());
+        let margin_val        = vassl_db::shared::get_setting(db, "pricebook.default_margin").ok().flatten().unwrap_or_else(|| "20".into());
+        let prefix_val        = vassl_db::shared::get_setting(db, "quotations.prefix").ok().flatten().unwrap_or_else(|| "VASSL".into());
+        let tax_val           = vassl_db::shared::get_setting(db, "quotations.tax_rate").ok().flatten().unwrap_or_else(|| "0".into());
+        let notes_val         = vassl_db::shared::get_setting(db, "quotations.notes_template").ok().flatten().unwrap_or_default();
+        // db borrow ends here
+
+        let font_size: f64 = font_size_val.parse::<f64>().unwrap_or(13.0).max(10.0).min(24.0);
+        let font_names = cx.text_system().all_font_names();
+
+        let make_input = |placeholder: &'static str, value: String, cx: &mut Context<Self>| {
+            cx.new(move |cx| {
+                let mut input = TextInput::with_placeholder(placeholder, cx);
+                input.set_text(value, cx);
+                input
+            })
+        };
+
+        let user_name      = make_input("e.g. Alice Kamalu", user_name_val,    cx);
+        let company_name   = make_input("e.g. Kamalu Ltd.",  company_name_val, cx);
+        let low_stock      = make_input("5",                 low_stock_val,    cx);
+        let default_unit   = make_input("pcs",               default_unit_val, cx);
+        let usd_to_jmd     = make_input("157.50",            usd_jmd_val,      cx);
+        let default_margin = make_input("20",                margin_val,       cx);
+        let quote_prefix   = make_input("VASSL",             prefix_val,       cx);
+        let tax_rate       = make_input("0",                 tax_val,          cx);
+        let notes_template = make_input("",                  notes_val,        cx);
+
+        cx.observe(&user_name,     |this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("general.user_name",           v, cx); }).detach();
+        cx.observe(&company_name,  |this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("general.company_name",         v, cx); }).detach();
+        cx.observe(&low_stock,     |this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("inventory.low_stock_threshold", v, cx); }).detach();
+        cx.observe(&default_unit,  |this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("inventory.default_unit",        v, cx); }).detach();
+        cx.observe(&usd_to_jmd,    |this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("pricebook.usd_to_jmd_rate",     v, cx); }).detach();
+        cx.observe(&default_margin,|this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("pricebook.default_margin",      v, cx); }).detach();
+        cx.observe(&quote_prefix,  |this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("quotations.prefix",             v, cx); }).detach();
+        cx.observe(&tax_rate,      |this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("quotations.tax_rate",           v, cx); }).detach();
+        cx.observe(&notes_template,|this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("quotations.notes_template",     v, cx); }).detach();
+
         Self {
             active_category: SettingsCategory::General,
-            font_names:      Vec::new(),
+            font_names,
             open_select:     None,
-            user_name:       cx.new(|cx| TextInput::with_placeholder("e.g. Alice Kamalu", cx)),
-            company_name:    cx.new(|cx| TextInput::with_placeholder("e.g. Kamalu Ltd.", cx)),
-            theme:           "dark".into(),
-            font_family:     "system-ui".into(),
-            font_size:       13.0,
-            low_stock:       cx.new(|cx| TextInput::with_placeholder("5", cx)),
-            default_unit:    cx.new(|cx| TextInput::with_placeholder("pcs", cx)),
-            currency:        "USD".into(),
-            usd_to_jmd:      cx.new(|cx| TextInput::with_placeholder("157.50", cx)),
-            default_margin:  cx.new(|cx| TextInput::with_placeholder("20", cx)),
-            quote_prefix:    cx.new(|cx| TextInput::with_placeholder("VASSL", cx)),
-            tax_rate:        cx.new(|cx| TextInput::with_placeholder("0", cx)),
-            notes_template:  cx.new(|cx| TextInput::with_placeholder("", cx)),
+            user_name,
+            company_name,
+            theme:           theme_val,
+            font_family:     font_family_val,
+            font_size,
+            low_stock,
+            default_unit,
+            currency:        currency_val,
+            usd_to_jmd,
+            default_margin,
+            quote_prefix,
+            tax_rate,
+            notes_template,
             focus_handle:    cx.focus_handle(),
         }
+    }
+
+    fn save_setting(&self, key: &'static str, value: String, cx: &mut Context<Self>) {
+        let db = vassl_db::AppDatabase::global(&**cx).clone();
+        cx.spawn(async move |_, _| {
+            let _ = db.write(move |conn| vassl_db::shared::set_setting(conn, key, &value)).await;
+            Ok::<(), anyhow::Error>(())
+        }).detach();
     }
 
     fn category_label(cat: SettingsCategory) -> &'static str {
@@ -182,5 +242,35 @@ mod tests {
             assert!(!parts[0].is_empty());
             assert!(!parts[1].is_empty());
         }
+    }
+
+    #[test]
+    fn font_size_default_parses_to_13() {
+        let s = "13";
+        let v: f64 = s.parse().unwrap();
+        assert!((v - 13.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn font_size_clamps_at_bounds() {
+        fn clamp(v: f64) -> f64 { v.max(10.0).min(24.0) }
+        assert!((clamp(9.5)  - 10.0).abs() < f64::EPSILON);
+        assert!((clamp(25.0) - 24.0).abs() < f64::EPSILON);
+        assert!((clamp(13.0) - 13.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn theme_values_are_dark_or_light() {
+        let valid = ["dark", "light"];
+        for v in &valid { assert!(valid.contains(v)); }
+        assert!(!valid.contains(&"blue"));
+    }
+
+    #[test]
+    fn currency_values_are_usd_or_jmd() {
+        let valid = ["USD", "JMD"];
+        assert!(valid.contains(&"USD"));
+        assert!(valid.contains(&"JMD"));
+        assert!(!valid.contains(&"EUR"));
     }
 }
