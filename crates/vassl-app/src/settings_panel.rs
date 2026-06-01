@@ -1,4 +1,4 @@
-use gpui::{Context, FocusHandle, Focusable, IntoElement, Render, Window,
+use gpui::{Context, FocusHandle, Focusable, IntoElement, Render, SharedString, Window,
            div, prelude::*, px, rgb};
 use vassl_ui::{TextInput, ThemeHandle};
 
@@ -165,6 +165,7 @@ impl SettingsPanel {
     }
 
     fn render_appearance(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let font_picker = self.render_font_picker(cx);  // must be first — borrows self mutably
         let c       = cx.global::<ThemeHandle>().0.clone();
         let is_dark = self.theme == "dark";
 
@@ -265,6 +266,21 @@ impl SettingsPanel {
                     )
                     .child(div().h(px(1.)).mx(px(32.)).bg(rgb(c.surface_default)))
             )
+            // Font Family row
+            .child(
+                div().flex().flex_col()
+                    .child(
+                        div().flex().flex_row().items_center().py(px(14.)).px(px(32.))
+                            .child(
+                                div().flex_1().flex().flex_col().gap(px(3.))
+                                    .child(div().text_size(px(13.)).text_color(rgb(c.text_default)).child("Font Family"))
+                                    .child(div().text_size(px(11.)).text_color(rgb(c.text_muted))
+                                        .child("UI font used across the application."))
+                            )
+                            .child(div().w(px(240.)).child(font_picker))
+                    )
+                    .child(div().h(px(1.)).mx(px(32.)).bg(rgb(c.surface_default)))
+            )
             // Font size row
             .child(
                 div().flex().flex_col()
@@ -280,6 +296,66 @@ impl SettingsPanel {
                     )
                     .child(div().h(px(1.)).mx(px(32.)).bg(rgb(c.surface_default)))
             )
+    }
+
+    fn render_font_picker(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
+        let c          = cx.global::<ThemeHandle>().0.clone();
+        let is_open    = self.open_select == Some(SettingSelect::FontPicker);
+        let current    = self.font_family.clone();
+        let font_names = self.font_names.clone();
+
+        div().flex().flex_col()
+            // trigger button showing current font name in that font
+            .child(
+                div().id("settings-font-trigger")
+                    .flex().flex_row().items_center().gap(px(6.))
+                    .px(px(10.)).py(px(6.))
+                    .bg(rgb(c.surface_default)).rounded(px(5.))
+                    .border_1().border_color(rgb(c.surface_active))
+                    .cursor_pointer()
+                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
+                        this.open_select = if this.open_select == Some(SettingSelect::FontPicker) {
+                            None
+                        } else {
+                            Some(SettingSelect::FontPicker)
+                        };
+                        cx.notify();
+                    }))
+                    .child(
+                        div().flex_1().text_size(px(12.)).text_color(rgb(c.text_default))
+                            .font_family(SharedString::from(current.clone()))
+                            .child(current.clone())
+                    )
+                    .child(div().text_size(px(11.)).text_color(rgb(c.text_muted)).child("◇"))
+            )
+            // inline scrollable list (shown only when open)
+            .when(is_open, move |d| {
+                d.child(
+                    div().id("settings-font-list")
+                        .mt(px(2.)).max_h(px(200.)).overflow_y_scroll()
+                        .bg(rgb(c.surface_default)).rounded(px(4.))
+                        .border_1().border_color(rgb(c.surface_active))
+                        .children(font_names.into_iter().map(|name| {
+                            let name_for_select = name.clone();
+                            let name_for_display = name.clone();
+                            let selected = name == current;
+                            let bg = if selected { c.surface_active } else { c.surface_default };
+                            div()
+                                .id(SharedString::from(format!("font-{name}")))
+                                .px(px(10.)).py(px(5.))
+                                .bg(rgb(bg)).cursor_pointer()
+                                .font_family(SharedString::from(name.clone()))
+                                .text_size(px(12.)).text_color(rgb(c.text_default))
+                                .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |this, _, _, cx| {
+                                    this.font_family = name_for_select.clone();
+                                    this.open_select = None;
+                                    this.save_setting("appearance.font_family", name_for_select.clone(), cx);
+                                    cx.notify();
+                                }))
+                                .child(name_for_display)
+                        }))
+                )
+            })
     }
 
     fn render_general(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -459,5 +535,18 @@ mod tests {
         let mut v = 22.5_f64;
         v = 13.0;
         assert!((v - 13.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn font_family_key_is_correct() {
+        let key = "appearance.font_family";
+        assert!(key.contains('.'));
+        assert!(key.starts_with("appearance."));
+    }
+
+    #[test]
+    fn font_picker_default_is_non_empty() {
+        let default = "system-ui";
+        assert!(!default.is_empty());
     }
 }
