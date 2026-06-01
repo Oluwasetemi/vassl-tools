@@ -3,7 +3,7 @@ use gpui::{App, Context, Entity, IntoElement, MouseButton, MouseDownEvent, Rende
 use vassl_ui::{ThemeColors, ThemeHandle};
 
 use crate::colors;
-use crate::store::{PriceBookStore, ProductPrice};
+use crate::store::{ContextMenuTarget, PriceBookStore, ProductPrice};
 
 pub struct PriceTable {
     store: Entity<PriceBookStore>,
@@ -62,10 +62,12 @@ impl Render for PriceTable {
 }
 
 fn price_row(pp: &ProductPrice, selected: bool, store: Entity<PriceBookStore>, c: &ThemeColors) -> impl IntoElement {
-    let product_id = pp.product_id;
-    let row_bg = if selected { c.surface_active } else { c.canvas_bg };
-    let price_str = price_display(pp);
-    let price_color = if pp.latest.is_some() { c.text_default } else { c.text_muted };
+    let product_id   = pp.product_id;
+    let product_name = pp.name.clone();
+    let row_bg       = if selected { c.surface_active } else { c.canvas_bg };
+    let price_str    = price_display(pp);
+    let price_color  = if pp.latest.is_some() { c.text_default } else { c.text_muted };
+    let store_right  = store.clone();
 
     div()
         .id(format!("pb-row-{product_id}"))
@@ -79,33 +81,41 @@ fn price_row(pp: &ProductPrice, selected: bool, store: Entity<PriceBookStore>, c
                 store.update(cx, |s, cx| s.select_product(product_id, cx));
             },
         )
-        // SKU
+        .on_mouse_down(
+            MouseButton::Right,
+            move |event: &MouseDownEvent, _window: &mut Window, cx: &mut App| {
+                let target = ContextMenuTarget {
+                    product_id,
+                    product_name: product_name.clone(),
+                    x: event.position.x.as_f32(),
+                    y: event.position.y.as_f32(),
+                };
+                store_right.update(cx, |s, cx| s.set_context_menu(target, cx));
+            },
+        )
         .child(
             div()
                 .w(px(90.)).text_size(px(12.))
                 .text_color(rgb(c.text_muted))
                 .child(pp.sku.clone())
         )
-        // Name
         .child(
             div()
                 .w(px(160.)).text_size(px(13.))
                 .text_color(rgb(c.text_default))
                 .child(pp.name.clone())
         )
-        // Price summary
         .child(
             div()
                 .flex_1().text_size(px(12.))
                 .text_color(rgb(price_color))
                 .child(price_str)
         )
-        // Effective date
         .child(
             div()
                 .w(px(110.)).text_size(px(11.))
                 .text_color(rgb(c.text_muted))
-                .child(pp.latest.as_ref().map(|e| e.effective_date[..10].to_string()).unwrap_or_default())
+                .child(pp.latest.as_ref().map(|e| e.effective_date.get(..10).unwrap_or(&e.effective_date).to_string()).unwrap_or_default())
         )
 }
 

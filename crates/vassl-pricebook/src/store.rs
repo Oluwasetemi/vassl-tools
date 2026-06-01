@@ -11,11 +11,20 @@ pub struct ProductPrice {
     pub latest:     Option<PriceEntry>,
 }
 
+#[derive(Debug, Clone)]
+pub struct ContextMenuTarget {
+    pub product_id:   i64,
+    pub product_name: String,
+    pub x:            f32,
+    pub y:            f32,
+}
+
 pub struct PriceBookStore {
     pub product_prices:      Vec<ProductPrice>,
     pub selected_product_id: Option<i64>,
     pub history:             Vec<PriceEntry>,
     pub loading:             bool,
+    pub context_menu:        Option<ContextMenuTarget>,
 }
 
 pub struct PriceBookStoreHandle(pub Entity<PriceBookStore>);
@@ -36,6 +45,7 @@ impl PriceBookStore {
             selected_product_id: None,
             history:             Vec::new(),
             loading:             false,
+            context_menu:        None,
         }
     }
 
@@ -96,6 +106,16 @@ impl PriceBookStore {
         })
         .detach();
     }
+
+    pub fn set_context_menu(&mut self, target: ContextMenuTarget, cx: &mut Context<Self>) {
+        self.context_menu = Some(target);
+        cx.notify();
+    }
+
+    pub fn clear_context_menu(&mut self, cx: &mut Context<Self>) {
+        self.context_menu = None;
+        cx.notify();
+    }
 }
 
 #[cfg(test)]
@@ -114,6 +134,20 @@ mod tests {
             effective_date:    "2026-01-01T00:00:00Z".to_string(),
             notes:             None,
         }
+    }
+
+    #[test]
+    fn pricebook_context_menu_target_fields_roundtrip() {
+        let target = ContextMenuTarget {
+            product_id:   7,
+            product_name: "NVR Unit".to_string(),
+            x:            200.0,
+            y:            450.0,
+        };
+        assert_eq!(target.product_id,   7);
+        assert_eq!(target.product_name, "NVR Unit");
+        assert_eq!(target.x, 200.0);
+        assert_eq!(target.y, 450.0);
     }
 
     #[test]
