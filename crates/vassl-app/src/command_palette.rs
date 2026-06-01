@@ -124,7 +124,8 @@ impl Render for CommandPalette {
                     .child(text_field("", self.query.clone(), query_focused, window))
                     .child({
                         let results = div().id("palette-results")
-                            .flex().flex_col().gap(px(2.));
+                            .flex().flex_col().gap(px(2.))
+                            .max_h(px(240.)).overflow_y_scroll();
                         if matches.is_empty() {
                             results.child(
                                 div().px(px(10.)).py(px(8.))

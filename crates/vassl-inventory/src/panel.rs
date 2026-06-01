@@ -44,7 +44,7 @@ impl InventoryPanel {
         }
     }
 
-    fn open_stock_form(&mut self, cx: &mut Context<Self>) {
+    fn open_stock_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.stock_form.is_some() { return; }
         let (product_id, product_name) = {
             let store = self.store.read(cx);
@@ -58,6 +58,8 @@ impl InventoryPanel {
         };
 
         let form = cx.new(|cx| StockEntryForm::new(self.store.clone(), product_id, product_name, cx));
+        let first = form.read(cx).quantity.read(cx).focus_handle.clone();
+        window.focus(&first, cx);
         let sub = cx.subscribe(&form, |this, _form, ev: &StockFormEvent, cx| {
             match ev {
                 StockFormEvent::Submitted | StockFormEvent::Cancelled => {
@@ -72,9 +74,11 @@ impl InventoryPanel {
         cx.notify();
     }
 
-    fn open_product_form(&mut self, cx: &mut Context<Self>) {
+    fn open_product_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.product_form.is_some() { return; }
         let form = cx.new(|cx| ProductForm::new(self.store.clone(), cx));
+        let first = form.read(cx).sku.read(cx).focus_handle.clone();
+        window.focus(&first, cx);
         let sub  = cx.subscribe(&form, |this, _form, ev: &ProductFormEvent, cx| {
             match ev {
                 ProductFormEvent::Submitted | ProductFormEvent::Cancelled => {
@@ -145,8 +149,8 @@ impl Render for InventoryPanel {
                             .bg(rgb(c.surface_default))
                             .text_size(px(12.)).text_color(rgb(c.text_default))
                             .cursor_pointer()
-                            .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
-                                this.open_product_form(cx);
+                            .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, cx| {
+                                this.open_product_form(window, cx);
                             }))
                             .child("+ New Product")
                     )
@@ -162,8 +166,8 @@ impl Render for InventoryPanel {
                         if has_selection {
                             btn = btn
                                 .cursor_pointer()
-                                .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
-                                    this.open_stock_form(cx);
+                                .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, cx| {
+                                    this.open_stock_form(window, cx);
                                 }));
                         }
                         btn

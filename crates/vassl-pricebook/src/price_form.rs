@@ -18,7 +18,7 @@ pub struct PriceEntryForm {
     store:        Entity<PriceBookStore>,
     product_id:   i64,
     product_name: String,
-    cost:         Entity<TextInput>,
+    pub cost:     Entity<TextInput>,
     duty:         Entity<TextInput>,
     markup:       Entity<TextInput>,
     error:        Option<String>,

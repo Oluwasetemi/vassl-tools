@@ -11,6 +11,7 @@ mod status_bar;
 
 use actions::{ConfirmSelection, EscapeModal, FocusSearch, NewRecord, OpenAuditLog, OpenInventory, OpenPriceBook, OpenQuotations, SelectNext, SelectPrev};
 use vassl_ui::text_input::{BackTab, Backspace, Copy, Cut, Delete, End, Home, Left, Paste, Right, SelectAll, SelectLeft, SelectRight, Tab as TextTab};
+use vassl_inventory::product_form::{EscapeForm as ProductEscapeForm, TabField as ProductTab, BackTabField as ProductBackTab};
 use vassl_inventory::stock_form::{EscapeForm as StockEscapeForm, TabField as StockTab, BackTabField as StockBackTab};
 use vassl_pricebook::price_form::{EscapeForm as PriceEscapeForm, TabField as PriceTab, BackTabField as PriceBackTab};
 use vassl_quotations::quotation_form::EscapeForm as QuotationEscapeForm;
@@ -107,6 +108,10 @@ fn main() {
             KeyBinding::new("down",              SelectNext,       Some("CommandPalette")),
             KeyBinding::new("up",                SelectPrev,       Some("CommandPalette")),
             KeyBinding::new("enter",             ConfirmSelection, Some("CommandPalette")),
+            // ProductForm escape + tab
+            KeyBinding::new("escape",            ProductEscapeForm, Some("ProductForm")),
+            KeyBinding::new("tab",               ProductTab,        Some("ProductForm")),
+            KeyBinding::new("shift-tab",         ProductBackTab,    Some("ProductForm")),
             // StockEntryForm escape + tab
             KeyBinding::new("escape",            StockEscapeForm,  Some("StockEntryForm")),
             KeyBinding::new("tab",               StockTab,         Some("StockEntryForm")),

@@ -18,6 +18,9 @@ use gpui::{App, Global};
 use sqlez::thread_safe_connection::ThreadSafeConnection;
 use std::path::PathBuf;
 
+// Alias so set_global calls below are unambiguous.
+use db::AppDatabase as VendoredAppDatabase;
+
 /// The VASSL application database.
 ///
 /// Wraps a `ThreadSafeConnection` (from `sqlez`) and is registered as a GPUI
@@ -68,6 +71,9 @@ pub fn init(cx: &mut App) -> anyhow::Result<()> {
     // db_dir is now data_local_dir()/VASSL
     std::fs::create_dir_all(&db_dir).context("failed to create VASSL data directory")?;
     let conn = gpui::block_on(open_db::<AppMigrator>(&db_dir, GlobalDbScope));
+    // static_connection! (re-exported from vendored `db`) expands $crate::AppDatabase
+    // to db::AppDatabase, so we must register both globals.
+    cx.set_global(VendoredAppDatabase(conn.clone()));
     cx.set_global(AppDatabase(conn));
     Ok(())
 }

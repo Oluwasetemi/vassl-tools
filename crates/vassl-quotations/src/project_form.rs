@@ -15,7 +15,7 @@ impl EventEmitter<ProjectFormEvent> for ProjectForm {}
 
 pub struct ProjectForm {
     store:        Entity<QuotationStore>,
-    name:         Entity<TextInput>,
+    pub name:     Entity<TextInput>,
     client_name:  Entity<TextInput>,
     error:        Option<String>,
     focus_handle: FocusHandle,

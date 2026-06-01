@@ -42,9 +42,11 @@ impl QuotationPanel {
         }
     }
 
-    fn open_project_form(&mut self, cx: &mut Context<Self>) {
+    fn open_project_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.project_form.is_some() { return; }
         let form = cx.new(|cx| ProjectForm::new(self.store.clone(), cx));
+        let first = form.read(cx).name.read(cx).focus_handle.clone();
+        window.focus(&first, cx);
         let sub  = cx.subscribe(&form, |this, _form, ev: &ProjectFormEvent, cx| {
             match ev {
                 ProjectFormEvent::Submitted | ProjectFormEvent::Cancelled => {
@@ -59,7 +61,7 @@ impl QuotationPanel {
         cx.notify();
     }
 
-    fn open_form(&mut self, cx: &mut Context<Self>) {
+    fn open_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.form.is_some() { return; }
         let (ref_num, projects) = {
             let store    = self.store.read(cx);
@@ -68,6 +70,8 @@ impl QuotationPanel {
             (ref_num, store.projects.clone())
         };
         let form = cx.new(|cx| QuotationForm::new(self.store.clone(), ref_num, projects, cx));
+        let first = form.read(cx).notes.read(cx).focus_handle.clone();
+        window.focus(&first, cx);
         let sub  = cx.subscribe(&form, |this, _form, ev: &QuotationFormEvent, cx| {
             match ev {
                 QuotationFormEvent::Submitted | QuotationFormEvent::Cancelled => {
@@ -136,8 +140,8 @@ impl Render for QuotationPanel {
                             .bg(rgb(c.surface_default))
                             .text_size(px(12.)).text_color(rgb(c.text_muted))
                             .cursor_pointer()
-                            .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
-                                this.open_project_form(cx);
+                            .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, cx| {
+                                this.open_project_form(window, cx);
                             }))
                             .child("+ New Project")
                     )
@@ -149,8 +153,8 @@ impl Render for QuotationPanel {
                             .bg(rgb(c.surface_active))
                             .text_size(px(12.)).text_color(rgb(c.text_default))
                             .cursor_pointer()
-                            .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
-                                this.open_form(cx);
+                            .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, cx| {
+                                this.open_form(window, cx);
                             }))
                             .child("+ New Quotation")
                     )

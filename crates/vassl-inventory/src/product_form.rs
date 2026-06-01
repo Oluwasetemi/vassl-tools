@@ -1,10 +1,12 @@
 use gpui::{Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Window,
-           div, prelude::*, px, rgb, rgba, SharedString};
-use vassl_ui::{TextInput, text_field};
+           actions, div, prelude::*, px, rgb, rgba, SharedString};
+use vassl_ui::{TextInput, ThemeHandle, text_field};
 
 use crate::colors;
 use crate::db::InventoryDb;
 use crate::store::InventoryStore;
+
+actions!(product_form, [EscapeForm, TabField, BackTabField]);
 
 #[derive(Debug)]
 pub enum ProductFormEvent { Submitted, Cancelled }
@@ -13,7 +15,7 @@ impl EventEmitter<ProductFormEvent> for ProductForm {}
 
 pub struct ProductForm {
     store:        Entity<InventoryStore>,
-    sku:          Entity<TextInput>,
+    pub sku:      Entity<TextInput>,
     name:         Entity<TextInput>,
     category:     Entity<TextInput>,
     unit:         Entity<TextInput>,
@@ -78,6 +80,7 @@ impl Focusable for ProductForm {
 
 impl Render for ProductForm {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let c      = cx.global::<ThemeHandle>().0.clone();
         let sku_f  = self.sku.read(cx).focus_handle.is_focused(window);
         let name_f = self.name.read(cx).focus_handle.is_focused(window);
         let cat_f  = self.category.read(cx).focus_handle.is_focused(window);
@@ -88,30 +91,109 @@ impl Render for ProductForm {
             .absolute().top_0().left_0().right_0().bottom_0()
             .flex().items_center().justify_center()
             .bg(rgba(0x00000099))
+            .key_context("ProductForm")
+            .on_action(cx.listener(|_, _: &EscapeForm, _, cx| {
+                cx.emit(ProductFormEvent::Cancelled);
+            }))
+            .on_action(cx.listener(|this, _: &TabField, window, cx| {
+                let handles = [
+                    this.sku.read(cx).focus_handle.clone(),
+                    this.name.read(cx).focus_handle.clone(),
+                    this.category.read(cx).focus_handle.clone(),
+                    this.unit.read(cx).focus_handle.clone(),
+                    this.min_stock.read(cx).focus_handle.clone(),
+                ];
+                let current = handles.iter().position(|h| h.is_focused(window));
+                let next = handles[(current.map(|i| i + 1).unwrap_or(0)) % handles.len()].clone();
+                window.focus(&next, cx);
+            }))
+            .on_action(cx.listener(|this, _: &BackTabField, window, cx| {
+                let handles = [
+                    this.sku.read(cx).focus_handle.clone(),
+                    this.name.read(cx).focus_handle.clone(),
+                    this.category.read(cx).focus_handle.clone(),
+                    this.unit.read(cx).focus_handle.clone(),
+                    this.min_stock.read(cx).focus_handle.clone(),
+                ];
+                let current = handles.iter().position(|h| h.is_focused(window));
+                let prev = handles[(current.unwrap_or(0) + handles.len() - 1) % handles.len()].clone();
+                window.focus(&prev, cx);
+            }))
             .child(
                 div()
-                    .w(px(400.)).bg(rgb(colors::CANVAS_BG)).rounded(px(8.)).p(px(24.))
-                    .flex().flex_col().gap(px(12.))
-                    .child(div().text_size(px(14.)).text_color(rgb(colors::TEXT_DEFAULT)).child("New Product"))
-                    .child(text_field("SKU",                   self.sku.clone(),       sku_f,  window))
-                    .child(text_field("Name",                  self.name.clone(),      name_f, window))
-                    .child(text_field("Category (optional)",   self.category.clone(),  cat_f,  window))
-                    .child(text_field("Unit",                  self.unit.clone(),      unit_f, window))
-                    .child(text_field("Min Stock Level",       self.min_stock.clone(), min_f,  window))
-                    .child(div().text_size(px(11.)).text_color(rgb(colors::STATUS_RED))
-                        .child(self.error.as_deref().map(SharedString::from).unwrap_or_default()))
+                    .w(px(580.))
+                    .bg(rgb(c.canvas_bg))
+                    .rounded(px(10.))
+                    .border_1()
+                    .border_color(rgb(c.surface_default))
+                    .overflow_hidden()
+                    .flex().flex_col()
+                    // ── header ──────────────────────────────────────────
                     .child(
-                        div().flex().flex_row().justify_end().gap(px(8.))
-                            .child(div().id("prod-btn-cancel").px(px(16.)).py(px(6.)).rounded(px(4.))
-                                .bg(rgb(colors::SURFACE_DEFAULT)).text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT))
+                        div()
+                            .px(px(20.)).py(px(14.))
+                            .bg(rgb(c.sidebar_bg))
+                            .flex().flex_row().items_center()
+                            .child(div().flex_1()
+                                .text_size(px(13.)).text_color(rgb(c.text_default))
+                                .child("New Product"))
+                            .child(div().text_size(px(11.)).text_color(rgb(c.text_muted)).child("Esc to cancel"))
+                    )
+                    // ── fields ──────────────────────────────────────────
+                    .child(
+                        div().flex().flex_col().px(px(20.)).pt(px(8.)).pb(px(4.))
+                            .child(
+                                div().flex().flex_row().items_center().py(px(10.))
+                                    .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("SKU"))
+                                    .child(div().flex_1().child(text_field("", self.sku.clone(), sku_f, window)))
+                            )
+                            .child(div().h(px(1.)).bg(rgb(c.surface_default)))
+                            .child(
+                                div().flex().flex_row().items_center().py(px(10.))
+                                    .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Name"))
+                                    .child(div().flex_1().child(text_field("", self.name.clone(), name_f, window)))
+                            )
+                            .child(div().h(px(1.)).bg(rgb(c.surface_default)))
+                            .child(
+                                div().flex().flex_row().items_center().py(px(10.))
+                                    .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_muted)).child("Category"))
+                                    .child(div().flex_1().child(text_field("", self.category.clone(), cat_f, window)))
+                            )
+                            .child(div().h(px(1.)).bg(rgb(c.surface_default)))
+                            .child(
+                                div().flex().flex_row().items_center().py(px(10.))
+                                    .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Unit"))
+                                    .child(div().flex_1().child(text_field("", self.unit.clone(), unit_f, window)))
+                            )
+                            .child(div().h(px(1.)).bg(rgb(c.surface_default)))
+                            .child(
+                                div().flex().flex_row().items_center().py(px(10.))
+                                    .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_muted)).child("Min Stock Level"))
+                                    .child(div().flex_1().child(text_field("", self.min_stock.clone(), min_f, window)))
+                            )
+                            .child(
+                                div().h(px(18.)).flex().items_center()
+                                    .child(div().text_size(px(11.)).text_color(rgb(c.status_red))
+                                        .child(self.error.as_deref().map(SharedString::from).unwrap_or_default()))
+                            )
+                    )
+                    // ── footer ──────────────────────────────────────────
+                    .child(
+                        div()
+                            .px(px(20.)).py(px(14.))
+                            .border_t_1()
+                            .border_color(rgb(c.surface_default))
+                            .flex().flex_row().justify_end().gap(px(8.))
+                            .child(div().id("prod-btn-cancel").px(px(18.)).py(px(7.)).rounded(px(5.))
+                                .bg(rgb(c.surface_default)).text_size(px(12.)).text_color(rgb(c.text_default))
                                 .cursor_pointer()
                                 .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| { cx.emit(ProductFormEvent::Cancelled); }))
                                 .child("Cancel"))
-                            .child(div().id("prod-btn-save").px(px(16.)).py(px(6.)).rounded(px(4.))
-                                .bg(rgb(colors::SURFACE_ACTIVE)).text_size(px(12.)).text_color(rgb(colors::TEXT_DEFAULT))
+                            .child(div().id("prod-btn-save").px(px(18.)).py(px(7.)).rounded(px(5.))
+                                .bg(rgb(c.surface_active)).text_size(px(12.)).text_color(rgb(c.text_default))
                                 .cursor_pointer()
                                 .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| { this.submit(cx); }))
-                                .child("Save"))
+                                .child("Save Product"))
                     )
             )
     }

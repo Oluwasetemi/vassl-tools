@@ -19,7 +19,7 @@ pub struct QuotationForm {
     reference_number: String,
     projects:         Vec<Project>,
     selected_project: Option<i64>,
-    notes:            Entity<TextInput>,
+    pub notes:        Entity<TextInput>,
     error:            Option<String>,
     focus_handle:     FocusHandle,
 }

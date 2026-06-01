@@ -33,7 +33,7 @@ impl PriceBookPanel {
         }
     }
 
-    fn open_form(&mut self, cx: &mut Context<Self>) {
+    fn open_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.form.is_some() { return; }
         let (product_id, product_name) = {
             let store = self.store.read(cx);
@@ -46,6 +46,8 @@ impl PriceBookPanel {
             (pid, name)
         };
         let form = cx.new(|cx| PriceEntryForm::new(self.store.clone(), product_id, product_name, cx));
+        let first = form.read(cx).cost.read(cx).focus_handle.clone();
+        window.focus(&first, cx);
         let sub  = cx.subscribe(&form, |this, _form, ev: &PriceFormEvent, cx| {
             match ev {
                 PriceFormEvent::Submitted | PriceFormEvent::Cancelled => {
@@ -173,8 +175,8 @@ impl Render for PriceBookPanel {
                         if has_selection {
                             btn = btn
                                 .cursor_pointer()
-                                .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
-                                    this.open_form(cx);
+                                .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, cx| {
+                                    this.open_form(window, cx);
                                 }));
                         }
                         btn

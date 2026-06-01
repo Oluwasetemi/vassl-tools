@@ -18,7 +18,7 @@ pub struct StockEntryForm {
     store:            Entity<InventoryStore>,
     product_id:       i64,
     product_name:     String,
-    quantity:         Entity<TextInput>,
+    pub quantity:     Entity<TextInput>,
     unit_cost:        Entity<TextInput>,
     supplier:         Entity<TextInput>,
     invoice_ref:      Entity<TextInput>,
