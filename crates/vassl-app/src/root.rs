@@ -126,6 +126,7 @@ impl Render for VasslRoot {
             ActiveModule::Inventory  => content.child(self.inventory_panel.clone()),
             ActiveModule::Quotations => content.child(self.quotation_panel.clone()),
             ActiveModule::PriceBook  => content.child(self.pricebook_panel.clone()),
+            ActiveModule::Settings   => content, // placeholder — Task 2 adds real panel
         };
 
         let mut root = div()

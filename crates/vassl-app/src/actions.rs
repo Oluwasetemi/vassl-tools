@@ -5,6 +5,7 @@ actions!(vassl, [
     OpenQuotations,
     OpenPriceBook,
     OpenAuditLog,
+    OpenSettings,
     NewRecord,
     FocusSearch,
     EscapeModal,

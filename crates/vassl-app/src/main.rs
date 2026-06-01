@@ -9,7 +9,7 @@ mod root;
 mod sidebar;
 mod status_bar;
 
-use actions::{ConfirmSelection, EscapeModal, FocusSearch, NewRecord, OpenAuditLog, OpenInventory, OpenPriceBook, OpenQuotations, SelectNext, SelectPrev};
+use actions::{ConfirmSelection, EscapeModal, FocusSearch, NewRecord, OpenAuditLog, OpenInventory, OpenPriceBook, OpenQuotations, OpenSettings, SelectNext, SelectPrev};
 use vassl_ui::text_input::{BackTab, Backspace, Copy, Cut, Delete, End, Home, Left, Paste, Right, SelectAll, SelectLeft, SelectRight, ShowCharacterPalette, Tab as TextTab};
 use vassl_inventory::product_form::{EscapeForm as ProductEscapeForm, TabField as ProductTab, BackTabField as ProductBackTab};
 use vassl_inventory::stock_form::{EscapeForm as StockEscapeForm, TabField as StockTab, BackTabField as StockBackTab};
@@ -88,6 +88,7 @@ fn main() {
             KeyBinding::new("secondary-shift-a", OpenAuditLog,   Some("VasslRoot")),
             KeyBinding::new("secondary-n",       NewRecord,      Some("VasslRoot")),
             KeyBinding::new("secondary-f",       FocusSearch,    Some("VasslRoot")),
+            KeyBinding::new("secondary-comma",   OpenSettings,   Some("VasslRoot")),
             // TextInput editing keys
             KeyBinding::new("backspace",        Backspace,   Some("TextInput")),
             KeyBinding::new("delete",           Delete,      Some("TextInput")),
