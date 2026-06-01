@@ -1,7 +1,8 @@
 use gpui::{Context, Entity, FocusHandle, Focusable, IntoElement, Render, Subscription, Window, div, prelude::*, rgb};
 use vassl_ui::ThemeHandle;
 
-use crate::actions::{EscapeModal, FocusSearch, OpenAuditLog, OpenInventory, OpenPriceBook, OpenQuotations};
+use crate::actions::{EscapeModal, FocusSearch, OpenAuditLog, OpenInventory, OpenPriceBook, OpenQuotations, OpenSettings};
+use crate::settings_panel::SettingsPanel;
 use crate::audit_log::AuditLogPanel;
 use crate::colors;
 use crate::command_palette::{CommandPalette, PaletteEvent, PaletteCommand};
@@ -18,6 +19,7 @@ pub struct VasslRoot {
     inventory_panel:  Entity<InventoryPanel>,
     pricebook_panel:  Entity<PriceBookPanel>,
     quotation_panel:  Entity<QuotationPanel>,
+    settings_panel:   Entity<SettingsPanel>,
     first_run:        Option<Entity<FirstRunPrompt>>,
     _first_run_sub:   Option<Subscription>,
     audit_log:        Option<Entity<AuditLogPanel>>,
@@ -68,6 +70,7 @@ impl VasslRoot {
             inventory_panel:  cx.new(InventoryPanel::new),
             pricebook_panel:  cx.new(PriceBookPanel::new),
             quotation_panel:  cx.new(QuotationPanel::new),
+            settings_panel:   cx.new(SettingsPanel::new),
             first_run,
             _first_run_sub,
             audit_log: None,
@@ -126,7 +129,7 @@ impl Render for VasslRoot {
             ActiveModule::Inventory  => content.child(self.inventory_panel.clone()),
             ActiveModule::Quotations => content.child(self.quotation_panel.clone()),
             ActiveModule::PriceBook  => content.child(self.pricebook_panel.clone()),
-            ActiveModule::Settings   => content, // placeholder — Task 2 adds real panel
+            ActiveModule::Settings   => content.child(self.settings_panel.clone()),
         };
 
         let mut root = div()
@@ -148,6 +151,9 @@ impl Render for VasslRoot {
                     this.audit_log = Some(cx.new(|cx| AuditLogPanel::new(cx)));
                 }
                 cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &OpenSettings, _w, cx| {
+                this.sidebar.update(cx, |s, cx| { s.active = ActiveModule::Settings; cx.notify(); });
             }))
             .on_action(cx.listener(|this, _: &FocusSearch, window, cx| {
                 this.open_palette(window, cx);

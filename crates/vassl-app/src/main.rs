@@ -6,6 +6,7 @@ mod command_palette;
 mod first_run;
 mod platform;
 mod root;
+mod settings_panel;
 mod sidebar;
 mod status_bar;
 
