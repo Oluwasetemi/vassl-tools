@@ -3,8 +3,6 @@ use gpui::{
 };
 use vassl_ui::ThemeHandle;
 
-use crate::colors;
-
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum ActiveModule {
     Inventory,

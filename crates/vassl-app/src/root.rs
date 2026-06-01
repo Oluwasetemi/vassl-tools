@@ -4,7 +4,6 @@ use vassl_ui::{ThemeColors, ThemeHandle};
 use crate::actions::{EscapeModal, FocusSearch, OpenAuditLog, OpenInventory, OpenPriceBook, OpenQuotations, OpenSettings};
 use crate::settings_panel::SettingsPanel;
 use crate::audit_log::AuditLogPanel;
-use crate::colors;
 use crate::command_palette::{CommandPalette, PaletteEvent, PaletteCommand};
 use crate::first_run::{FirstRunEvent, FirstRunPrompt};
 use crate::sidebar::{ActiveModule, Sidebar};

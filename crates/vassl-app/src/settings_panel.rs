@@ -13,8 +13,9 @@ pub enum SettingsCategory {
 }
 
 /// Identifies which inline select/picker is currently open.
+/// `Theme` is not used — theme is a toggle pill, not a select. Kept for exhaustive matching.
 #[derive(Clone, Copy, PartialEq, Debug)]
-#[allow(dead_code)] // Theme reserved for future inline theme select
+#[allow(dead_code)]
 pub enum SettingSelect { Theme, Currency, FontPicker }
 
 pub struct SettingsPanel {
@@ -244,7 +245,7 @@ impl SettingsPanel {
                     .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, cx| {
                         this.font_size = 13.0;
                         window.set_rem_size(px(13.0_f32));
-                        this.save_setting("appearance.font_size", "13".into(), cx);
+                        this.save_setting("appearance.font_size", "13.0".into(), cx);
                         cx.notify();
                     }))
                     .child("↺")
