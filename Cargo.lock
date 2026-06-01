@@ -6094,6 +6094,7 @@ dependencies = [
  "vassl-inventory",
  "vassl-pricebook",
  "vassl-quotations",
+ "vassl-suppliers",
  "vassl-ui",
 ]
 

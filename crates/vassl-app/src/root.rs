@@ -11,6 +11,7 @@ use crate::status_bar::StatusBar;
 use vassl_inventory::panel::InventoryPanel;
 use vassl_pricebook::panel::PriceBookPanel;
 use vassl_quotations::panel::QuotationPanel;
+use vassl_suppliers::{panel::SupplierPanel, SupplierStoreHandle};
 
 pub struct VasslRoot {
     sidebar:          Entity<Sidebar>,
@@ -18,6 +19,7 @@ pub struct VasslRoot {
     inventory_panel:  Entity<InventoryPanel>,
     pricebook_panel:  Entity<PriceBookPanel>,
     quotation_panel:  Entity<QuotationPanel>,
+    suppliers_panel:  Entity<SupplierPanel>,
     settings_panel:   Entity<SettingsPanel>,
     first_run:        Option<Entity<FirstRunPrompt>>,
     _first_run_sub:   Option<Subscription>,
@@ -84,12 +86,16 @@ impl VasslRoot {
         let settings_panel = cx.new(SettingsPanel::new);
         settings_panel.update(cx, |panel, cx| panel.wire_observers(cx));
 
+        let supplier_store = cx.global::<SupplierStoreHandle>().0.clone();
+        let suppliers_panel = cx.new(|cx| SupplierPanel::new(supplier_store, cx));
+
         Self {
             sidebar:          cx.new(Sidebar::new),
             status_bar:       cx.new(StatusBar::new),
             inventory_panel:  cx.new(InventoryPanel::new),
             pricebook_panel:  cx.new(PriceBookPanel::new),
             quotation_panel:  cx.new(QuotationPanel::new),
+            suppliers_panel,
             settings_panel,
             first_run,
             _first_run_sub,
@@ -149,6 +155,7 @@ impl Render for VasslRoot {
             ActiveModule::Inventory  => content.child(self.inventory_panel.clone()),
             ActiveModule::Quotations => content.child(self.quotation_panel.clone()),
             ActiveModule::PriceBook  => content.child(self.pricebook_panel.clone()),
+            ActiveModule::Suppliers  => content.child(self.suppliers_panel.clone()),
             ActiveModule::Settings   => content.child(self.settings_panel.clone()),
         };
 

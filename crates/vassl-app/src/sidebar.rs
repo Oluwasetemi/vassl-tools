@@ -8,6 +8,7 @@ pub enum ActiveModule {
     Inventory,
     Quotations,
     PriceBook,
+    Suppliers,
     Settings,
 }
 
@@ -17,9 +18,7 @@ pub struct Sidebar {
 
 impl Sidebar {
     pub fn new(_cx: &mut Context<Self>) -> Self {
-        Self {
-            active: ActiveModule::Inventory,
-        }
+        Self { active: ActiveModule::Inventory }
     }
 }
 
@@ -52,9 +51,10 @@ impl Render for Sidebar {
             .flex().flex_col().justify_between()
             .child(
                 div().flex().flex_col()
-                    .child(make_btn(ActiveModule::Inventory,  "I", "btn-inventory"))
-                    .child(make_btn(ActiveModule::Quotations, "Q", "btn-quotations"))
-                    .child(make_btn(ActiveModule::PriceBook,  "P", "btn-pricebook")),
+                    .child(make_btn(ActiveModule::Inventory,  "I",  "btn-inventory"))
+                    .child(make_btn(ActiveModule::Quotations, "Q",  "btn-quotations"))
+                    .child(make_btn(ActiveModule::PriceBook,  "P",  "btn-pricebook"))
+                    .child(make_btn(ActiveModule::Suppliers,  "S",  "btn-suppliers")),
             )
             .child(make_btn(ActiveModule::Settings, "⚙", "btn-settings"))
     }
@@ -66,8 +66,7 @@ mod tests {
 
     #[test]
     fn default_module_is_inventory() {
-        let default = ActiveModule::Inventory;
-        assert_eq!(default, ActiveModule::Inventory);
+        assert_eq!(ActiveModule::Inventory, ActiveModule::Inventory);
     }
 
     #[test]
@@ -82,5 +81,12 @@ mod tests {
         assert_ne!(ActiveModule::Settings, ActiveModule::Inventory);
         assert_ne!(ActiveModule::Settings, ActiveModule::Quotations);
         assert_ne!(ActiveModule::Settings, ActiveModule::PriceBook);
+    }
+
+    #[test]
+    fn suppliers_module_is_distinct() {
+        assert_ne!(ActiveModule::Suppliers, ActiveModule::Inventory);
+        assert_ne!(ActiveModule::Suppliers, ActiveModule::PriceBook);
+        assert_ne!(ActiveModule::Suppliers, ActiveModule::Settings);
     }
 }
