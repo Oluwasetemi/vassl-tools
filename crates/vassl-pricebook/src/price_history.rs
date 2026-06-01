@@ -38,7 +38,7 @@ impl Render for PriceHistoryPanel {
             div()
                 .flex().flex_row().items_center().w_full()
                 .px(px(16.)).py(px(6.))
-                .child(div().w(px(100.)).text_size(px(12.)).text_color(rgb(c.text_muted)).child(e.effective_date[..10].to_string()))
+                .child(div().w(px(100.)).text_size(px(12.)).text_color(rgb(c.text_muted)).child(e.effective_date.get(..10).unwrap_or(&e.effective_date).to_string()))
                 .child(div().w(px(90.)).text_size(px(12.)).text_color(rgb(c.text_default)).child(format!("${:.2}", e.cost_price_usd)))
                 .child(div().w(px(80.)).text_size(px(12.)).text_color(rgb(c.text_muted)).child(format!("+${:.2}", e.duty_cost_usd)))
                 .child(div().w(px(70.)).text_size(px(12.)).text_color(rgb(c.text_muted)).child(format!("{:.0}%", e.markup_percent)))
