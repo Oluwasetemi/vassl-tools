@@ -93,6 +93,8 @@ impl SupplierForm {
         match validate_supplier_name(&name_raw) {
             Err(msg) => { self.error = Some(msg); cx.notify(); }
             Ok(name) => {
+                self.error = None;
+                cx.notify();
                 let db         = SupplierDb::global(&**cx);
                 let store      = self.store.clone();
                 let editing_id = self.editing_id;
