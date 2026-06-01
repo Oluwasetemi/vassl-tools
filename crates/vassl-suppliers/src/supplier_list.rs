@@ -76,27 +76,7 @@ fn supplier_row(s: &Supplier, selected: bool, store: Entity<SupplierStore>, c: &
                 store.update(cx, |s, cx| s.select_supplier(id, cx));
             },
         )
-        .child(
-            div()
-                .flex_1()
-                .text_size(px(13.))
-                .text_color(rgb(c.text_default))
-                .child(s.name.clone())
-        )
-        .child(
-            div()
-                .w(px(180.))
-                .text_size(px(12.))
-                .text_color(rgb(c.text_muted))
-                .child(s.email.clone().unwrap_or_default())
-        )
-        .child(
-            div()
-                .w(px(130.))
-                .text_size(px(12.))
-                .text_color(rgb(c.text_muted))
-                .child(s.phone.clone().unwrap_or_default())
-        )
+        .child(format_supplier_row(s))
 }
 
 #[cfg(test)]

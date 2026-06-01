@@ -6185,6 +6185,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "vassl-suppliers"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "db",
+ "gpui",
+ "sqlez",
+ "tokio",
+ "tracing",
+ "vassl-core",
+ "vassl-db",
+ "vassl-ui",
+]
+
+[[package]]
 name = "vassl-ui"
 version = "0.1.0"
 dependencies = [
