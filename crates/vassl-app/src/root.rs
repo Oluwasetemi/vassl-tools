@@ -1,7 +1,8 @@
 use gpui::{Context, Entity, FocusHandle, Focusable, IntoElement, Render, Subscription, Window, div, prelude::*, px, rgb};
 use vassl_ui::{ThemeColors, ThemeHandle};
 
-use crate::actions::{EscapeModal, FocusSearch, OpenAuditLog, OpenInventory, OpenPriceBook, OpenQuotations, OpenSettings};
+use crate::actions::{EscapeModal, FocusSearch, OpenAuditLog, OpenGlobalSearch, OpenInventory, OpenPriceBook, OpenQuotations, OpenSettings};
+use crate::global_search::{GlobalSearch, GlobalSearchEvent, SearchResultKind};
 use crate::settings_panel::SettingsPanel;
 use crate::audit_log::AuditLogPanel;
 use crate::command_palette::{CommandPalette, PaletteEvent, PaletteCommand};
@@ -9,10 +10,11 @@ use crate::first_run::{FirstRunEvent, FirstRunPrompt};
 use crate::sidebar::{ActiveModule, Sidebar};
 use crate::status_bar::StatusBar;
 use vassl_inventory::panel::{InventoryPanel, InventoryPanelEvent};
+use vassl_inventory::store::InventoryStoreHandle;
 use vassl_pricebook::panel::{PriceBookPanel, PriceBookPanelEvent};
 use vassl_pricebook::price_history::{PriceHistoryEvent, PriceHistoryPanel};
 use vassl_quotations::panel::QuotationPanel;
-use vassl_suppliers::{panel::SupplierPanel, SupplierStoreHandle};
+use vassl_suppliers::{panel::SupplierPanel, store::SupplierStoreHandle};
 
 pub struct VasslRoot {
     sidebar:          Entity<Sidebar>,
@@ -29,6 +31,8 @@ pub struct VasslRoot {
     _palette_sub:          Option<Subscription>,
     price_history:         Option<Entity<PriceHistoryPanel>>,
     _price_history_sub:    Option<Subscription>,
+    global_search:         Option<Entity<GlobalSearch>>,
+    _global_search_sub:    Option<Subscription>,
     _inventory_panel_sub:  Subscription,
     _pricebook_panel_sub:  Subscription,
     focus_handle:          FocusHandle,
@@ -165,10 +169,50 @@ impl VasslRoot {
             _palette_sub:         None,
             price_history:        None,
             _price_history_sub:   None,
+            global_search:        None,
+            _global_search_sub:   None,
             _inventory_panel_sub,
             _pricebook_panel_sub,
             focus_handle,
         }
+    }
+
+    fn open_global_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.global_search.is_some() { return; }
+        let gs  = cx.new(|cx| GlobalSearch::new(cx));
+        let qf  = gs.read(cx).query.read(cx).focus_handle.clone();
+        window.focus(&qf, cx);
+        let sub = cx.subscribe(&gs, |this, _, ev: &GlobalSearchEvent, cx| {
+            match ev {
+                GlobalSearchEvent::Dismissed => {
+                    this._global_search_sub = None;
+                    this.global_search      = None;
+                    cx.notify();
+                }
+                GlobalSearchEvent::Navigate(hit) => {
+                    this.sidebar.update(cx, |s, cx| { s.active = hit.module; cx.notify(); });
+                    match &hit.kind {
+                        SearchResultKind::Product  { id, .. } => {
+                            let pid = *id;
+                            cx.global::<InventoryStoreHandle>().0.clone()
+                                .update(cx, |s, cx| s.select_product(pid, cx));
+                        }
+                        SearchResultKind::Supplier { id, .. } => {
+                            let sid = *id;
+                            cx.global::<SupplierStoreHandle>().0.clone()
+                                .update(cx, |s, cx| s.select_supplier(sid, cx));
+                        }
+                        SearchResultKind::Project { .. } => {}
+                    }
+                    this._global_search_sub = None;
+                    this.global_search      = None;
+                    cx.notify();
+                }
+            }
+        });
+        self.global_search      = Some(gs);
+        self._global_search_sub = Some(sub);
+        cx.notify();
     }
 
     fn open_palette(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -250,19 +294,27 @@ impl Render for VasslRoot {
             .on_action(cx.listener(|this, _: &FocusSearch, window, cx| {
                 this.open_palette(window, cx);
             }))
+            .on_action(cx.listener(|this, _: &OpenGlobalSearch, window, cx| {
+                this.open_global_search(window, cx);
+            }))
             .on_action(cx.listener(|this, _: &EscapeModal, w, cx| {
                 if this.palette.is_some() {
                     this._palette_sub = None;
                     this.palette = None;
                     w.focus(&this.focus_handle, cx);
                     cx.notify();
-                } else if this.audit_log.is_some() {
-                    this.audit_log = None;
+                } else if this.global_search.is_some() {
+                    this._global_search_sub = None;
+                    this.global_search      = None;
                     w.focus(&this.focus_handle, cx);
                     cx.notify();
                 } else if this.price_history.is_some() {
                     this._price_history_sub = None;
                     this.price_history      = None;
+                    w.focus(&this.focus_handle, cx);
+                    cx.notify();
+                } else if this.audit_log.is_some() {
+                    this.audit_log = None;
                     w.focus(&this.focus_handle, cx);
                     cx.notify();
                 }
@@ -288,6 +340,9 @@ impl Render for VasslRoot {
         }
         if let Some(ph) = &self.price_history {
             root = root.child(ph.clone());
+        }
+        if let Some(gs) = &self.global_search {
+            root = root.child(gs.clone());
         }
 
         root
@@ -315,5 +370,12 @@ mod tests {
             name:       "Test".to_string(),
         };
         assert!(matches!(ev, PriceBookPanelEvent::ShowPriceHistory { .. }));
+    }
+
+    #[test]
+    fn open_global_search_action_is_distinct_from_focus_search() {
+        use crate::actions::{FocusSearch, OpenGlobalSearch};
+        let _a: FocusSearch      = FocusSearch;
+        let _b: OpenGlobalSearch = OpenGlobalSearch;
     }
 }
