@@ -1,12 +1,18 @@
-use gpui::{Context, Entity, IntoElement, Render, Subscription, Window,
-           div, prelude::*, px, rgb};
+use gpui::{Context, Entity, EventEmitter, IntoElement, MouseButton, MouseDownEvent,
+           Render, Subscription, Window, div, prelude::*, px, rgb};
 use vassl_ui::ThemeHandle;
 
-use crate::colors;
 use crate::price_form::{PriceEntryForm, PriceFormEvent};
 use crate::price_table::PriceTable;
 use crate::store::PriceBookStore;
 use crate::PriceBookStoreHandle;
+
+#[derive(Clone, PartialEq)]
+pub enum PriceBookPanelEvent {
+    ShowPriceHistory { product_id: i64, name: String },
+}
+
+impl EventEmitter<PriceBookPanelEvent> for PriceBookPanel {}
 
 #[derive(Clone, Copy, PartialEq)]
 enum Tab { PriceBook, History }
@@ -34,18 +40,20 @@ impl PriceBookPanel {
     }
 
     fn open_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let store = self.store.read(cx);
+        let Some(pid) = store.selected_product_id else { return; };
+        let name = store.product_prices
+            .iter()
+            .find(|p| p.product_id == pid)
+            .map(|p| p.name.clone())
+            .unwrap_or_default();
+        drop(store);
+        self.open_form_for(pid, name, window, cx);
+    }
+
+    pub fn open_form_for(&mut self, product_id: i64, name: String, window: &mut Window, cx: &mut Context<Self>) {
         if self.form.is_some() { return; }
-        let (product_id, product_name) = {
-            let store = self.store.read(cx);
-            let Some(pid) = store.selected_product_id else { return; };
-            let name = store.product_prices
-                .iter()
-                .find(|p| p.product_id == pid)
-                .map(|p| p.name.clone())
-                .unwrap_or_default();
-            (pid, name)
-        };
-        let form = cx.new(|cx| PriceEntryForm::new(self.store.clone(), product_id, product_name, cx));
+        let form  = cx.new(|cx| PriceEntryForm::new(self.store.clone(), product_id, name, cx));
         let first = form.read(cx).cost.read(cx).focus_handle.clone();
         window.focus(&first, cx);
         let sub  = cx.subscribe(&form, |this, _form, ev: &PriceFormEvent, cx| {
@@ -69,12 +77,11 @@ impl Render for PriceBookPanel {
         let active_tab    = self.active_tab;
         let has_selection = self.store.read(cx).selected_product_id.is_some();
 
-        // Extract history data while store is borrowed
         let history_rows: Vec<_> = {
             let store = self.store.read(cx);
             store.history.iter().map(|e| {
                 (
-                    e.effective_date[..10].to_string(),
+                    e.effective_date.get(..10).unwrap_or(&e.effective_date).to_string(),
                     e.cost_price_usd,
                     e.duty_cost_usd,
                     e.markup_percent,
@@ -129,12 +136,10 @@ impl Render for PriceBookPanel {
             .relative()
             .flex_1().flex().flex_col().h_full()
             .child(
-                // Tab bar + button row
                 div()
                     .flex().flex_row().items_center().gap(px(8.))
                     .px(px(16.)).py(px(8.))
                     .bg(rgb(c.canvas_bg))
-                    // Price Book tab
                     .child(
                         div()
                             .id("pb-tab-pricebook")
@@ -142,13 +147,12 @@ impl Render for PriceBookPanel {
                             .bg(rgb(if active_tab == Tab::PriceBook { c.surface_active } else { c.surface_default }))
                             .text_size(px(12.)).text_color(rgb(c.text_default))
                             .cursor_pointer()
-                            .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
+                            .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| {
                                 this.active_tab = Tab::PriceBook;
                                 cx.notify();
                             }))
                             .child("Price Book")
                     )
-                    // History tab
                     .child(
                         div()
                             .id("pb-tab-history")
@@ -156,15 +160,13 @@ impl Render for PriceBookPanel {
                             .bg(rgb(if active_tab == Tab::History { c.surface_active } else { c.surface_default }))
                             .text_size(px(12.)).text_color(rgb(c.text_default))
                             .cursor_pointer()
-                            .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
+                            .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| {
                                 this.active_tab = Tab::History;
                                 cx.notify();
                             }))
                             .child("History")
                     )
-                    // Spacer
                     .child(div().flex_1())
-                    // New Entry button — enabled only when a product is selected
                     .child({
                         let mut btn = div()
                             .id("pb-btn-new-entry")
@@ -175,7 +177,7 @@ impl Render for PriceBookPanel {
                         if has_selection {
                             btn = btn
                                 .cursor_pointer()
-                                .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, cx| {
+                                .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| {
                                     this.open_form(window, cx);
                                 }));
                         }
@@ -188,6 +190,123 @@ impl Render for PriceBookPanel {
             root = root.child(form.clone());
         }
 
+        // Context menu overlay
+        let ctx_menu = self.store.read(cx).context_menu.clone();
+        if let Some(target) = ctx_menu {
+            let info_line = {
+                let store = self.store.read(cx);
+                store.product_prices
+                    .iter()
+                    .find(|pp| pp.product_id == target.product_id)
+                    .map(|pp| {
+                        match &pp.latest {
+                            None    => "No price set".to_string(),
+                            Some(e) => format!(
+                                "${:.2} + ${:.2} → {:.0}% → ${:.2}",
+                                e.cost_price_usd, e.duty_cost_usd, e.markup_percent, e.selling_price_usd
+                            ),
+                        }
+                    })
+                    .unwrap_or_default()
+            };
+
+            let pid  = target.product_id;
+            let name = target.product_name.clone();
+
+            root = root
+                .child(
+                    div()
+                        .absolute().inset_0()
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(|this, _: &MouseDownEvent, _: &mut Window, cx| {
+                                this.store.update(cx, |s, cx| s.clear_context_menu(cx));
+                            }),
+                        )
+                )
+                .child(
+                    div()
+                        .absolute()
+                        .left(px(target.x))
+                        .top(px(target.y))
+                        .w(px(220.))
+                        .bg(rgb(c.surface_default))
+                        .rounded(px(6.))
+                        .shadow_md()
+                        .child(
+                            div()
+                                .px(px(12.)).pt(px(10.)).pb(px(4.))
+                                .text_size(px(13.))
+                                .text_color(rgb(c.text_default))
+                                .font_weight(gpui::FontWeight::BOLD)
+                                .child(target.product_name.clone())
+                        )
+                        .child(
+                            div()
+                                .px(px(12.)).pb(px(8.))
+                                .text_size(px(11.))
+                                .text_color(rgb(c.text_muted))
+                                .child(info_line)
+                        )
+                        .child(div().h(px(1.)).bg(rgb(c.surface_default)))
+                        .child({
+                            let n = name.clone();
+                            div()
+                                .id("ctx-pb-price-history")
+                                .px(px(12.)).py(px(8.))
+                                .cursor_pointer()
+                                .text_size(px(13.))
+                                .text_color(rgb(c.text_default))
+                                .child("Price History")
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(move |this, _: &MouseDownEvent, _: &mut Window, cx| {
+                                        this.store.update(cx, |s, cx| s.clear_context_menu(cx));
+                                        cx.emit(PriceBookPanelEvent::ShowPriceHistory {
+                                            product_id: pid,
+                                            name:       n.clone(),
+                                        });
+                                    }),
+                                )
+                        })
+                        .child(
+                            div()
+                                .id("ctx-pb-add-price")
+                                .px(px(12.)).py(px(8.))
+                                .cursor_pointer()
+                                .text_size(px(13.))
+                                .text_color(rgb(c.text_default))
+                                .child("Add Price Entry")
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(move |this, _: &MouseDownEvent, window: &mut Window, cx| {
+                                        this.store.update(cx, |s, cx| s.clear_context_menu(cx));
+                                        this.open_form_for(pid, name.clone(), window, cx);
+                                    }),
+                                )
+                        )
+                );
+        }
+
         root
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pricebook_panel_event_show_price_history_carries_data() {
+        let ev = PriceBookPanelEvent::ShowPriceHistory {
+            product_id: 3,
+            name:       "DVR System".to_string(),
+        };
+        match ev {
+            PriceBookPanelEvent::ShowPriceHistory { product_id, name } => {
+                assert_eq!(product_id, 3);
+                assert_eq!(name, "DVR System");
+            }
+        }
     }
 }
