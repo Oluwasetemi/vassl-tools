@@ -124,7 +124,7 @@ impl Render for QuotationForm {
                             // Project dropdown row
                             .child(
                                 div().flex().flex_col().py(px(10.))
-                                    // Trigger
+                                    // Trigger — Zed-style: value + ◇ indicator
                                     .child(
                                         div().flex().flex_row().items_center()
                                             .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Project"))
@@ -132,9 +132,10 @@ impl Render for QuotationForm {
                                                 div()
                                                     .id("project-dropdown-trigger")
                                                     .flex_1()
-                                                    .flex().flex_row().items_center().justify_between()
-                                                    .px(px(8.)).py(px(6.))
-                                                    .bg(rgb(c.surface_default)).rounded(px(4.))
+                                                    .flex().flex_row().items_center().gap(px(6.))
+                                                    .px(px(12.)).py(px(7.))
+                                                    .bg(rgb(c.surface_default)).rounded(px(5.))
+                                                    .border_1().border_color(rgb(c.surface_active))
                                                     .cursor_pointer()
                                                     .on_mouse_down(MouseButton::Left, cx.listener(|this, _: &MouseDownEvent, _, cx| {
                                                         this.project_dropdown_open = !this.project_dropdown_open;
@@ -146,8 +147,8 @@ impl Render for QuotationForm {
                                                             .child(selected_name.clone().unwrap_or_else(|| "Select a project…".to_string()))
                                                     )
                                                     .child(
-                                                        div().text_size(px(10.)).text_color(rgb(c.text_muted))
-                                                            .child(if dropdown_open { "▴" } else { "▾" })
+                                                        div().text_size(px(11.)).text_color(rgb(c.text_muted))
+                                                            .child("◇")
                                                     )
                                             )
                                     )
