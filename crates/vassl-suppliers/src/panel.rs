@@ -1,23 +1,25 @@
 use gpui::{Context, Entity, IntoElement, Render, Subscription, Window,
            div, prelude::*, px, rgb};
-use vassl_ui::ThemeHandle;
+use vassl_ui::{TextInput, ThemeHandle, text_field};
 
 use crate::store::SupplierStore;
 use crate::supplier_form::{SupplierForm, SupplierFormEvent};
 use crate::supplier_list::SupplierList;
 
 pub struct SupplierPanel {
-    store:     Entity<SupplierStore>,
-    list:      Entity<SupplierList>,
-    form:      Option<Entity<SupplierForm>>,
-    _form_sub: Option<Subscription>,
+    store:        Entity<SupplierStore>,
+    list:         Entity<SupplierList>,
+    form:         Option<Entity<SupplierForm>>,
+    _form_sub:    Option<Subscription>,
+    search_input: Entity<TextInput>,
 }
 
 impl SupplierPanel {
     pub fn new(store: Entity<SupplierStore>, cx: &mut Context<Self>) -> Self {
         let list = cx.new(|cx| SupplierList::new(store.clone(), cx));
         store.update(cx, |s, cx| s.load_suppliers(cx));
-        Self { store, list, form: None, _form_sub: None }
+        let search_input = cx.new(|cx| TextInput::with_placeholder("Filter…", cx));
+        Self { store, list, form: None, _form_sub: None, search_input }
     }
 
     fn open_new_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -59,9 +61,16 @@ impl SupplierPanel {
 }
 
 impl Render for SupplierPanel {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c             = cx.global::<ThemeHandle>().0.clone();
         let has_selection = self.store.read(cx).selected_supplier_id.is_some();
+
+        // Sync filter input → store
+        let q = self.search_input.read(cx).text().to_string();
+        if q != self.store.read(cx).search_query {
+            self.store.update(cx, |s, cx| s.set_search_query(q.clone(), cx));
+        }
+        let has_query = !q.is_empty();
 
         let mut root = div()
             .relative()
@@ -71,6 +80,34 @@ impl Render for SupplierPanel {
                     .flex().flex_row().items_center().gap(px(8.))
                     .px(px(16.)).py(px(8.))
                     .bg(rgb(c.canvas_bg))
+                    .child(
+                        div()
+                            .flex().flex_row().items_center().gap(px(4.))
+                            .child(
+                                div()
+                                    .w(px(160.))
+                                    .child({
+                                        let focused = self.search_input.read(cx).focus_handle.is_focused(window);
+                                        text_field("", self.search_input.clone(), focused, cx)
+                                    })
+                            )
+                            .child({
+                                let mut clear = div()
+                                    .id("sup-search-clear")
+                                    .px(px(6.)).py(px(2.)).rounded(px(3.))
+                                    .text_size(px(11.)).text_color(rgb(c.text_muted))
+                                    .child("×");
+                                if has_query {
+                                    let si = self.search_input.clone();
+                                    clear = clear
+                                        .cursor_pointer()
+                                        .on_mouse_down(gpui::MouseButton::Left, move |_: &gpui::MouseDownEvent, _: &mut Window, cx: &mut gpui::App| {
+                                            si.update(cx, |t, cx| t.reset(cx));
+                                        });
+                                }
+                                clear
+                            })
+                    )
                     .child(div().flex_1())
                     .child(
                         div()

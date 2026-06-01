@@ -47,7 +47,15 @@ impl Render for SupplierList {
         }
 
         let selected = store.selected_supplier_id;
-        let rows: Vec<_> = store.suppliers.iter().map(|s| {
+        let filtered = store.filtered_suppliers();
+        if filtered.is_empty() && !store.suppliers.is_empty() {
+            return div()
+                .flex_1().flex().items_center().justify_center()
+                .text_color(rgb(c.text_muted))
+                .child(format!("No results for \"{}\".", store.search_query))
+                .into_any_element();
+        }
+        let rows: Vec<_> = filtered.iter().map(|s| {
             supplier_row(s, selected == Some(s.id), self.store.clone(), &c)
         }).collect();
 
