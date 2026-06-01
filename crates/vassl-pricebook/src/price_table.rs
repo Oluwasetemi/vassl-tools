@@ -47,7 +47,15 @@ impl Render for PriceTable {
         }
 
         let selected = store.selected_product_id;
-        let rows: Vec<_> = store.product_prices.iter().map(|pp| {
+        let filtered = store.filtered_product_prices();
+        if filtered.is_empty() && !store.product_prices.is_empty() {
+            return div()
+                .flex_1().flex().items_center().justify_center()
+                .text_color(rgb(c.text_muted))
+                .child(format!("No results for \"{}\".", store.search_query))
+                .into_any_element();
+        }
+        let rows: Vec<_> = filtered.iter().map(|pp| {
             let is_selected = selected == Some(pp.product_id);
             price_row(pp, is_selected, self.store.clone(), &c)
         }).collect();

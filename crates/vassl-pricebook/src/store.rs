@@ -25,6 +25,7 @@ pub struct PriceBookStore {
     pub history:             Vec<PriceEntry>,
     pub loading:             bool,
     pub context_menu:        Option<ContextMenuTarget>,
+    pub search_query:        String,
 }
 
 pub struct PriceBookStoreHandle(pub Entity<PriceBookStore>);
@@ -46,6 +47,7 @@ impl PriceBookStore {
             history:             Vec::new(),
             loading:             false,
             context_menu:        None,
+            search_query:        String::new(),
         }
     }
 
@@ -116,6 +118,22 @@ impl PriceBookStore {
         self.context_menu = None;
         cx.notify();
     }
+
+    pub fn set_search_query(&mut self, query: String, cx: &mut Context<Self>) {
+        if self.search_query == query { return; }
+        self.search_query = query;
+        cx.notify();
+    }
+
+    pub fn filtered_product_prices(&self) -> Vec<&ProductPrice> {
+        let q = self.search_query.trim().to_lowercase();
+        if q.is_empty() {
+            return self.product_prices.iter().collect();
+        }
+        self.product_prices.iter().filter(|pp| {
+            pp.name.to_lowercase().contains(&q) || pp.sku.to_lowercase().contains(&q)
+        }).collect()
+    }
 }
 
 #[cfg(test)]
@@ -134,6 +152,55 @@ mod tests {
             effective_date:    "2026-01-01T00:00:00Z".to_string(),
             notes:             None,
         }
+    }
+
+    #[test]
+    fn filtered_product_prices_empty_query_returns_all() {
+        let store = PriceBookStore {
+            product_prices: vec![
+                ProductPrice { product_id: 1, sku: "CAM-001".into(), name: "IP Camera".into(), latest: None },
+                ProductPrice { product_id: 2, sku: "NVR-001".into(), name: "NVR Unit".into(),  latest: None },
+            ],
+            selected_product_id: None,
+            history: vec![],
+            loading: false,
+            context_menu: None,
+            search_query: String::new(),
+        };
+        assert_eq!(store.filtered_product_prices().len(), 2);
+    }
+
+    #[test]
+    fn filtered_product_prices_matches_name_case_insensitive() {
+        let store = PriceBookStore {
+            product_prices: vec![
+                ProductPrice { product_id: 1, sku: "CAM-001".into(), name: "IP Camera".into(), latest: None },
+                ProductPrice { product_id: 2, sku: "NVR-001".into(), name: "NVR Unit".into(),  latest: None },
+            ],
+            selected_product_id: None,
+            history: vec![],
+            loading: false,
+            context_menu: None,
+            search_query: "camera".into(),
+        };
+        let results = store.filtered_product_prices();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name, "IP Camera");
+    }
+
+    #[test]
+    fn filtered_product_prices_matches_sku() {
+        let store = PriceBookStore {
+            product_prices: vec![
+                ProductPrice { product_id: 1, sku: "CAM-001".into(), name: "IP Camera".into(), latest: None },
+            ],
+            selected_product_id: None,
+            history: vec![],
+            loading: false,
+            context_menu: None,
+            search_query: "cam-".into(),
+        };
+        assert_eq!(store.filtered_product_prices().len(), 1);
     }
 
     #[test]

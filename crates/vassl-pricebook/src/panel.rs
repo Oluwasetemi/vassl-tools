@@ -1,6 +1,6 @@
 use gpui::{Context, Entity, EventEmitter, IntoElement, MouseButton, MouseDownEvent,
            Render, Subscription, Window, div, prelude::*, px, rgb};
-use vassl_ui::ThemeHandle;
+use vassl_ui::{TextInput, ThemeHandle, text_field};
 
 use crate::price_form::{PriceEntryForm, PriceFormEvent};
 use crate::price_table::PriceTable;
@@ -18,11 +18,12 @@ impl EventEmitter<PriceBookPanelEvent> for PriceBookPanel {}
 enum Tab { PriceBook, History }
 
 pub struct PriceBookPanel {
-    pub store:   Entity<PriceBookStore>,
-    price_table: Entity<PriceTable>,
-    active_tab:  Tab,
-    form:        Option<Entity<PriceEntryForm>>,
-    _form_sub:   Option<Subscription>,
+    pub store:    Entity<PriceBookStore>,
+    price_table:  Entity<PriceTable>,
+    active_tab:   Tab,
+    form:         Option<Entity<PriceEntryForm>>,
+    _form_sub:    Option<Subscription>,
+    search_input: Entity<TextInput>,
 }
 
 impl PriceBookPanel {
@@ -30,12 +31,14 @@ impl PriceBookPanel {
         let store = cx.global::<PriceBookStoreHandle>().0.clone();
         let price_table = cx.new(|cx| PriceTable::new(store.clone(), cx));
         store.update(cx, |s, cx| s.load_products(cx));
+        let search_input = cx.new(|cx| TextInput::with_placeholder("Filter…", cx));
         Self {
             store,
             price_table,
-            active_tab: Tab::PriceBook,
-            form:      None,
-            _form_sub: None,
+            active_tab:   Tab::PriceBook,
+            form:         None,
+            _form_sub:    None,
+            search_input,
         }
     }
 
@@ -74,10 +77,17 @@ impl PriceBookPanel {
 }
 
 impl Render for PriceBookPanel {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = cx.global::<ThemeHandle>().0.clone();
         let active_tab    = self.active_tab;
         let has_selection = self.store.read(cx).selected_product_id.is_some();
+
+        // Sync filter input → store
+        let q = self.search_input.read(cx).text().to_string();
+        if q != self.store.read(cx).search_query {
+            self.store.update(cx, |s, cx| s.set_search_query(q.clone(), cx));
+        }
+        let has_query = !q.is_empty();
 
         let history_rows: Vec<_> = {
             let store = self.store.read(cx);
@@ -167,6 +177,34 @@ impl Render for PriceBookPanel {
                                 cx.notify();
                             }))
                             .child("History")
+                    )
+                    .child(
+                        div()
+                            .flex().flex_row().items_center().gap(px(4.))
+                            .child(
+                                div()
+                                    .w(px(160.))
+                                    .child({
+                                        let focused = self.search_input.read(cx).focus_handle.is_focused(window);
+                                        text_field("", self.search_input.clone(), focused, cx)
+                                    })
+                            )
+                            .child({
+                                let mut clear = div()
+                                    .id("pb-search-clear")
+                                    .px(px(6.)).py(px(2.)).rounded(px(3.))
+                                    .text_size(px(11.)).text_color(rgb(c.text_muted))
+                                    .child("×");
+                                if has_query {
+                                    let si = self.search_input.clone();
+                                    clear = clear
+                                        .cursor_pointer()
+                                        .on_mouse_down(gpui::MouseButton::Left, move |_: &gpui::MouseDownEvent, _: &mut Window, cx: &mut gpui::App| {
+                                            si.update(cx, |t, cx| t.reset(cx));
+                                        });
+                                }
+                                clear
+                            })
                     )
                     .child(div().flex_1())
                     .child({
