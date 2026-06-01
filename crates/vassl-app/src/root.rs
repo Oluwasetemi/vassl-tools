@@ -1,5 +1,5 @@
-use gpui::{Context, Entity, FocusHandle, Focusable, IntoElement, Render, Subscription, Window, div, prelude::*, rgb};
-use vassl_ui::ThemeHandle;
+use gpui::{Context, Entity, FocusHandle, Focusable, IntoElement, Render, Subscription, Window, div, prelude::*, px, rgb};
+use vassl_ui::{ThemeColors, ThemeHandle};
 
 use crate::actions::{EscapeModal, FocusSearch, OpenAuditLog, OpenInventory, OpenPriceBook, OpenQuotations, OpenSettings};
 use crate::settings_panel::SettingsPanel;
@@ -58,6 +58,24 @@ impl VasslRoot {
         } else {
             (None, None)
         };
+
+        // Apply persisted font size and theme before first render
+        {
+            let db = vassl_db::AppDatabase::global(&**cx);
+            if let Ok(Some(size_str)) = vassl_db::shared::get_setting(db, "appearance.font_size") {
+                if let Ok(size) = size_str.parse::<f32>() {
+                    window.set_rem_size(px(size.max(10.0).min(24.0)));
+                }
+            }
+            if let Ok(Some(theme)) = vassl_db::shared::get_setting(db, "appearance.theme") {
+                let colors = if theme == "light" {
+                    ThemeColors::light()
+                } else {
+                    ThemeColors::dark()
+                };
+                cx.set_global(ThemeHandle(colors));
+            }
+        }
 
         let focus_handle = cx.focus_handle();
         // Give the root focus on startup so Cmd+F and other app-level shortcuts

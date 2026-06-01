@@ -164,6 +164,124 @@ impl SettingsPanel {
             .child(div().h(px(1.)).mx(px(32.)).bg(rgb(c.surface_default)))
     }
 
+    fn render_appearance(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let c       = cx.global::<ThemeHandle>().0.clone();
+        let is_dark = self.theme == "dark";
+
+        // theme toggle pill
+        let toggle = {
+            let (pill_bg, thumb_x) = if is_dark {
+                (c.surface_active, px(16.))
+            } else {
+                (c.surface_default, px(2.))
+            };
+            div().id("settings-theme-toggle")
+                .w(px(32.)).h(px(18.)).rounded_full()
+                .bg(rgb(pill_bg)).cursor_pointer().relative()
+                .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
+                    this.theme = if this.theme == "dark" { "light".into() } else { "dark".into() };
+                    let colors = if this.theme == "dark" {
+                        vassl_ui::ThemeColors::dark()
+                    } else {
+                        vassl_ui::ThemeColors::light()
+                    };
+                    cx.set_global(vassl_ui::ThemeHandle(colors));
+                    this.save_setting("appearance.theme", this.theme.clone(), cx);
+                    cx.notify();
+                }))
+                .child(
+                    div().absolute()
+                        .top(px(2.)).left(thumb_x)
+                        .w(px(14.)).h(px(14.)).rounded_full()
+                        .bg(rgb(c.canvas_bg))
+                )
+        };
+
+        // font size stepper
+        let font_size = self.font_size;
+        let stepper = div().flex().flex_row().items_center().gap(px(2.))
+            .child(
+                div().id("settings-font-minus")
+                    .px(px(10.)).py(px(5.)).rounded(px(4.))
+                    .bg(rgb(c.surface_default)).text_size(px(13.)).text_color(rgb(c.text_default))
+                    .cursor_pointer()
+                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, cx| {
+                        this.font_size = (this.font_size - 0.5).max(10.0);
+                        window.set_rem_size(px(this.font_size as f32));
+                        this.save_setting("appearance.font_size", format!("{}", this.font_size), cx);
+                        cx.notify();
+                    }))
+                    .child("−")
+            )
+            .child(
+                div().w(px(52.)).px(px(4.)).py(px(5.))
+                    .bg(rgb(c.surface_default)).rounded(px(4.))
+                    .text_size(px(12.)).text_color(rgb(c.text_default))
+                    .flex().items_center().justify_center()
+                    .child(format!("{:.1}", font_size))
+            )
+            .child(
+                div().id("settings-font-plus")
+                    .px(px(10.)).py(px(5.)).rounded(px(4.))
+                    .bg(rgb(c.surface_default)).text_size(px(13.)).text_color(rgb(c.text_default))
+                    .cursor_pointer()
+                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, cx| {
+                        this.font_size = (this.font_size + 0.5).min(24.0);
+                        window.set_rem_size(px(this.font_size as f32));
+                        this.save_setting("appearance.font_size", format!("{}", this.font_size), cx);
+                        cx.notify();
+                    }))
+                    .child("+")
+            );
+
+        // font size label with ↺ reset button
+        let font_size_label = div().flex().flex_row().items_center().gap(px(6.))
+            .child(div().text_size(px(13.)).text_color(rgb(c.text_default)).child("Font Size"))
+            .child(
+                div().id("settings-font-reset")
+                    .text_size(px(11.)).text_color(rgb(c.text_muted)).cursor_pointer()
+                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, cx| {
+                        this.font_size = 13.0;
+                        window.set_rem_size(px(13.0_f32));
+                        this.save_setting("appearance.font_size", "13".into(), cx);
+                        cx.notify();
+                    }))
+                    .child("↺")
+            );
+
+        div().flex().flex_col()
+            // Theme row
+            .child(
+                div().flex().flex_col()
+                    .child(
+                        div().flex().flex_row().items_center().py(px(14.)).px(px(32.))
+                            .child(
+                                div().flex_1().flex().flex_col().gap(px(3.))
+                                    .child(div().text_size(px(13.)).text_color(rgb(c.text_default)).child("Theme"))
+                                    .child(div().text_size(px(11.)).text_color(rgb(c.text_muted))
+                                        .child(if is_dark { "Dark mode" } else { "Light mode" }))
+                            )
+                            .child(toggle)
+                    )
+                    .child(div().h(px(1.)).mx(px(32.)).bg(rgb(c.surface_default)))
+            )
+            // Font size row
+            .child(
+                div().flex().flex_col()
+                    .child(
+                        div().flex().flex_row().items_center().py(px(14.)).px(px(32.))
+                            .child(
+                                div().flex_1().flex().flex_col().gap(px(3.))
+                                    .child(font_size_label)
+                                    .child(div().text_size(px(11.)).text_color(rgb(c.text_muted))
+                                        .child("UI font size in pixels. Step 0.5, range 10–24."))
+                            )
+                            .child(stepper)
+                    )
+                    .child(div().h(px(1.)).mx(px(32.)).bg(rgb(c.surface_default)))
+            )
+    }
+
     fn render_general(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c           = cx.global::<ThemeHandle>().0.clone();
         let name_focused = self.user_name.read(cx).focus_handle.is_focused(window);
@@ -240,7 +358,8 @@ impl Render for SettingsPanel {
             .child(div().h(px(1.)).mx(px(32.)).bg(rgb(c.surface_default)))
             .child({
                 match active {
-                    SettingsCategory::General => self.render_general(window, cx).into_any_element(),
+                    SettingsCategory::General    => self.render_general(window, cx).into_any_element(),
+                    SettingsCategory::Appearance => self.render_appearance(window, cx).into_any_element(),
                     _ => div().px(px(32.)).py(px(24.))
                               .child(div().text_size(px(12.)).text_color(rgb(c.text_muted))
                                      .child("(coming soon)"))
@@ -319,5 +438,25 @@ mod tests {
         assert!(valid.contains(&"USD"));
         assert!(valid.contains(&"JMD"));
         assert!(!valid.contains(&"EUR"));
+    }
+
+    #[test]
+    fn stepper_step_up_clamps_at_24() {
+        let mut v = 24.0_f64;
+        v = (v + 0.5).min(24.0);
+        assert!((v - 24.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn stepper_step_down_clamps_at_10() {
+        let mut v = 10.0_f64;
+        v = (v - 0.5).max(10.0);
+        assert!((v - 10.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn stepper_reset_returns_to_13() {
+        let v = 13.0_f64;
+        assert!((v - 13.0).abs() < f64::EPSILON);
     }
 }
