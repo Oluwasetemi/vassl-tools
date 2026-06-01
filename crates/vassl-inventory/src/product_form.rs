@@ -20,6 +20,7 @@ pub struct ProductForm {
     category:     Entity<TextInput>,
     unit:         Entity<TextInput>,
     min_stock:    Entity<TextInput>,
+    description:  Entity<TextInput>,
     error:        Option<String>,
     focus_handle: FocusHandle,
 }
@@ -45,6 +46,9 @@ impl ProductForm {
             category:     cx.new(|cx| TextInput::with_placeholder("optional: Cameras, Cabling…", cx)),
             unit:         cx.new(|cx| TextInput::with_placeholder("pcs, meters, rolls…", cx)),
             min_stock:    cx.new(|cx| TextInput::with_placeholder("0", cx)),
+            description:  cx.new(|cx| TextInput::with_placeholder(
+                "e.g. Wide-angle camera lens, 24mm, F/1.8, compatible with Sony E-mount", cx
+            )),
             error:        None,
             focus_handle: cx.focus_handle(),
         }
@@ -57,6 +61,8 @@ impl ProductForm {
         let min_s     = self.min_stock.read(cx).text().to_string();
         let category  = self.category.read(cx).text().trim().to_string();
         let cat_opt   = if category.is_empty() { None } else { Some(category) };
+        let desc      = self.description.read(cx).text().trim().to_string();
+        let desc_opt  = if desc.is_empty() { None } else { Some(desc) };
 
         match validate_product(&sku, &name, &unit, &min_s) {
             Err(msg) => { self.error = Some(msg); cx.notify(); }
@@ -64,7 +70,10 @@ impl ProductForm {
                 let db    = InventoryDb::global(&**cx);
                 let store = self.store.clone();
                 cx.spawn(async move |this, cx| {
-                    let result = db.insert_product(&sku, &name, cat_opt.as_deref(), &unit, min, None, None).await;
+                    let result = db.insert_product(
+                        &sku, &name, cat_opt.as_deref(), &unit, min,
+                        desc_opt.as_deref(), None,
+                    ).await;
                     if let Err(e) = result { tracing::error!("insert_product failed: {e:?}"); return Ok(()); }
                     let _ = store.update(cx, |s, cx| s.load_products(cx));
                     this.update(cx, |_, cx| cx.emit(ProductFormEvent::Submitted))
@@ -86,6 +95,7 @@ impl Render for ProductForm {
         let cat_f  = self.category.read(cx).focus_handle.is_focused(window);
         let unit_f = self.unit.read(cx).focus_handle.is_focused(window);
         let min_f  = self.min_stock.read(cx).focus_handle.is_focused(window);
+        let desc_f = self.description.read(cx).focus_handle.is_focused(window);
 
         div()
             .absolute().top_0().left_0().right_0().bottom_0()
@@ -102,6 +112,7 @@ impl Render for ProductForm {
                     this.category.read(cx).focus_handle.clone(),
                     this.unit.read(cx).focus_handle.clone(),
                     this.min_stock.read(cx).focus_handle.clone(),
+                    this.description.read(cx).focus_handle.clone(),
                 ];
                 let current = handles.iter().position(|h| h.is_focused(window));
                 let next = handles[(current.map(|i| i + 1).unwrap_or(0)) % handles.len()].clone();
@@ -114,6 +125,7 @@ impl Render for ProductForm {
                     this.category.read(cx).focus_handle.clone(),
                     this.unit.read(cx).focus_handle.clone(),
                     this.min_stock.read(cx).focus_handle.clone(),
+                    this.description.read(cx).focus_handle.clone(),
                 ];
                 let current = handles.iter().position(|h| h.is_focused(window));
                 let prev = handles[(current.unwrap_or(0) + handles.len() - 1) % handles.len()].clone();
@@ -170,6 +182,12 @@ impl Render for ProductForm {
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_muted)).child("Min Stock Level"))
                                     .child(div().flex_1().child(text_field("", self.min_stock.clone(), min_f, cx)))
+                            )
+                            .child(div().h(px(1.)).bg(rgb(c.surface_default)))
+                            .child(
+                                div().flex().flex_row().items_start().py(px(10.))
+                                    .child(div().w(px(160.)).pt(px(6.)).text_size(px(12.)).text_color(rgb(c.text_muted)).child("Description"))
+                                    .child(div().flex_1().h(px(64.)).child(text_field("", self.description.clone(), desc_f, cx)))
                             )
                             .child(
                                 div().h(px(18.)).flex().items_center()
