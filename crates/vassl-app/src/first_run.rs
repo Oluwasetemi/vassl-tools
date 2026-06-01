@@ -92,7 +92,7 @@ impl Render for FirstRunPrompt {
                             .child(
                                 div().flex().flex_row().items_center().py(px(12.))
                                     .child(div().w(px(120.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Your Name"))
-                                    .child(div().flex_1().child(text_field("", self.name_input.clone(), name_focused, window)))
+                                    .child(div().flex_1().child(text_field("", self.name_input.clone(), name_focused, cx)))
                             )
                             .child(
                                 div().h(px(18.)).flex().items_center()

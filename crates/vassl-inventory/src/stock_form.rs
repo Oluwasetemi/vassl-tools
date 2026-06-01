@@ -151,25 +151,25 @@ impl Render for StockEntryForm {
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Quantity"))
-                                    .child(div().flex_1().child(text_field("", self.quantity.clone(), qty_focused, window)))
+                                    .child(div().flex_1().child(text_field("", self.quantity.clone(), qty_focused, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Unit Cost (USD)"))
-                                    .child(div().flex_1().child(text_field("", self.unit_cost.clone(), cost_focused, window)))
+                                    .child(div().flex_1().child(text_field("", self.unit_cost.clone(), cost_focused, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Supplier"))
-                                    .child(div().flex_1().child(text_field("", self.supplier.clone(), sup_focused, window)))
+                                    .child(div().flex_1().child(text_field("", self.supplier.clone(), sup_focused, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Invoice Ref"))
-                                    .child(div().flex_1().child(text_field("", self.invoice_ref.clone(), inv_focused, window)))
+                                    .child(div().flex_1().child(text_field("", self.invoice_ref.clone(), inv_focused, cx)))
                             )
                             .child(
                                 div().h(px(18.)).flex().items_center()

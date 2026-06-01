@@ -10,7 +10,7 @@ mod sidebar;
 mod status_bar;
 
 use actions::{ConfirmSelection, EscapeModal, FocusSearch, NewRecord, OpenAuditLog, OpenInventory, OpenPriceBook, OpenQuotations, SelectNext, SelectPrev};
-use vassl_ui::text_input::{BackTab, Backspace, Copy, Cut, Delete, End, Home, Left, Paste, Right, SelectAll, SelectLeft, SelectRight, Tab as TextTab};
+use vassl_ui::text_input::{BackTab, Backspace, Copy, Cut, Delete, End, Home, Left, Paste, Right, SelectAll, SelectLeft, SelectRight, ShowCharacterPalette, Tab as TextTab};
 use vassl_inventory::product_form::{EscapeForm as ProductEscapeForm, TabField as ProductTab, BackTabField as ProductBackTab};
 use vassl_inventory::stock_form::{EscapeForm as StockEscapeForm, TabField as StockTab, BackTabField as StockBackTab};
 use vassl_pricebook::price_form::{EscapeForm as PriceEscapeForm, TabField as PriceTab, BackTabField as PriceBackTab};
@@ -101,8 +101,9 @@ fn main() {
             KeyBinding::new("secondary-v",      Paste,       Some("TextInput")),
             KeyBinding::new("secondary-c",      Copy,        Some("TextInput")),
             KeyBinding::new("secondary-x",      Cut,              Some("TextInput")),
-            KeyBinding::new("tab",               TextTab,          Some("TextInput")),
-            KeyBinding::new("shift-tab",         BackTab,          Some("TextInput")),
+            KeyBinding::new("tab",               TextTab,              Some("TextInput")),
+            KeyBinding::new("shift-tab",         BackTab,              Some("TextInput")),
+            KeyBinding::new("ctrl-cmd-space",    ShowCharacterPalette, Some("TextInput")),
             // Escape closes overlays
             KeyBinding::new("escape",            EscapeModal,      Some("VasslRoot")),
             // CommandPalette keyboard navigation

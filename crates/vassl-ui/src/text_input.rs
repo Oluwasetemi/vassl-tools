@@ -5,14 +5,16 @@ use gpui::{
     EntityInputHandler, FocusHandle, Focusable, GlobalElementId, IntoElement, LayoutId,
     MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, Pixels, Point,
     ShapedLine, SharedString, Style, TextAlign, TextRun, UTF16Selection, Window,
-    actions, div, fill, point, prelude::*, px, relative, size,
+    actions, div, fill, point, prelude::*, px, relative, rgb, rgba, size,
 };
 use unicode_segmentation::UnicodeSegmentation;
+
+use crate::{ThemeColors, ThemeHandle};
 
 actions!(
     text_input,
     [Backspace, Delete, Left, Right, SelectLeft, SelectRight, SelectAll,
-     Home, End, Paste, Cut, Copy, Tab, BackTab]
+     Home, End, Paste, Cut, Copy, Tab, BackTab, ShowCharacterPalette]
 );
 
 pub struct TextInput {
@@ -220,6 +222,9 @@ impl TextInput {
             self.replace_text_in_range(None, "", window, cx);
         }
     }
+    fn show_character_palette(&mut self, _: &ShowCharacterPalette, window: &mut Window, _: &mut Context<Self>) {
+        window.show_character_palette();
+    }
 }
 
 impl EntityInputHandler for TextInput {
@@ -299,6 +304,7 @@ impl Render for TextInput {
             .on_action(cx.listener(Self::paste))
             .on_action(cx.listener(Self::cut))
             .on_action(cx.listener(Self::copy))
+            .on_action(cx.listener(Self::show_character_palette))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up))
@@ -339,14 +345,15 @@ impl gpui::Element for TextElement {
     }
 
     fn prepaint(&mut self, _: Option<&GlobalElementId>, _: Option<&gpui::InspectorElementId>, bounds: Bounds<Pixels>, _: &mut (), window: &mut Window, cx: &mut App) -> PrepaintState {
-        let input   = self.input.read(cx);
-        let content = input.content.clone();
-        let sel     = input.selected_range.clone();
-        let cursor  = input.cursor_offset();
-        let style   = window.text_style();
+        let input        = self.input.read(cx);
+        let content      = input.content.clone();
+        let sel          = input.selected_range.clone();
+        let cursor       = input.cursor_offset();
+        let style        = window.text_style();
+        let c: ThemeColors = cx.global::<ThemeHandle>().0.clone();
 
         let (display, color) = if content.is_empty() {
-            (input.placeholder.clone(), gpui::hsla(0., 0., 0.4, 1.))
+            (input.placeholder.clone(), rgba(((c.text_muted << 8) | 0x99) as u32).into())
         } else {
             (content, style.color)
         };
@@ -356,11 +363,14 @@ impl gpui::Element for TextElement {
         let font_size = style.font_size.to_pixels(window.rem_size());
         let line = window.text_system().shape_line(display, font_size, &runs, None);
 
-        let cursor_pos = line.x_for_index(cursor);
+        let cursor_pos  = line.x_for_index(cursor);
+        let cursor_fill = rgb(c.surface_active);
+        let sel_fill    = rgba(((c.surface_active << 8) | 0x66) as u32);
+
         let (selection, cursor_quad) = if sel.is_empty() {
             (None, Some(fill(
                 Bounds::new(point(bounds.left() + cursor_pos, bounds.top()), size(px(2.), bounds.bottom() - bounds.top())),
-                gpui::blue(),
+                cursor_fill,
             )))
         } else {
             let start_x = line.x_for_index(sel.start);
@@ -370,7 +380,7 @@ impl gpui::Element for TextElement {
                     point(bounds.left() + start_x, bounds.top()),
                     point(bounds.left() + end_x,   bounds.bottom()),
                 ),
-                gpui::blue().opacity(0.3),
+                sel_fill,
             )), None)
         };
 
@@ -408,30 +418,33 @@ impl gpui::Element for TextElement {
 }
 
 /// Convenience: a labelled text input widget for use in forms.
-/// Returns a `div` containing a label + the focusable text element.
+/// Returns a `div` wrapping the focusable text element, with an optional label above.
 pub fn text_field(
-    label:    &str,
-    input:    gpui::Entity<TextInput>,
-    focused:  bool,
-    _window:  &Window,
+    label:   &str,
+    input:   gpui::Entity<TextInput>,
+    focused: bool,
+    cx:      &gpui::App,
 ) -> impl IntoElement {
-    let border_color = if focused { 0x1a3c5e_u32 } else { 0x313244_u32 };
+    let c            = cx.global::<ThemeHandle>().0.clone();
+    let border_color = if focused { c.surface_active } else { c.surface_default };
     gpui::div().flex().flex_col().gap(px(4.))
-        .child(
-            gpui::div()
-                .text_size(px(11.))
-                .text_color(gpui::rgb(0x6c7086_u32))
-                .child(label.to_string())
-        )
+        .when(!label.is_empty(), |d| {
+            d.child(
+                gpui::div()
+                    .text_size(px(11.))
+                    .text_color(gpui::rgb(c.text_muted))
+                    .child(label.to_string())
+            )
+        })
         .child(
             gpui::div()
                 .px(px(8.)).py(px(6.))
-                .bg(gpui::rgb(0x313244_u32))
+                .bg(gpui::rgb(c.surface_default))
                 .rounded(px(4.))
                 .border_1()
                 .border_color(gpui::rgb(border_color))
                 .text_size(px(13.))
-                .text_color(gpui::rgb(0xcdd6f4_u32))
+                .text_color(gpui::rgb(c.text_default))
                 .child(input)
         )
 }

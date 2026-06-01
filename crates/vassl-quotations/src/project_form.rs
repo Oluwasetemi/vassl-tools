@@ -121,13 +121,13 @@ impl Render for ProjectForm {
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(140.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Project Name"))
-                                    .child(div().flex_1().child(text_field("", self.name.clone(), name_focused, window)))
+                                    .child(div().flex_1().child(text_field("", self.name.clone(), name_focused, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(140.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Client Name"))
-                                    .child(div().flex_1().child(text_field("", self.client_name.clone(), cli_focused, window)))
+                                    .child(div().flex_1().child(text_field("", self.client_name.clone(), cli_focused, cx)))
                             )
                             .child(
                                 div().h(px(18.)).flex().items_center()

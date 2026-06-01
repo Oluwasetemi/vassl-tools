@@ -155,19 +155,19 @@ impl Render for PriceEntryForm {
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Cost Price (USD)"))
-                                    .child(div().flex_1().child(text_field("", self.cost.clone(), cost_focused, window)))
+                                    .child(div().flex_1().child(text_field("", self.cost.clone(), cost_focused, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Duty Cost (USD)"))
-                                    .child(div().flex_1().child(text_field("", self.duty.clone(), duty_focused, window)))
+                                    .child(div().flex_1().child(text_field("", self.duty.clone(), duty_focused, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Markup %"))
-                                    .child(div().flex_1().child(text_field("", self.markup.clone(), mrkp_focused, window)))
+                                    .child(div().flex_1().child(text_field("", self.markup.clone(), mrkp_focused, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(

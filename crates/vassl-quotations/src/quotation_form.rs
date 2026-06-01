@@ -153,7 +153,7 @@ impl Render for QuotationForm {
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Notes"))
-                                    .child(div().flex_1().child(text_field("", self.notes.clone(), notes_focused, window)))
+                                    .child(div().flex_1().child(text_field("", self.notes.clone(), notes_focused, cx)))
                             )
                             .child(
                                 div().h(px(18.)).flex().items_center()

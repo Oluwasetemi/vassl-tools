@@ -145,31 +145,31 @@ impl Render for ProductForm {
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("SKU"))
-                                    .child(div().flex_1().child(text_field("", self.sku.clone(), sku_f, window)))
+                                    .child(div().flex_1().child(text_field("", self.sku.clone(), sku_f, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Name"))
-                                    .child(div().flex_1().child(text_field("", self.name.clone(), name_f, window)))
+                                    .child(div().flex_1().child(text_field("", self.name.clone(), name_f, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_muted)).child("Category"))
-                                    .child(div().flex_1().child(text_field("", self.category.clone(), cat_f, window)))
+                                    .child(div().flex_1().child(text_field("", self.category.clone(), cat_f, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Unit"))
-                                    .child(div().flex_1().child(text_field("", self.unit.clone(), unit_f, window)))
+                                    .child(div().flex_1().child(text_field("", self.unit.clone(), unit_f, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_muted)).child("Min Stock Level"))
-                                    .child(div().flex_1().child(text_field("", self.min_stock.clone(), min_f, window)))
+                                    .child(div().flex_1().child(text_field("", self.min_stock.clone(), min_f, cx)))
                             )
                             .child(
                                 div().h(px(18.)).flex().items_center()
