@@ -89,6 +89,7 @@ mod tests {
             category: None,
             unit: "pcs".to_string(),
             min_stock_level: 5.0,
+            description: None,
             notes: None,
             created_at: "2026-01-01T00:00:00Z".to_string(),
         }

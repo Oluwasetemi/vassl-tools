@@ -64,7 +64,7 @@ impl ProductForm {
                 let db    = InventoryDb::global(&**cx);
                 let store = self.store.clone();
                 cx.spawn(async move |this, cx| {
-                    let result = db.insert_product(&sku, &name, cat_opt.as_deref(), &unit, min, None).await;
+                    let result = db.insert_product(&sku, &name, cat_opt.as_deref(), &unit, min, None, None).await;
                     if let Err(e) = result { tracing::error!("insert_product failed: {e:?}"); return Ok(()); }
                     let _ = store.update(cx, |s, cx| s.load_products(cx));
                     this.update(cx, |_, cx| cx.emit(ProductFormEvent::Submitted))
