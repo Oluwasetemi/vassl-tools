@@ -1,14 +1,21 @@
-use gpui::{Context, Entity, IntoElement, Render, Subscription, Window,
-           div, prelude::*, px, rgb};
+use gpui::{Context, Entity, EventEmitter, IntoElement, MouseButton, MouseDownEvent,
+           Render, Subscription, Window, div, prelude::*, px, rgb};
 use vassl_ui::ThemeHandle;
 
-use crate::colors;
 use crate::product_form::{ProductForm, ProductFormEvent};
 use crate::product_list::ProductList;
 use crate::restock::RestockAlerts;
 use crate::stock_form::{StockEntryForm, StockFormEvent};
 use crate::store::InventoryStore;
 use crate::InventoryStoreHandle;
+
+#[derive(Clone, PartialEq)]
+pub enum InventoryPanelEvent {
+    ShowPriceHistory   { product_id: i64, name: String },
+    ShowPriceEntryForm { product_id: i64, name: String },
+}
+
+impl EventEmitter<InventoryPanelEvent> for InventoryPanel {}
 
 #[derive(Clone, Copy, PartialEq)]
 enum Tab { Products, Restock }
@@ -57,7 +64,7 @@ impl InventoryPanel {
             (pid, name)
         };
 
-        let form = cx.new(|cx| StockEntryForm::new(self.store.clone(), product_id, product_name, cx));
+        let form  = cx.new(|cx| StockEntryForm::new(self.store.clone(), product_id, product_name, cx));
         let first = form.read(cx).quantity.read(cx).focus_handle.clone();
         window.focus(&first, cx);
         let sub = cx.subscribe(&form, |this, _form, ev: &StockFormEvent, cx| {
@@ -76,7 +83,7 @@ impl InventoryPanel {
 
     fn open_product_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.product_form.is_some() { return; }
-        let form = cx.new(|cx| ProductForm::new(self.store.clone(), cx));
+        let form  = cx.new(|cx| ProductForm::new(self.store.clone(), cx));
         let first = form.read(cx).sku.read(cx).focus_handle.clone();
         window.focus(&first, cx);
         let sub  = cx.subscribe(&form, |this, _form, ev: &ProductFormEvent, cx| {
@@ -98,7 +105,7 @@ impl Render for InventoryPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = cx.global::<ThemeHandle>().0.clone();
         let active_tab    = self.active_tab;
-        let has_selection = { self.store.read(cx).selected_product_id.is_some() };
+        let has_selection = self.store.read(cx).selected_product_id.is_some();
 
         let content = div().flex_1().h_full().flex().flex_col();
         let content = match active_tab {
@@ -121,7 +128,7 @@ impl Render for InventoryPanel {
                             .bg(rgb(if active_tab == Tab::Products { c.surface_active } else { c.surface_default }))
                             .text_size(px(12.)).text_color(rgb(c.text_default))
                             .cursor_pointer()
-                            .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
+                            .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| {
                                 this.active_tab = Tab::Products;
                                 cx.notify();
                             }))
@@ -134,14 +141,13 @@ impl Render for InventoryPanel {
                             .bg(rgb(if active_tab == Tab::Restock { c.surface_active } else { c.surface_default }))
                             .text_size(px(12.)).text_color(rgb(c.text_default))
                             .cursor_pointer()
-                            .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
+                            .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| {
                                 this.active_tab = Tab::Restock;
                                 cx.notify();
                             }))
                             .child("Restock Alerts")
                     )
                     .child(div().flex_1())
-                    // New Product button — always enabled
                     .child(
                         div()
                             .id("btn-new-product")
@@ -149,12 +155,11 @@ impl Render for InventoryPanel {
                             .bg(rgb(c.surface_default))
                             .text_size(px(12.)).text_color(rgb(c.text_default))
                             .cursor_pointer()
-                            .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, cx| {
+                            .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| {
                                 this.open_product_form(window, cx);
                             }))
                             .child("+ New Product")
                     )
-                    // New Entry button (requires product selection)
                     .child({
                         let mut btn = div()
                             .id("btn-new-entry")
@@ -166,7 +171,7 @@ impl Render for InventoryPanel {
                         if has_selection {
                             btn = btn
                                 .cursor_pointer()
-                                .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, cx| {
+                                .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| {
                                     this.open_stock_form(window, cx);
                                 }));
                         }
@@ -182,6 +187,141 @@ impl Render for InventoryPanel {
             root = root.child(form.clone());
         }
 
+        // Context menu overlay
+        let ctx_menu = self.store.read(cx).context_menu.clone();
+        if let Some(target) = ctx_menu {
+            let info_line = {
+                let store = self.store.read(cx);
+                store.products
+                    .iter()
+                    .find(|p| p.product.id == target.product_id)
+                    .map(|p| format!(
+                        "Stock: {:.1} {} (min {:.1})",
+                        p.current_stock, p.product.unit, p.product.min_stock_level
+                    ))
+                    .unwrap_or_default()
+            };
+
+            let pid  = target.product_id;
+            let name = target.product_name.clone();
+
+            root = root
+                .child(
+                    div()
+                        .absolute().inset_0()
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(|this, _: &MouseDownEvent, _: &mut Window, cx| {
+                                this.store.update(cx, |s, cx| s.clear_context_menu(cx));
+                            }),
+                        )
+                )
+                .child(
+                    div()
+                        .absolute()
+                        .left(px(target.x))
+                        .top(px(target.y))
+                        .w(px(220.))
+                        .bg(rgb(c.surface_default))
+                        .rounded(px(6.))
+                        .shadow_md()
+                        .child(
+                            div()
+                                .px(px(12.)).pt(px(10.)).pb(px(4.))
+                                .text_size(px(13.))
+                                .text_color(rgb(c.text_default))
+                                .font_weight(gpui::FontWeight::BOLD)
+                                .child(target.product_name.clone())
+                        )
+                        .child(
+                            div()
+                                .px(px(12.)).pb(px(8.))
+                                .text_size(px(11.))
+                                .text_color(rgb(c.text_muted))
+                                .child(info_line)
+                        )
+                        .child(
+                            div()
+                                .h(px(1.))
+                                .bg(rgb(c.surface_default))
+                        )
+                        .child({
+                            let n = name.clone();
+                            div()
+                                .id("ctx-inv-price-history")
+                                .px(px(12.)).py(px(8.))
+                                .cursor_pointer()
+                                .text_size(px(13.))
+                                .text_color(rgb(c.text_default))
+                                .child("Price History")
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(move |this, _: &MouseDownEvent, _: &mut Window, cx| {
+                                        this.store.update(cx, |s, cx| s.clear_context_menu(cx));
+                                        cx.emit(InventoryPanelEvent::ShowPriceHistory {
+                                            product_id: pid,
+                                            name:       n.clone(),
+                                        });
+                                    }),
+                                )
+                        })
+                        .child(
+                            div()
+                                .id("ctx-inv-add-price")
+                                .px(px(12.)).py(px(8.))
+                                .cursor_pointer()
+                                .text_size(px(13.))
+                                .text_color(rgb(c.text_default))
+                                .child("Add Price Entry")
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(move |this, _: &MouseDownEvent, _: &mut Window, cx| {
+                                        this.store.update(cx, |s, cx| s.clear_context_menu(cx));
+                                        cx.emit(InventoryPanelEvent::ShowPriceEntryForm {
+                                            product_id: pid,
+                                            name:       name.clone(),
+                                        });
+                                    }),
+                                )
+                        )
+                );
+        }
+
         root
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn inventory_panel_event_show_price_history_carries_data() {
+        let ev = InventoryPanelEvent::ShowPriceHistory {
+            product_id: 5,
+            name:       "Lens 24mm".to_string(),
+        };
+        match ev {
+            InventoryPanelEvent::ShowPriceHistory { product_id, name } => {
+                assert_eq!(product_id, 5);
+                assert_eq!(name, "Lens 24mm");
+            }
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn inventory_panel_event_show_price_entry_form_carries_data() {
+        let ev = InventoryPanelEvent::ShowPriceEntryForm {
+            product_id: 12,
+            name:       "NVR".to_string(),
+        };
+        match ev {
+            InventoryPanelEvent::ShowPriceEntryForm { product_id, name } => {
+                assert_eq!(product_id, 12);
+                assert_eq!(name, "NVR");
+            }
+            _ => panic!("wrong variant"),
+        }
     }
 }
