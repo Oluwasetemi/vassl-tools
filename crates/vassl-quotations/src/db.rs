@@ -229,6 +229,24 @@ impl QuotationDb {
         .await
     }
 
+    pub async fn insert_project(&self, name: String, client_name: String) -> anyhow::Result<i64> {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.write(move |conn| {
+            conn.exec_bound::<(String, String, String)>(
+                "INSERT INTO projects (name, client_name, status, created_at) VALUES (?1, ?2, 'active', ?3)",
+            )
+            .context("prepare insert_project")?
+            ((name, client_name, now))
+            .context("execute insert_project")?;
+            conn.select_bound::<(), i64>("SELECT last_insert_rowid()")
+                .context("prepare last_insert_rowid")?
+                (())
+                .context("execute last_insert_rowid")?
+                .into_iter().next().ok_or_else(|| anyhow::anyhow!("no rowid"))
+        })
+        .await
+    }
+
     pub async fn update_status(&self, id: i64, status: QuotationStatus) -> anyhow::Result<()> {
         let status_str = status_to_str(&status).to_string();
         let now        = chrono::Utc::now().to_rfc3339();

@@ -4,6 +4,7 @@ use vassl_ui::ThemeHandle;
 
 use crate::colors;
 use crate::quotation_detail::QuotationDetail;
+use crate::project_form::{ProjectForm, ProjectFormEvent};
 use crate::quotation_form::{QuotationForm, QuotationFormEvent};
 use crate::quotation_list::QuotationList;
 use crate::store::QuotationStore;
@@ -13,12 +14,14 @@ use crate::QuotationStoreHandle;
 enum Tab { Quotations, Items }
 
 pub struct QuotationPanel {
-    store:       Entity<QuotationStore>,
-    quot_list:   Entity<QuotationList>,
-    quot_detail: Entity<QuotationDetail>,
-    active_tab:  Tab,
-    form:        Option<Entity<QuotationForm>>,
-    _form_sub:   Option<Subscription>,
+    store:            Entity<QuotationStore>,
+    quot_list:        Entity<QuotationList>,
+    quot_detail:      Entity<QuotationDetail>,
+    active_tab:       Tab,
+    form:             Option<Entity<QuotationForm>>,
+    _form_sub:        Option<Subscription>,
+    project_form:     Option<Entity<ProjectForm>>,
+    _project_form_sub: Option<Subscription>,
 }
 
 impl QuotationPanel {
@@ -31,10 +34,29 @@ impl QuotationPanel {
             store,
             quot_list,
             quot_detail,
-            active_tab: Tab::Quotations,
-            form:       None,
-            _form_sub:  None,
+            active_tab:        Tab::Quotations,
+            form:              None,
+            _form_sub:         None,
+            project_form:      None,
+            _project_form_sub: None,
         }
+    }
+
+    fn open_project_form(&mut self, cx: &mut Context<Self>) {
+        if self.project_form.is_some() { return; }
+        let form = cx.new(|cx| ProjectForm::new(self.store.clone(), cx));
+        let sub  = cx.subscribe(&form, |this, _form, ev: &ProjectFormEvent, cx| {
+            match ev {
+                ProjectFormEvent::Submitted | ProjectFormEvent::Cancelled => {
+                    this._project_form_sub = None;
+                    this.project_form      = None;
+                    cx.notify();
+                }
+            }
+        });
+        self.project_form      = Some(form);
+        self._project_form_sub = Some(sub);
+        cx.notify();
     }
 
     fn open_form(&mut self, cx: &mut Context<Self>) {
@@ -107,6 +129,18 @@ impl Render for QuotationPanel {
                             .child("Items")
                     )
                     .child(div().flex_1())
+                    .child(
+                        div()
+                            .id("quot-btn-new-project")
+                            .px(px(12.)).py(px(4.)).rounded(px(4.))
+                            .bg(rgb(c.surface_default))
+                            .text_size(px(12.)).text_color(rgb(c.text_muted))
+                            .cursor_pointer()
+                            .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
+                                this.open_project_form(cx);
+                            }))
+                            .child("+ New Project")
+                    )
                     // New Quotation button — always enabled (form has inline project picker)
                     .child(
                         div()
@@ -125,6 +159,9 @@ impl Render for QuotationPanel {
 
         if let Some(form) = &self.form {
             root = root.child(form.clone());
+        }
+        if let Some(pf) = &self.project_form {
+            root = root.child(pf.clone());
         }
 
         root

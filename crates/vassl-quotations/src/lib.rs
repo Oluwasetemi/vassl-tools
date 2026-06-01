@@ -1,6 +1,7 @@
 pub mod colors;
 pub mod db;
 pub mod panel;
+pub mod project_form;
 pub mod quotation_detail;
 pub mod quotation_form;
 pub mod quotation_list;
