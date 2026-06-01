@@ -358,6 +358,160 @@ impl SettingsPanel {
             })
     }
 
+    fn render_inventory(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let c             = cx.global::<ThemeHandle>().0.clone();
+        let stock_focused = self.low_stock.read(cx).focus_handle.is_focused(window);
+        let unit_focused  = self.default_unit.read(cx).focus_handle.is_focused(window);
+
+        div().flex().flex_col()
+            .child(Self::render_row(
+                "Low Stock Threshold",
+                "Alert when stock quantity falls at or below this number.",
+                vassl_ui::text_field("", self.low_stock.clone(), stock_focused, cx),
+                &c,
+            ))
+            .child(Self::render_row(
+                "Default Stock Unit",
+                "Unit label used when adding new products (e.g. pcs, kg, L).",
+                vassl_ui::text_field("", self.default_unit.clone(), unit_focused, cx),
+                &c,
+            ))
+    }
+
+    fn render_setting_select(
+        &mut self,
+        id:      &'static str,
+        select:  SettingSelect,
+        current: String,
+        options: &[(&'static str, &'static str)],
+        on_pick: impl Fn(&mut Self, &'static str, &mut Context<Self>) + 'static,
+        cx:      &mut Context<Self>,
+    ) -> impl IntoElement {
+        let c       = cx.global::<ThemeHandle>().0.clone();
+        let is_open = self.open_select == Some(select);
+        let label: SharedString = options.iter()
+            .find(|(v, _)| *v == current.as_str())
+            .map(|(_, l)| SharedString::from(*l))
+            .unwrap_or_else(|| SharedString::from(current.clone()));
+        let options_owned: Vec<(&'static str, &'static str)> = options.to_vec();
+        let current_owned = current.clone();
+        let on_pick = std::sync::Arc::new(on_pick);
+
+        div().flex().flex_col()
+            .child(
+                div().id(id)
+                    .flex().flex_row().items_center().gap(px(6.))
+                    .px(px(10.)).py(px(6.))
+                    .bg(rgb(c.surface_default)).rounded(px(5.))
+                    .border_1().border_color(rgb(c.surface_active))
+                    .cursor_pointer()
+                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |this, _, _, cx| {
+                        this.open_select = if this.open_select == Some(select) { None } else { Some(select) };
+                        cx.notify();
+                    }))
+                    .child(div().flex_1().text_size(px(12.)).text_color(rgb(c.text_default)).child(label))
+                    .child(div().text_size(px(11.)).text_color(rgb(c.text_muted)).child("◇"))
+            )
+            .when(is_open, move |d| {
+                d.child(
+                    div().id(SharedString::from(format!("{id}-list")))
+                        .mt(px(2.))
+                        .bg(rgb(c.surface_default)).rounded(px(4.))
+                        .border_1().border_color(rgb(c.surface_active))
+                        .children(options_owned.iter().map(|(val, lbl)| {
+                            let val2 = *val;
+                            let selected = *val == current_owned.as_str();
+                            let bg = if selected { c.surface_active } else { c.surface_default };
+                            let on_pick = on_pick.clone();
+                            div()
+                                .id(SharedString::from(format!("{id}-opt-{val}")))
+                                .px(px(10.)).py(px(6.))
+                                .bg(rgb(bg)).cursor_pointer()
+                                .text_size(px(12.)).text_color(rgb(c.text_default))
+                                .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |this, _, _, cx| {
+                                    on_pick(this, val2, cx);
+                                    this.open_select = None;
+                                    cx.notify();
+                                }))
+                                .child(*lbl)
+                        }))
+                )
+            })
+    }
+
+    fn render_pricebook(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let rate_focused   = self.usd_to_jmd.read(cx).focus_handle.is_focused(window);
+        let margin_focused = self.default_margin.read(cx).focus_handle.is_focused(window);
+        let c              = cx.global::<ThemeHandle>().0.clone();
+
+        let currency_select = self.render_setting_select(
+            "settings-currency",
+            SettingSelect::Currency,
+            self.currency.clone(),
+            &[("USD", "USD — US Dollar"), ("JMD", "JMD — Jamaican Dollar")],
+            |this, val, cx| {
+                this.currency = val.to_string();
+                this.save_setting("pricebook.currency", val.to_string(), cx);
+            },
+            cx,
+        );
+
+        div().flex().flex_col()
+            .child(
+                div().flex().flex_col()
+                    .child(
+                        div().flex().flex_row().items_center().py(px(14.)).px(px(32.))
+                            .child(
+                                div().flex_1().flex().flex_col().gap(px(3.))
+                                    .child(div().text_size(px(13.)).text_color(rgb(c.text_default)).child("Default Currency"))
+                                    .child(div().text_size(px(11.)).text_color(rgb(c.text_muted))
+                                        .child("Currency used on quotations and price book entries."))
+                            )
+                            .child(div().w(px(240.)).child(currency_select))
+                    )
+                    .child(div().h(px(1.)).mx(px(32.)).bg(rgb(c.surface_default)))
+            )
+            .child(Self::render_row(
+                "USD → JMD Rate",
+                "Conversion rate applied when displaying prices in JMD.",
+                vassl_ui::text_field("", self.usd_to_jmd.clone(), rate_focused, cx),
+                &c,
+            ))
+            .child(Self::render_row(
+                "Default Margin %",
+                "Pre-filled margin percentage when creating new price book entries.",
+                vassl_ui::text_field("", self.default_margin.clone(), margin_focused, cx),
+                &c,
+            ))
+    }
+
+    fn render_quotations(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let c              = cx.global::<ThemeHandle>().0.clone();
+        let prefix_focused = self.quote_prefix.read(cx).focus_handle.is_focused(window);
+        let tax_focused    = self.tax_rate.read(cx).focus_handle.is_focused(window);
+        let notes_focused  = self.notes_template.read(cx).focus_handle.is_focused(window);
+
+        div().flex().flex_col()
+            .child(Self::render_row(
+                "Quote Number Prefix",
+                "Prefix for auto-generated quotation reference numbers (e.g. VASSL-2026-0001).",
+                vassl_ui::text_field("", self.quote_prefix.clone(), prefix_focused, cx),
+                &c,
+            ))
+            .child(Self::render_row(
+                "Default Tax / VAT %",
+                "Pre-filled tax rate on new quotations. Set to 0 to disable.",
+                vassl_ui::text_field("", self.tax_rate.clone(), tax_focused, cx),
+                &c,
+            ))
+            .child(Self::render_row(
+                "Default Notes Template",
+                "Text pre-filled in the Notes field on new quotations.",
+                vassl_ui::text_field("", self.notes_template.clone(), notes_focused, cx),
+                &c,
+            ))
+    }
+
     fn render_general(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c           = cx.global::<ThemeHandle>().0.clone();
         let name_focused = self.user_name.read(cx).focus_handle.is_focused(window);
@@ -436,10 +590,9 @@ impl Render for SettingsPanel {
                 match active {
                     SettingsCategory::General    => self.render_general(window, cx).into_any_element(),
                     SettingsCategory::Appearance => self.render_appearance(window, cx).into_any_element(),
-                    _ => div().px(px(32.)).py(px(24.))
-                              .child(div().text_size(px(12.)).text_color(rgb(c.text_muted))
-                                     .child("(coming soon)"))
-                              .into_any_element(),
+                    SettingsCategory::Inventory  => self.render_inventory(window, cx).into_any_element(),
+                    SettingsCategory::PriceBook  => self.render_pricebook(window, cx).into_any_element(),
+                    SettingsCategory::Quotations => self.render_quotations(window, cx).into_any_element(),
                 }
             });
 
