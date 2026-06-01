@@ -41,7 +41,15 @@ impl Render for ProductList {
                 .into_any_element();
         }
 
-        let rows: Vec<_> = store.products.iter().map(|p| {
+        let filtered = store.filtered_products();
+        if filtered.is_empty() && !store.products.is_empty() {
+            return div()
+                .flex_1().flex().items_center().justify_center()
+                .text_color(rgb(c.text_muted))
+                .child(format!("No results for \"{}\".", store.search_query))
+                .into_any_element();
+        }
+        let rows: Vec<_> = filtered.iter().map(|p| {
             let selected = store.selected_product_id == Some(p.product.id);
             product_row(p, selected, self.store.clone(), &c)
         }).collect();

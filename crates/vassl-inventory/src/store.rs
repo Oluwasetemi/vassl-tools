@@ -47,6 +47,7 @@ pub struct InventoryStore {
     pub stock_entries: Vec<StockEntry>,   // entries for selected product
     pub loading: bool,
     pub context_menu: Option<ContextMenuTarget>,
+    pub search_query: String,
 }
 
 #[derive(Debug)]
@@ -65,6 +66,7 @@ impl InventoryStore {
             stock_entries: Vec::new(),
             loading: false,
             context_menu: None,
+            search_query: String::new(),
         }
     }
 
@@ -136,6 +138,26 @@ impl InventoryStore {
         self.context_menu = None;
         cx.notify();
     }
+
+    pub fn set_search_query(&mut self, query: String, cx: &mut Context<Self>) {
+        if self.search_query == query { return; }
+        self.search_query = query;
+        cx.notify();
+    }
+
+    pub fn filtered_products(&self) -> Vec<&ProductWithStock> {
+        let q = self.search_query.trim().to_lowercase();
+        if q.is_empty() {
+            return self.products.iter().collect();
+        }
+        self.products.iter().filter(|p| {
+            p.product.name.to_lowercase().contains(&q)
+                || p.product.sku.to_lowercase().contains(&q)
+                || p.product.category.as_ref()
+                    .map(|c| c.to_lowercase().contains(&q))
+                    .unwrap_or(false)
+        }).collect()
+    }
 }
 
 /// Newtype wrapper so `Entity<InventoryStore>` can be stored as a GPUI global.
@@ -150,6 +172,76 @@ impl Global for InventoryStoreHandle {}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn make_pws(id: i64, sku: &str, name: &str, category: Option<&str>) -> ProductWithStock {
+        use vassl_core::Product;
+        ProductWithStock {
+            product: Product {
+                id, sku: sku.into(), name: name.into(),
+                category: category.map(String::from),
+                unit: "pcs".into(), min_stock_level: 0.0,
+                description: None, notes: None,
+                created_at: "2026-01-01T00:00:00Z".into(),
+            },
+            current_stock: 10.0,
+            status: StockStatus::Healthy,
+        }
+    }
+
+    #[test]
+    fn filtered_products_empty_query_returns_all() {
+        let store = InventoryStore {
+            products: vec![make_pws(1, "CAM-001", "IP Camera", None), make_pws(2, "NVR-001", "NVR", None)],
+            selected_product_id: None,
+            stock_entries: vec![],
+            loading: false,
+            search_query: String::new(),
+            context_menu: None,
+        };
+        assert_eq!(store.filtered_products().len(), 2);
+    }
+
+    #[test]
+    fn filtered_products_matches_name_case_insensitive() {
+        let store = InventoryStore {
+            products: vec![make_pws(1, "CAM-001", "IP Camera", None), make_pws(2, "NVR-001", "NVR Unit", None)],
+            selected_product_id: None,
+            stock_entries: vec![],
+            loading: false,
+            search_query: "camera".into(),
+            context_menu: None,
+        };
+        let results = store.filtered_products();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].product.name, "IP Camera");
+    }
+
+    #[test]
+    fn filtered_products_matches_sku() {
+        let store = InventoryStore {
+            products: vec![make_pws(1, "CAM-001", "IP Camera", None), make_pws(2, "NVR-001", "NVR Unit", None)],
+            selected_product_id: None,
+            stock_entries: vec![],
+            loading: false,
+            search_query: "nvr-".into(),
+            context_menu: None,
+        };
+        assert_eq!(store.filtered_products().len(), 1);
+        assert_eq!(store.filtered_products()[0].product.sku, "NVR-001");
+    }
+
+    #[test]
+    fn filtered_products_no_match_returns_empty() {
+        let store = InventoryStore {
+            products: vec![make_pws(1, "CAM-001", "IP Camera", None)],
+            selected_product_id: None,
+            stock_entries: vec![],
+            loading: false,
+            search_query: "zzzzz".into(),
+            context_menu: None,
+        };
+        assert!(store.filtered_products().is_empty());
+    }
 
     #[test]
     fn context_menu_target_fields_roundtrip() {

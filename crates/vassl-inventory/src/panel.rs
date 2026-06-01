@@ -1,6 +1,6 @@
 use gpui::{Context, Entity, EventEmitter, IntoElement, MouseButton, MouseDownEvent,
            Render, Subscription, Window, div, prelude::*, px, rgb};
-use vassl_ui::ThemeHandle;
+use vassl_ui::{TextInput, ThemeHandle, text_field};
 
 use crate::product_form::{ProductForm, ProductFormEvent};
 use crate::product_list::ProductList;
@@ -29,6 +29,7 @@ pub struct InventoryPanel {
     _form_sub:      Option<Subscription>,
     product_form:   Option<Entity<ProductForm>>,
     _prod_form_sub: Option<Subscription>,
+    search_input:   Entity<TextInput>,
 }
 
 impl InventoryPanel {
@@ -38,6 +39,7 @@ impl InventoryPanel {
         let restock_alerts = cx.new(|cx| RestockAlerts::new(store.clone(), cx));
 
         store.update(cx, |s, cx| s.load_products(cx));
+        let search_input = cx.new(|cx| TextInput::with_placeholder("Filter…", cx));
 
         Self {
             store,
@@ -48,6 +50,7 @@ impl InventoryPanel {
             _form_sub:      None,
             product_form:   None,
             _prod_form_sub: None,
+            search_input,
         }
     }
 
@@ -102,10 +105,17 @@ impl InventoryPanel {
 }
 
 impl Render for InventoryPanel {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = cx.global::<ThemeHandle>().0.clone();
         let active_tab    = self.active_tab;
         let has_selection = self.store.read(cx).selected_product_id.is_some();
+
+        // Sync filter input → store (GPUI re-renders on TextInput change)
+        let q = self.search_input.read(cx).text().to_string();
+        if q != self.store.read(cx).search_query {
+            self.store.update(cx, |s, cx| s.set_search_query(q.clone(), cx));
+        }
+        let has_query = !q.is_empty();
 
         let content = div().flex_1().h_full().flex().flex_col();
         let content = match active_tab {
@@ -146,6 +156,34 @@ impl Render for InventoryPanel {
                                 cx.notify();
                             }))
                             .child("Restock Alerts")
+                    )
+                    .child(
+                        div()
+                            .flex().flex_row().items_center().gap(px(4.))
+                            .child(
+                                div()
+                                    .w(px(160.))
+                                    .child({
+                                        let focused = self.search_input.read(cx).focus_handle.is_focused(window);
+                                        text_field("", self.search_input.clone(), focused, cx)
+                                    })
+                            )
+                            .child({
+                                let mut clear = div()
+                                    .id("inv-search-clear")
+                                    .px(px(6.)).py(px(2.)).rounded(px(3.))
+                                    .text_size(px(11.)).text_color(rgb(c.text_muted))
+                                    .child("×");
+                                if has_query {
+                                    let si = self.search_input.clone();
+                                    clear = clear
+                                        .cursor_pointer()
+                                        .on_mouse_down(gpui::MouseButton::Left, move |_: &gpui::MouseDownEvent, _: &mut Window, cx: &mut gpui::App| {
+                                            si.update(cx, |t, cx| t.reset(cx));
+                                        });
+                                }
+                                clear
+                            })
                     )
                     .child(div().flex_1())
                     .child(
