@@ -14,6 +14,7 @@ pub enum SettingsCategory {
 
 /// Identifies which inline select/picker is currently open.
 #[derive(Clone, Copy, PartialEq, Debug)]
+#[allow(dead_code)] // Theme reserved for future inline theme select
 pub enum SettingSelect { Theme, Currency, FontPicker }
 
 pub struct SettingsPanel {
@@ -86,7 +87,7 @@ impl Focusable for SettingsPanel {
 }
 
 impl Render for SettingsPanel {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = cx.global::<ThemeHandle>().0.clone();
         let active = self.active_category;
 
@@ -139,8 +140,6 @@ impl Render for SettingsPanel {
                     .child(div().text_size(px(12.)).text_color(rgb(c.text_muted))
                         .child("(settings rows will appear here)"))
             );
-
-        let _ = window; // window will be used in later tasks
 
         div()
             .flex().flex_row().flex_1().h_full()
