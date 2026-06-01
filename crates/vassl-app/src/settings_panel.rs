@@ -450,8 +450,9 @@ impl SettingsPanel {
             self.currency.clone(),
             &[("USD", "USD — US Dollar"), ("JMD", "JMD — Jamaican Dollar")],
             |this, val, cx| {
-                this.currency = val.to_string();
-                this.save_setting("pricebook.currency", val.to_string(), cx);
+                let val_s = val.to_string();
+                this.currency = val_s.clone();
+                this.save_setting("pricebook.currency", val_s, cx);
             },
             cx,
         );
