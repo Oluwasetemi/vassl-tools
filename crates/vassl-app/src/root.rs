@@ -1,4 +1,4 @@
-use gpui::{Context, Entity, IntoElement, Render, Subscription, Window, div, prelude::*, rgb};
+use gpui::{Context, Entity, FocusHandle, Focusable, IntoElement, Render, Subscription, Window, div, prelude::*, rgb};
 use vassl_ui::ThemeHandle;
 
 use crate::actions::{EscapeModal, FocusSearch, OpenAuditLog, OpenInventory, OpenPriceBook, OpenQuotations};
@@ -23,10 +23,15 @@ pub struct VasslRoot {
     audit_log:        Option<Entity<AuditLogPanel>>,
     palette:          Option<Entity<CommandPalette>>,
     _palette_sub:     Option<Subscription>,
+    focus_handle:     FocusHandle,
+}
+
+impl Focusable for VasslRoot {
+    fn focus_handle(&self, _: &gpui::App) -> FocusHandle { self.focus_handle.clone() }
 }
 
 impl VasslRoot {
-    pub fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         // Check whether a current_user has been set in the DB.
         let needs_first_run = {
             let db = vassl_db::AppDatabase::global(&**cx);
@@ -52,6 +57,11 @@ impl VasslRoot {
             (None, None)
         };
 
+        let focus_handle = cx.focus_handle();
+        // Give the root focus on startup so Cmd+F and other app-level shortcuts
+        // fire immediately without requiring the user to click a text field first.
+        window.focus(&focus_handle, cx);
+
         Self {
             sidebar:          cx.new(Sidebar::new),
             status_bar:       cx.new(StatusBar::new),
@@ -63,6 +73,7 @@ impl VasslRoot {
             audit_log: None,
             palette:   None,
             _palette_sub: None,
+            focus_handle,
         }
     }
 
@@ -119,6 +130,7 @@ impl Render for VasslRoot {
 
         let mut root = div()
             .key_context("VasslRoot")
+            .track_focus(&self.focus_handle)
             .on_action(cx.listener(|this, _: &OpenInventory, _w, cx| {
                 this.sidebar.update(cx, |s, cx| { s.active = ActiveModule::Inventory; cx.notify(); });
             }))
@@ -139,13 +151,15 @@ impl Render for VasslRoot {
             .on_action(cx.listener(|this, _: &FocusSearch, window, cx| {
                 this.open_palette(window, cx);
             }))
-            .on_action(cx.listener(|this, _: &EscapeModal, _w, cx| {
+            .on_action(cx.listener(|this, _: &EscapeModal, w, cx| {
                 if this.palette.is_some() {
                     this._palette_sub = None;
                     this.palette = None;
+                    w.focus(&this.focus_handle, cx);
                     cx.notify();
                 } else if this.audit_log.is_some() {
                     this.audit_log = None;
+                    w.focus(&this.focus_handle, cx);
                     cx.notify();
                 }
             }))
