@@ -1,6 +1,5 @@
 use gpui::{Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
            MouseButton, MouseDownEvent, Render, Window, actions, div, prelude::*, px, rgb, rgba, SharedString};
-use vassl_core::Project;
 use vassl_ui::{TextInput, ThemeHandle, text_field};
 
 use crate::colors;
@@ -15,14 +14,13 @@ pub enum QuotationFormEvent { Submitted, Cancelled }
 impl EventEmitter<QuotationFormEvent> for QuotationForm {}
 
 pub struct QuotationForm {
-    store:                Entity<QuotationStore>,
-    reference_number:     String,
-    projects:             Vec<Project>,
-    selected_project:     Option<i64>,
+    store:                 Entity<QuotationStore>,
+    reference_number:      String,
+    selected_project:      Option<i64>,
     project_dropdown_open: bool,
-    pub notes:            Entity<TextInput>,
-    error:                Option<String>,
-    focus_handle:         FocusHandle,
+    pub notes:             Entity<TextInput>,
+    error:                 Option<String>,
+    focus_handle:          FocusHandle,
 }
 
 pub fn validate_form(selected_project: Option<i64>) -> Option<String> {
@@ -30,11 +28,10 @@ pub fn validate_form(selected_project: Option<i64>) -> Option<String> {
 }
 
 impl QuotationForm {
-    pub fn new(store: Entity<QuotationStore>, reference_number: String, projects: Vec<Project>, cx: &mut Context<Self>) -> Self {
+    pub fn new(store: Entity<QuotationStore>, reference_number: String, cx: &mut Context<Self>) -> Self {
         Self {
             store,
             reference_number,
-            projects,
             selected_project:      None,
             project_dropdown_open: false,
             notes:                 cx.new(|cx| TextInput::with_placeholder("optional", cx)),
@@ -74,8 +71,13 @@ impl Render for QuotationForm {
         let c = cx.global::<ThemeHandle>().0.clone();
         let notes_focused = self.notes.read(cx).focus_handle.is_focused(window);
 
+        let (projects, store_loading) = {
+            let store = self.store.read(cx);
+            (store.projects.clone(), store.loading)
+        };
+
         let selected_name: Option<String> = self.selected_project
-            .and_then(|pid| self.projects.iter().find(|p| p.id == pid))
+            .and_then(|pid| projects.iter().find(|p| p.id == pid))
             .map(|p| format!("{} / {}", p.name, p.client_name));
 
         let dropdown_open = self.project_dropdown_open;
@@ -154,33 +156,48 @@ impl Render for QuotationForm {
                                     )
                                     // Inline list — only rendered when open
                                     .when(dropdown_open, |this| {
-                                        this.child(
-                                            div()
-                                                .id("project-dropdown-list")
-                                                .ml(px(160.))
-                                                .mt(px(2.))
-                                                .max_h(px(150.)).overflow_y_scroll()
-                                                .bg(rgb(c.surface_default)).rounded(px(4.))
-                                                .border_1().border_color(rgb(c.surface_active))
-                                                .children(self.projects.iter().map(|p| {
-                                                    let pid      = p.id;
-                                                    let selected = self.selected_project == Some(pid);
-                                                    let bg       = if selected { c.surface_active } else { c.surface_default };
-                                                    div()
-                                                        .id(format!("pick-project-{pid}"))
-                                                        .flex().flex_row().items_center()
-                                                        .px(px(10.)).py(px(6.))
-                                                        .bg(rgb(bg)).cursor_pointer()
-                                                        .on_mouse_down(MouseButton::Left, cx.listener(move |this, _: &MouseDownEvent, _, cx| {
-                                                            this.selected_project     = Some(pid);
-                                                            this.project_dropdown_open = false;
-                                                            this.error                = None;
-                                                            cx.notify();
-                                                        }))
-                                                        .child(div().flex_1().text_size(px(12.)).text_color(rgb(c.text_default)).child(p.name.clone()))
-                                                        .child(div().text_size(px(11.)).text_color(rgb(c.text_muted)).child(p.client_name.clone()))
-                                                }))
-                                        )
+                                        let list = div()
+                                            .id("project-dropdown-list")
+                                            .ml(px(160.))
+                                            .mt(px(2.))
+                                            .max_h(px(150.)).overflow_y_scroll()
+                                            .bg(rgb(c.surface_default)).rounded(px(4.))
+                                            .border_1().border_color(rgb(c.surface_active));
+
+                                        let list = if store_loading {
+                                            list.child(
+                                                div().px(px(10.)).py(px(8.))
+                                                    .text_size(px(12.)).text_color(rgb(c.text_muted))
+                                                    .child("Loading…")
+                                            )
+                                        } else if projects.is_empty() {
+                                            list.child(
+                                                div().px(px(10.)).py(px(8.))
+                                                    .text_size(px(12.)).text_color(rgb(c.text_muted))
+                                                    .child("No projects yet — create one first.")
+                                            )
+                                        } else {
+                                            list.children(projects.iter().map(|p| {
+                                                let pid      = p.id;
+                                                let selected = self.selected_project == Some(pid);
+                                                let bg       = if selected { c.surface_active } else { c.surface_default };
+                                                div()
+                                                    .id(format!("pick-project-{pid}"))
+                                                    .flex().flex_row().items_center()
+                                                    .px(px(10.)).py(px(6.))
+                                                    .bg(rgb(bg)).cursor_pointer()
+                                                    .on_mouse_down(MouseButton::Left, cx.listener(move |this, _: &MouseDownEvent, _, cx| {
+                                                        this.selected_project      = Some(pid);
+                                                        this.project_dropdown_open = false;
+                                                        this.error                 = None;
+                                                        cx.notify();
+                                                    }))
+                                                    .child(div().flex_1().text_size(px(12.)).text_color(rgb(c.text_default)).child(p.name.clone()))
+                                                    .child(div().text_size(px(11.)).text_color(rgb(c.text_muted)).child(p.client_name.clone()))
+                                            }))
+                                        };
+
+                                        this.child(list)
                                     })
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
