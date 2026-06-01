@@ -6094,6 +6094,7 @@ dependencies = [
  "vassl-inventory",
  "vassl-pricebook",
  "vassl-quotations",
+ "vassl-suppliers",
  "vassl-ui",
 ]
 
@@ -6181,6 +6182,22 @@ dependencies = [
  "vassl-core",
  "vassl-db",
  "vassl-pricebook",
+ "vassl-ui",
+]
+
+[[package]]
+name = "vassl-suppliers"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "db",
+ "gpui",
+ "sqlez",
+ "tokio",
+ "tracing",
+ "vassl-core",
+ "vassl-db",
  "vassl-ui",
 ]
 

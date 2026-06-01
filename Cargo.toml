@@ -6,6 +6,7 @@ members = [
     "crates/vassl-inventory",
     "crates/vassl-quotations",
     "crates/vassl-pricebook",
+    "crates/vassl-suppliers",
     "crates/vassl-ui",
     # Vendored from Zed monorepo
     "crates/collections",

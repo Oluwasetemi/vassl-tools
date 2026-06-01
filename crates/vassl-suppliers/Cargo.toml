@@ -1,0 +1,18 @@
+[package]
+name    = "vassl-suppliers"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+gpui.workspace       = true
+anyhow.workspace     = true
+tracing.workspace    = true
+chrono.workspace     = true
+sqlez.workspace      = true
+vassl-core           = { path = "../vassl-core" }
+vassl-db             = { path = "../vassl-db" }
+vassl-ui             = { path = "../vassl-ui" }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt"] }
+db    = { path = "../db", features = ["test-support"] }

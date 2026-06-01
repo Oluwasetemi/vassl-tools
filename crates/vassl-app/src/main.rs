@@ -15,6 +15,7 @@ use vassl_ui::text_input::{BackTab, Backspace, Copy, Cut, Delete, End, Home, Lef
 use vassl_inventory::product_form::{EscapeForm as ProductEscapeForm, TabField as ProductTab, BackTabField as ProductBackTab};
 use vassl_inventory::stock_form::{EscapeForm as StockEscapeForm, TabField as StockTab, BackTabField as StockBackTab};
 use vassl_pricebook::price_form::{EscapeForm as PriceEscapeForm, TabField as PriceTab, BackTabField as PriceBackTab};
+use vassl_suppliers::supplier_form::{EscapeForm as SupplierEscapeForm, TabField as SupplierTab, BackTabField as SupplierBackTab};
 use vassl_quotations::quotation_form::EscapeForm as QuotationEscapeForm;
 use vassl_quotations::project_form::{EscapeForm as ProjectEscapeForm, TabField as ProjectTab, BackTabField as ProjectBackTab};
 use vassl_quotations::line_item_form::{EscapeForm as LineItemEscapeForm, TabField as LineItemTab, BackTabField as LineItemBackTab};
@@ -69,6 +70,7 @@ fn main() {
         vassl_inventory::init(cx);
         vassl_quotations::init(cx);
         vassl_pricebook::init(cx);
+        vassl_suppliers::init(cx);
 
         // Initialize theme based on current OS appearance.
         let initial_dark = matches!(
@@ -124,6 +126,10 @@ fn main() {
             KeyBinding::new("escape",            PriceEscapeForm,  Some("PriceEntryForm")),
             KeyBinding::new("tab",               PriceTab,         Some("PriceEntryForm")),
             KeyBinding::new("shift-tab",         PriceBackTab,     Some("PriceEntryForm")),
+            // SupplierForm escape + tab
+            KeyBinding::new("escape",    SupplierEscapeForm, Some("SupplierForm")),
+            KeyBinding::new("tab",       SupplierTab,        Some("SupplierForm")),
+            KeyBinding::new("shift-tab", SupplierBackTab,    Some("SupplierForm")),
             // QuotationForm escape
             KeyBinding::new("escape",            QuotationEscapeForm, Some("QuotationForm")),
             // ProjectForm escape + tab
