@@ -8,6 +8,7 @@ pub struct Product {
     pub category: Option<String>,
     pub unit: String,
     pub min_stock_level: f64,
+    pub description: Option<String>,
     pub notes: Option<String>,
     pub created_at: String,
 }
@@ -19,6 +20,7 @@ pub struct NewProduct {
     pub category: Option<String>,
     pub unit: String,
     pub min_stock_level: f64,
+    pub description: Option<String>,
     pub notes: Option<String>,
 }
 
@@ -54,4 +56,39 @@ pub struct NewStockEntry {
     pub project_id: Option<i64>,
     pub invoice_ref: Option<String>,
     pub notes: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn product_description_is_optional() {
+        let p = Product {
+            id: 1,
+            sku: "CAM-001".into(),
+            name: "IP Camera".into(),
+            category: None,
+            unit: "pcs".into(),
+            min_stock_level: 0.0,
+            description: Some("Wide-angle, 24mm".into()),
+            notes: None,
+            created_at: "2026-01-01T00:00:00Z".into(),
+        };
+        assert_eq!(p.description.as_deref(), Some("Wide-angle, 24mm"));
+    }
+
+    #[test]
+    fn new_product_description_is_optional() {
+        let np = NewProduct {
+            sku: "CAM-001".into(),
+            name: "IP Camera".into(),
+            category: None,
+            unit: "pcs".into(),
+            min_stock_level: 0.0,
+            description: None,
+            notes: None,
+        };
+        assert!(np.description.is_none());
+    }
 }
