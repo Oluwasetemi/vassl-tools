@@ -144,6 +144,45 @@ impl SettingsPanel {
             SettingsCategory::Quotations => "Quotations",
         }
     }
+
+    fn render_row(
+        title:       &'static str,
+        description: &'static str,
+        control:     impl IntoElement,
+        c:           &vassl_ui::ThemeColors,
+    ) -> impl IntoElement {
+        div().flex().flex_col()
+            .child(
+                div().flex().flex_row().items_center().py(px(14.)).px(px(32.))
+                    .child(
+                        div().flex_1().flex().flex_col().gap(px(3.))
+                            .child(div().text_size(px(13.)).text_color(rgb(c.text_default)).child(title))
+                            .child(div().text_size(px(11.)).text_color(rgb(c.text_muted)).child(description))
+                    )
+                    .child(div().w(px(240.)).child(control))
+            )
+            .child(div().h(px(1.)).mx(px(32.)).bg(rgb(c.surface_default)))
+    }
+
+    fn render_general(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let c           = cx.global::<ThemeHandle>().0.clone();
+        let name_focused = self.user_name.read(cx).focus_handle.is_focused(window);
+        let co_focused   = self.company_name.read(cx).focus_handle.is_focused(window);
+
+        div().flex().flex_col()
+            .child(Self::render_row(
+                "User Name",
+                "Your display name, used in audit logs.",
+                vassl_ui::text_field("", self.user_name.clone(), name_focused, cx),
+                &c,
+            ))
+            .child(Self::render_row(
+                "Company Name",
+                "Appears on quotation headers.",
+                vassl_ui::text_field("", self.company_name.clone(), co_focused, cx),
+                &c,
+            ))
+    }
 }
 
 impl Focusable for SettingsPanel {
@@ -151,7 +190,7 @@ impl Focusable for SettingsPanel {
 }
 
 impl Render for SettingsPanel {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = cx.global::<ThemeHandle>().0.clone();
         let active = self.active_category;
 
@@ -199,11 +238,15 @@ impl Render for SettingsPanel {
                         .child(format!("{} Settings", Self::category_label(active))))
             )
             .child(div().h(px(1.)).mx(px(32.)).bg(rgb(c.surface_default)))
-            .child(
-                div().px(px(32.)).py(px(8.))
-                    .child(div().text_size(px(12.)).text_color(rgb(c.text_muted))
-                        .child("(settings rows will appear here)"))
-            );
+            .child({
+                match active {
+                    SettingsCategory::General => self.render_general(window, cx).into_any_element(),
+                    _ => div().px(px(32.)).py(px(24.))
+                              .child(div().text_size(px(12.)).text_color(rgb(c.text_muted))
+                                     .child("(coming soon)"))
+                              .into_any_element(),
+                }
+            });
 
         div()
             .flex().flex_row().flex_1().h_full()
