@@ -1,7 +1,7 @@
 use gpui::{App, Context, Entity, IntoElement, MouseButton, MouseDownEvent, Render, Window, div, prelude::*, px, rgb};
 use vassl_ui::{ThemeColors, ThemeHandle};
 
-use crate::store::{InventoryStore, ProductWithStock, StockStatus};
+use crate::store::{ContextMenuTarget, InventoryStore, ProductWithStock, StockStatus};
 use crate::colors;
 
 pub struct ProductList {
@@ -58,7 +58,8 @@ impl Render for ProductList {
 }
 
 fn product_row(p: &ProductWithStock, selected: bool, store: Entity<InventoryStore>, c: &ThemeColors) -> impl IntoElement {
-    let product_id = p.product.id;
+    let product_id    = p.product.id;
+    let product_name  = p.product.name.clone();
     let badge_color = match p.status {
         StockStatus::Healthy  => c.status_green,
         StockStatus::Low      => c.status_amber,
@@ -66,7 +67,8 @@ fn product_row(p: &ProductWithStock, selected: bool, store: Entity<InventoryStor
         StockStatus::NoAlert  => c.status_grey,
     };
 
-    let row_bg = if selected { c.surface_active } else { c.canvas_bg };
+    let row_bg      = if selected { c.surface_active } else { c.canvas_bg };
+    let store_right = store.clone();
 
     div()
         .id(format!("product-{product_id}"))
@@ -84,7 +86,18 @@ fn product_row(p: &ProductWithStock, selected: bool, store: Entity<InventoryStor
                 store.update(cx, |s, cx| s.select_product(product_id, cx));
             },
         )
-        // Status badge — 8×8 colored dot
+        .on_mouse_down(
+            MouseButton::Right,
+            move |event: &MouseDownEvent, _window: &mut Window, cx: &mut App| {
+                let target = ContextMenuTarget {
+                    product_id,
+                    product_name: product_name.clone(),
+                    x: event.position.x.as_f32(),
+                    y: event.position.y.as_f32(),
+                };
+                store_right.update(cx, |s, cx| s.set_context_menu(target, cx));
+            },
+        )
         .child(
             div()
                 .w(px(8.)).h(px(8.))
@@ -92,7 +105,6 @@ fn product_row(p: &ProductWithStock, selected: bool, store: Entity<InventoryStor
                 .bg(rgb(badge_color))
                 .mr(px(8.))
         )
-        // SKU
         .child(
             div()
                 .w(px(80.))
@@ -100,7 +112,6 @@ fn product_row(p: &ProductWithStock, selected: bool, store: Entity<InventoryStor
                 .text_color(rgb(c.text_muted))
                 .child(p.product.sku.clone())
         )
-        // Name
         .child(
             div()
                 .flex_1()
@@ -108,7 +119,6 @@ fn product_row(p: &ProductWithStock, selected: bool, store: Entity<InventoryStor
                 .text_color(rgb(c.text_default))
                 .child(p.product.name.clone())
         )
-        // Current qty
         .child(
             div()
                 .w(px(70.))
@@ -116,7 +126,6 @@ fn product_row(p: &ProductWithStock, selected: bool, store: Entity<InventoryStor
                 .text_color(rgb(c.text_default))
                 .child(format!("{:.1} {}", p.current_stock, p.product.unit))
         )
-        // Min level
         .child(
             div()
                 .w(px(70.))
