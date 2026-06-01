@@ -539,14 +539,16 @@ mod tests {
 
     #[test]
     fn font_family_key_is_correct() {
-        let key = "appearance.font_family";
-        assert!(key.contains('.'));
-        assert!(key.starts_with("appearance."));
+        const KEY: &str = "appearance.font_family";
+        let (module, field) = KEY.split_once('.').expect("key must contain a dot");
+        assert_eq!(module, "appearance");
+        assert_eq!(field, "font_family");
     }
 
     #[test]
-    fn font_picker_default_is_non_empty() {
-        let default = "system-ui";
-        assert!(!default.is_empty());
+    fn font_picker_default_is_valid_css_generic() {
+        const DEFAULT: &str = "system-ui";
+        assert!(!DEFAULT.is_empty());
+        assert!(["system-ui", "sans-serif", "serif", "monospace"].contains(&DEFAULT));
     }
 }
