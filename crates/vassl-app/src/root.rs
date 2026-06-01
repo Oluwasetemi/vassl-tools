@@ -64,13 +64,16 @@ impl VasslRoot {
         // fire immediately without requiring the user to click a text field first.
         window.focus(&focus_handle, cx);
 
+        let settings_panel = cx.new(SettingsPanel::new);
+        settings_panel.update(cx, |panel, cx| panel.wire_observers(cx));
+
         Self {
             sidebar:          cx.new(Sidebar::new),
             status_bar:       cx.new(StatusBar::new),
             inventory_panel:  cx.new(InventoryPanel::new),
             pricebook_panel:  cx.new(PriceBookPanel::new),
             quotation_panel:  cx.new(QuotationPanel::new),
-            settings_panel:   cx.new(SettingsPanel::new),
+            settings_panel,
             first_run,
             _first_run_sub,
             audit_log: None,

@@ -27,8 +27,8 @@ pub struct SettingsPanel {
     pub company_name: gpui::Entity<TextInput>,
 
     // Appearance
-    pub theme:       String,   // "dark" | "light"
-    pub font_family: String,
+    pub theme:       String,   // "dark" | "light" — saved by render_appearance toggle
+    pub font_family: String,   // saved by render_font_picker on selection
     pub font_size:   f64,      // 10.0–24.0, step 0.5
 
     // Inventory
@@ -36,7 +36,7 @@ pub struct SettingsPanel {
     pub default_unit: gpui::Entity<TextInput>,
 
     // Price Book
-    pub currency:       String,  // "USD" | "JMD"
+    pub currency:       String,  // "USD" | "JMD" — saved by render_pricebook select
     pub usd_to_jmd:     gpui::Entity<TextInput>,
     pub default_margin: gpui::Entity<TextInput>,
 
@@ -92,16 +92,6 @@ impl SettingsPanel {
         let tax_rate       = make_input("0",                 tax_val,          cx);
         let notes_template = make_input("",                  notes_val,        cx);
 
-        cx.observe(&user_name,     |this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("general.user_name",           v, cx); }).detach();
-        cx.observe(&company_name,  |this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("general.company_name",         v, cx); }).detach();
-        cx.observe(&low_stock,     |this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("inventory.low_stock_threshold", v, cx); }).detach();
-        cx.observe(&default_unit,  |this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("inventory.default_unit",        v, cx); }).detach();
-        cx.observe(&usd_to_jmd,    |this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("pricebook.usd_to_jmd_rate",     v, cx); }).detach();
-        cx.observe(&default_margin,|this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("pricebook.default_margin",      v, cx); }).detach();
-        cx.observe(&quote_prefix,  |this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("quotations.prefix",             v, cx); }).detach();
-        cx.observe(&tax_rate,      |this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("quotations.tax_rate",           v, cx); }).detach();
-        cx.observe(&notes_template,|this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("quotations.notes_template",     v, cx); }).detach();
-
         Self {
             active_category: SettingsCategory::General,
             font_names,
@@ -126,9 +116,23 @@ impl SettingsPanel {
     fn save_setting(&self, key: &'static str, value: String, cx: &mut Context<Self>) {
         let db = vassl_db::AppDatabase::global(&**cx).clone();
         cx.spawn(async move |_, _| {
-            let _ = db.write(move |conn| vassl_db::shared::set_setting(conn, key, &value)).await;
+            if let Err(e) = db.write(move |conn| vassl_db::shared::set_setting(conn, key, &value)).await {
+                tracing::error!("save_setting({key}) failed: {e:?}");
+            }
             Ok::<(), anyhow::Error>(())
         }).detach();
+    }
+
+    pub fn wire_observers(&mut self, cx: &mut Context<Self>) {
+        cx.observe(&self.user_name.clone(),     |this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("general.user_name",           v, cx); }).detach();
+        cx.observe(&self.company_name.clone(),  |this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("general.company_name",         v, cx); }).detach();
+        cx.observe(&self.low_stock.clone(),     |this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("inventory.low_stock_threshold", v, cx); }).detach();
+        cx.observe(&self.default_unit.clone(),  |this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("inventory.default_unit",        v, cx); }).detach();
+        cx.observe(&self.usd_to_jmd.clone(),    |this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("pricebook.usd_to_jmd_rate",     v, cx); }).detach();
+        cx.observe(&self.default_margin.clone(),|this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("pricebook.default_margin",      v, cx); }).detach();
+        cx.observe(&self.quote_prefix.clone(),  |this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("quotations.prefix",             v, cx); }).detach();
+        cx.observe(&self.tax_rate.clone(),      |this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("quotations.tax_rate",           v, cx); }).detach();
+        cx.observe(&self.notes_template.clone(),|this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("quotations.notes_template",     v, cx); }).detach();
     }
 
     fn category_label(cat: SettingsCategory) -> &'static str {
