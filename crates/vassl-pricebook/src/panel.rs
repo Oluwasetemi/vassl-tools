@@ -40,14 +40,16 @@ impl PriceBookPanel {
     }
 
     fn open_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let store = self.store.read(cx);
-        let Some(pid) = store.selected_product_id else { return; };
-        let name = store.product_prices
-            .iter()
-            .find(|p| p.product_id == pid)
-            .map(|p| p.name.clone())
-            .unwrap_or_default();
-        drop(store);
+        let (pid, name) = {
+            let store = self.store.read(cx);
+            let Some(pid) = store.selected_product_id else { return; };
+            let name = store.product_prices
+                .iter()
+                .find(|p| p.product_id == pid)
+                .map(|p| p.name.clone())
+                .unwrap_or_default();
+            (pid, name)
+        };
         self.open_form_for(pid, name, window, cx);
     }
 
