@@ -7,6 +7,25 @@ edition = "2021"
 name = "vassl"
 path = "src/main.rs"
 
+[package.metadata.bundle]
+name         = "VASSL"
+identifier   = "com.kamalu.vassl"
+icon         = ["../../assets/icons/vassl_512.png",
+                "../../assets/icons/vassl_256.png",
+                "../../assets/icons/vassl_128.png",
+                "../../assets/icons/vassl_32.png"]
+version      = "0.1.0"
+copyright    = "Copyright © 2026 Kamalu Ltd. All rights reserved."
+category     = "Business"
+short_description = "VASSL — internal tools for inventory, pricing, and quotations."
+long_description  = """
+VASSL is Kamalu Ltd.'s internal operations platform for managing inventory,
+price books, supplier contacts, and client quotations.
+"""
+
+[package.metadata.bundle.windows]
+wix = "installer/vassl.wxs"
+
 [dependencies]
 gpui.workspace               = true
 gpui_platform.workspace      = true

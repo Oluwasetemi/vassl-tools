@@ -1,5 +1,5 @@
 use gpui::{Context, FocusHandle, Focusable, IntoElement, Render, SharedString, Window,
-           div, prelude::*, px, rgb};
+           div, prelude::*, px, rems, rgb};
 use vassl_ui::{TextInput, ThemeHandle};
 
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
@@ -46,6 +46,7 @@ pub struct SettingsPanel {
     pub tax_rate:       gpui::Entity<TextInput>,
     pub notes_template: gpui::Entity<TextInput>,
 
+    save_error:   Option<String>,
     focus_handle: FocusHandle,
 }
 
@@ -110,15 +111,20 @@ impl SettingsPanel {
             quote_prefix,
             tax_rate,
             notes_template,
+            save_error:      None,
             focus_handle:    cx.focus_handle(),
         }
     }
 
-    fn save_setting(&self, key: &'static str, value: String, cx: &mut Context<Self>) {
+    pub fn save_setting(&self, key: &'static str, value: String, cx: &mut Context<Self>) {
         let db = vassl_db::AppDatabase::global(&**cx).clone();
-        cx.spawn(async move |_, _| {
+        cx.spawn(async move |this, cx| {
             if let Err(e) = db.write(move |conn| vassl_db::shared::set_setting(conn, key, &value)).await {
                 tracing::error!("save_setting({key}) failed: {e:?}");
+                let _ = this.update(cx, |sp, cx| {
+                    sp.save_error = Some(format!("Failed to save setting \"{key}\": {e}"));
+                    cx.notify();
+                });
             }
             Ok::<(), anyhow::Error>(())
         }).detach();
@@ -157,8 +163,8 @@ impl SettingsPanel {
                 div().flex().flex_row().items_center().py(px(14.)).px(px(32.))
                     .child(
                         div().flex_1().flex().flex_col().gap(px(3.))
-                            .child(div().text_size(px(13.)).text_color(rgb(c.text_default)).child(title))
-                            .child(div().text_size(px(11.)).text_color(rgb(c.text_muted)).child(description))
+                            .child(div().text_size(rems(1.)).text_color(rgb(c.text_default)).child(title))
+                            .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted)).child(description))
                     )
                     .child(div().w(px(240.)).child(control))
             )
@@ -187,7 +193,7 @@ impl SettingsPanel {
                     } else {
                         vassl_ui::ThemeColors::light()
                     };
-                    cx.set_global(vassl_ui::ThemeHandle(colors));
+                    cx.set_global(vassl_ui::ThemeHandle(colors.with_font(this.font_family.clone())));
                     this.save_setting("appearance.theme", this.theme.clone(), cx);
                     cx.notify();
                 }))
@@ -205,7 +211,7 @@ impl SettingsPanel {
             .child(
                 div().id("settings-font-minus")
                     .px(px(10.)).py(px(5.)).rounded(px(4.))
-                    .bg(rgb(c.surface_default)).text_size(px(13.)).text_color(rgb(c.text_default))
+                    .bg(rgb(c.surface_default)).text_size(rems(1.)).text_color(rgb(c.text_default))
                     .cursor_pointer()
                     .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, cx| {
                         this.font_size = (this.font_size - 0.5).max(10.0);
@@ -218,14 +224,14 @@ impl SettingsPanel {
             .child(
                 div().w(px(52.)).px(px(4.)).py(px(5.))
                     .bg(rgb(c.surface_default)).rounded(px(4.))
-                    .text_size(px(12.)).text_color(rgb(c.text_default))
+                    .text_size(rems(0.923)).text_color(rgb(c.text_default))
                     .flex().items_center().justify_center()
                     .child(format!("{:.1}", font_size))
             )
             .child(
                 div().id("settings-font-plus")
                     .px(px(10.)).py(px(5.)).rounded(px(4.))
-                    .bg(rgb(c.surface_default)).text_size(px(13.)).text_color(rgb(c.text_default))
+                    .bg(rgb(c.surface_default)).text_size(rems(1.)).text_color(rgb(c.text_default))
                     .cursor_pointer()
                     .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, cx| {
                         this.font_size = (this.font_size + 0.5).min(24.0);
@@ -238,10 +244,10 @@ impl SettingsPanel {
 
         // font size label with ↺ reset button
         let font_size_label = div().flex().flex_row().items_center().gap(px(6.))
-            .child(div().text_size(px(13.)).text_color(rgb(c.text_default)).child("Font Size"))
+            .child(div().text_size(rems(1.)).text_color(rgb(c.text_default)).child("Font Size"))
             .child(
                 div().id("settings-font-reset")
-                    .text_size(px(11.)).text_color(rgb(c.text_muted)).cursor_pointer()
+                    .text_size(rems(0.846)).text_color(rgb(c.text_muted)).cursor_pointer()
                     .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, cx| {
                         this.font_size = 13.0;
                         window.set_rem_size(px(13.0_f32));
@@ -259,8 +265,8 @@ impl SettingsPanel {
                         div().flex().flex_row().items_center().py(px(14.)).px(px(32.))
                             .child(
                                 div().flex_1().flex().flex_col().gap(px(3.))
-                                    .child(div().text_size(px(13.)).text_color(rgb(c.text_default)).child("Theme"))
-                                    .child(div().text_size(px(11.)).text_color(rgb(c.text_muted))
+                                    .child(div().text_size(rems(1.)).text_color(rgb(c.text_default)).child("Theme"))
+                                    .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted))
                                         .child(if is_dark { "Dark mode" } else { "Light mode" }))
                             )
                             .child(toggle)
@@ -274,8 +280,8 @@ impl SettingsPanel {
                         div().flex().flex_row().items_center().py(px(14.)).px(px(32.))
                             .child(
                                 div().flex_1().flex().flex_col().gap(px(3.))
-                                    .child(div().text_size(px(13.)).text_color(rgb(c.text_default)).child("Font Family"))
-                                    .child(div().text_size(px(11.)).text_color(rgb(c.text_muted))
+                                    .child(div().text_size(rems(1.)).text_color(rgb(c.text_default)).child("Font Family"))
+                                    .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted))
                                         .child("UI font used across the application."))
                             )
                             .child(div().w(px(240.)).child(font_picker))
@@ -290,7 +296,7 @@ impl SettingsPanel {
                             .child(
                                 div().flex_1().flex().flex_col().gap(px(3.))
                                     .child(font_size_label)
-                                    .child(div().text_size(px(11.)).text_color(rgb(c.text_muted))
+                                    .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted))
                                         .child("UI font size in pixels. Step 0.5, range 10–24."))
                             )
                             .child(stepper)
@@ -323,11 +329,11 @@ impl SettingsPanel {
                         cx.notify();
                     }))
                     .child(
-                        div().flex_1().text_size(px(12.)).text_color(rgb(c.text_default))
+                        div().flex_1().text_size(rems(0.923)).text_color(rgb(c.text_default))
                             .font_family(SharedString::from(current.clone()))
                             .child(current.clone())
                     )
-                    .child(div().text_size(px(11.)).text_color(rgb(c.text_muted)).child("◇"))
+                    .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted)).child("◇"))
             )
             // inline scrollable list (shown only when open)
             .when(is_open, move |d| {
@@ -346,11 +352,15 @@ impl SettingsPanel {
                                 .px(px(10.)).py(px(5.))
                                 .bg(rgb(bg)).cursor_pointer()
                                 .font_family(SharedString::from(name.clone()))
-                                .text_size(px(12.)).text_color(rgb(c.text_default))
+                                .text_size(rems(0.923)).text_color(rgb(c.text_default))
                                 .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |this, _, _, cx| {
                                     this.font_family = name_for_select.clone();
                                     this.open_select = None;
                                     this.save_setting("appearance.font_family", name_for_select.clone(), cx);
+                                    // Update the theme global so the root div re-renders with the new font
+                                    let mut theme = cx.global::<ThemeHandle>().0.clone();
+                                    theme.font_family = name_for_select.clone();
+                                    cx.set_global(ThemeHandle(theme));
                                     cx.notify();
                                 }))
                                 .child(name_for_display)
@@ -410,8 +420,8 @@ impl SettingsPanel {
                         this.open_select = if this.open_select == Some(select) { None } else { Some(select) };
                         cx.notify();
                     }))
-                    .child(div().flex_1().text_size(px(12.)).text_color(rgb(c.text_default)).child(label))
-                    .child(div().text_size(px(11.)).text_color(rgb(c.text_muted)).child("◇"))
+                    .child(div().flex_1().text_size(rems(0.923)).text_color(rgb(c.text_default)).child(label))
+                    .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted)).child("◇"))
             )
             .when(is_open, move |d| {
                 d.child(
@@ -428,7 +438,7 @@ impl SettingsPanel {
                                 .id(SharedString::from(format!("{id}-opt-{val}")))
                                 .px(px(10.)).py(px(6.))
                                 .bg(rgb(bg)).cursor_pointer()
-                                .text_size(px(12.)).text_color(rgb(c.text_default))
+                                .text_size(rems(0.923)).text_color(rgb(c.text_default))
                                 .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |this, _, _, cx| {
                                     on_pick(this, val2, cx);
                                     this.open_select = None;
@@ -465,8 +475,8 @@ impl SettingsPanel {
                         div().flex().flex_row().items_center().py(px(14.)).px(px(32.))
                             .child(
                                 div().flex_1().flex().flex_col().gap(px(3.))
-                                    .child(div().text_size(px(13.)).text_color(rgb(c.text_default)).child("Default Currency"))
-                                    .child(div().text_size(px(11.)).text_color(rgb(c.text_muted))
+                                    .child(div().text_size(rems(1.)).text_color(rgb(c.text_default)).child("Default Currency"))
+                                    .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted))
                                         .child("Currency used on quotations and price book entries."))
                             )
                             .child(div().w(px(240.)).child(currency_select))
@@ -566,7 +576,7 @@ impl Render for SettingsPanel {
                     .id(format!("settings-cat-{}", Self::category_label(cat)))
                     .px(px(16.)).py(px(9.))
                     .bg(rgb(bg)).text_color(rgb(fg))
-                    .text_size(px(13.)).cursor_pointer()
+                    .text_size(rems(1.)).cursor_pointer()
                     .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |this, _, _, cx| {
                         this.active_category = cat;
                         cx.notify();
@@ -582,9 +592,9 @@ impl Render for SettingsPanel {
             .flex().flex_col()
             .child(
                 div().px(px(32.)).pt(px(24.)).pb(px(8.))
-                    .child(div().text_size(px(18.)).text_color(rgb(c.text_default))
+                    .child(div().text_size(rems(1.385)).text_color(rgb(c.text_default))
                         .child(Self::category_label(active)))
-                    .child(div().text_size(px(12.)).text_color(rgb(c.text_muted)).mt(px(2.))
+                    .child(div().text_size(rems(0.923)).text_color(rgb(c.text_muted)).mt(px(2.))
                         .child(format!("{} Settings", Self::category_label(active))))
             )
             .child(div().h(px(1.)).mx(px(32.)).bg(rgb(c.surface_default)))
@@ -598,11 +608,24 @@ impl Render for SettingsPanel {
                 }
             });
 
+        let error_bar = self.save_error.as_deref().map(|msg| {
+            let c = cx.global::<ThemeHandle>().0.clone();
+            div()
+                .absolute().bottom_0().left(px(160.)).right_0()
+                .px(px(16.)).py(px(8.))
+                .bg(rgb(c.surface_default))
+                .border_t_1().border_color(rgb(c.surface_active))
+                .text_size(rems(0.846)).text_color(rgb(c.status_red))
+                .child(SharedString::from(msg.to_string()))
+        });
+
         div()
+            .relative()
             .flex().flex_row().flex_1().h_full()
             .track_focus(&self.focus_handle)
             .child(nav)
             .child(content)
+            .children(error_bar)
     }
 }
 

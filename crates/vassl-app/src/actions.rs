@@ -13,4 +13,14 @@ actions!(vassl, [
     SelectPrev,
     ConfirmSelection,
     OpenGlobalSearch,
+    IncreaseFontSize,
+    DecreaseFontSize,
+    // App-level menu actions
+    Quit,
+    About,
+    Hide,
+    HideOthers,
+    ShowAll,
+    Minimize,
+    Zoom,
 ]);

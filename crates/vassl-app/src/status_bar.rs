@@ -1,7 +1,6 @@
-use gpui::{Context, IntoElement, Render, SharedString, Window, div, prelude::*, px, rgb};
+use gpui::{Context, IntoElement, Render, SharedString, Window, div, prelude::*, px, rems, rgb};
 use vassl_ui::ThemeHandle;
 
-use crate::colors;
 
 pub struct StatusBar {
     pub last_action: Option<String>,
@@ -12,7 +11,6 @@ impl StatusBar {
         Self { last_action: None }
     }
 
-    /// Called by DB write helpers in future tasks to surface operation feedback in the status bar.
     #[allow(dead_code)]
     pub fn set_last_action(&mut self, action: impl Into<String>, cx: &mut Context<Self>) {
         self.last_action = Some(action.into());
@@ -35,7 +33,7 @@ impl Render for StatusBar {
             .flex()
             .items_center()
             .text_color(rgb(c.text_muted))
-            .text_size(px(11.))
+            .text_size(rems(0.846))
             .child(label)
     }
 }

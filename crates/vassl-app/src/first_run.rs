@@ -1,8 +1,7 @@
 use gpui::{Context, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Window,
-           div, prelude::*, px, rgb, rgba, SharedString};
+           div, prelude::*, px, rems, rgb, rgba, SharedString};
 use vassl_ui::{TextInput, ThemeHandle, text_field};
 
-use crate::colors;
 
 #[derive(Debug)]
 pub enum FirstRunEvent { Saved }
@@ -82,8 +81,8 @@ impl Render for FirstRunPrompt {
                             .px(px(20.)).py(px(16.))
                             .bg(rgb(c.sidebar_bg))
                             .flex().flex_col().gap(px(4.))
-                            .child(div().text_size(px(15.)).text_color(rgb(c.text_default)).child("Welcome to VASSL"))
-                            .child(div().text_size(px(12.)).text_color(rgb(c.text_muted))
+                            .child(div().text_size(rems(1.154)).text_color(rgb(c.text_default)).child("Welcome to VASSL"))
+                            .child(div().text_size(rems(0.923)).text_color(rgb(c.text_muted))
                                 .child("Enter your name to get started. It will be used for audit logs."))
                     )
                     // ── field ────────────────────────────────────────────
@@ -91,12 +90,12 @@ impl Render for FirstRunPrompt {
                         div().flex().flex_col().px(px(20.)).pt(px(8.)).pb(px(4.))
                             .child(
                                 div().flex().flex_row().items_center().py(px(12.))
-                                    .child(div().w(px(120.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Your Name"))
+                                    .child(div().w(px(120.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Your Name"))
                                     .child(div().flex_1().child(text_field("", self.name_input.clone(), name_focused, cx)))
                             )
                             .child(
                                 div().h(px(18.)).flex().items_center()
-                                    .child(div().text_size(px(11.)).text_color(rgb(c.status_red))
+                                    .child(div().text_size(rems(0.846)).text_color(rgb(c.status_red))
                                         .child(self.error.as_deref().map(SharedString::from).unwrap_or_default()))
                             )
                     )
@@ -111,7 +110,7 @@ impl Render for FirstRunPrompt {
                                 div().id("first-run-btn-save")
                                     .px(px(20.)).py(px(8.)).rounded(px(5.))
                                     .bg(rgb(c.surface_active))
-                                    .text_size(px(12.)).text_color(rgb(c.text_default))
+                                    .text_size(rems(0.923)).text_color(rgb(c.text_default))
                                     .cursor_pointer()
                                     .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
                                         this.save(cx);

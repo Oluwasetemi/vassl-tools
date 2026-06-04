@@ -1,8 +1,7 @@
-use gpui::{Context, IntoElement, Render, Window, div, prelude::*, px, rgb, rgba};
+use gpui::{Context, IntoElement, Render, Window, div, prelude::*, px, rems, rgb, rgba};
 use sqlez::thread_safe_connection::ThreadSafeConnection;
 use vassl_ui::ThemeHandle;
 
-use crate::colors;
 
 #[derive(Clone, Debug)]
 pub struct AuditRow {
@@ -12,8 +11,8 @@ pub struct AuditRow {
     pub action:     String,
     pub changed_by: String,
     pub changed_at: String,
-    pub old_value:  Option<String>,
-    pub new_value:  Option<String>,
+    #[allow(dead_code)] pub old_value: Option<String>,
+    #[allow(dead_code)] pub new_value: Option<String>,
 }
 
 pub struct AuditLogPanel {
@@ -32,17 +31,19 @@ impl AuditLogPanel {
     pub fn load(&mut self, cx: &mut Context<Self>) {
         let db = self.db.clone();
         cx.spawn(async move |this, cx| {
-            let rows = db.write(|conn| -> anyhow::Result<Vec<AuditRow>> {
-                let mut query = conn.select_bound::<(), (i64, String, i64, String, String, String, Option<String>, Option<String>)>(
-                    "SELECT id, table_name, record_id, action, changed_by, changed_at, old_value, new_value \
-                     FROM audit_log ORDER BY id DESC LIMIT 200",
-                ).map_err(|e| anyhow::anyhow!("{e}"))?;
-
-                let results = query(())?;
-                Ok(results.into_iter().map(|(id, table_name, record_id, action, changed_by, changed_at, old_value, new_value)| {
-                    AuditRow { id, table_name, record_id, action, changed_by, changed_at, old_value, new_value }
-                }).collect())
-            }).await;
+            // Use background_executor for this SELECT to avoid blocking the write queue.
+            let rows = cx.background_executor()
+                .spawn(async move {
+                    let mut query = db.select_bound::<(), (i64, String, i64, String, String, String, Option<String>, Option<String>)>(
+                        "SELECT id, table_name, record_id, action, changed_by, changed_at, old_value, new_value \
+                         FROM audit_log ORDER BY id DESC LIMIT 200",
+                    ).map_err(|e| anyhow::anyhow!("{e}"))?;
+                    let results = query(()).map_err(|e| anyhow::anyhow!("{e}"))?;
+                    Ok::<Vec<AuditRow>, anyhow::Error>(results.into_iter().map(|(id, table_name, record_id, action, changed_by, changed_at, old_value, new_value)| {
+                        AuditRow { id, table_name, record_id, action, changed_by, changed_at, old_value, new_value }
+                    }).collect())
+                })
+                .await;
 
             match rows {
                 Ok(rows) => {
@@ -80,12 +81,12 @@ impl Render for AuditLogPanel {
                             .px(px(20.)).py(px(14.))
                             .bg(rgb(c.sidebar_bg))
                             .flex().flex_row().items_center()
-                            .child(div().flex_1().text_size(px(13.)).text_color(rgb(c.text_default)).child("Audit Log"))
+                            .child(div().flex_1().text_size(rems(1.)).text_color(rgb(c.text_default)).child("Audit Log"))
                             .child(
                                 div().id("audit-btn-refresh")
                                     .px(px(12.)).py(px(5.)).rounded(px(5.))
                                     .bg(rgb(c.surface_default))
-                                    .text_size(px(11.)).text_color(rgb(c.text_muted))
+                                    .text_size(rems(0.846)).text_color(rgb(c.text_muted))
                                     .cursor_pointer()
                                     .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
                                         this.load(cx);
@@ -100,12 +101,12 @@ impl Render for AuditLogPanel {
                             .border_b_1()
                             .border_color(rgb(c.surface_default))
                             .bg(rgb(c.sidebar_bg))
-                            .child(div().w(px(40.)).text_size(px(10.)).text_color(rgb(c.text_muted)).child("ID"))
-                            .child(div().w(px(100.)).text_size(px(10.)).text_color(rgb(c.text_muted)).child("Table"))
-                            .child(div().w(px(60.)).text_size(px(10.)).text_color(rgb(c.text_muted)).child("Record"))
-                            .child(div().w(px(70.)).text_size(px(10.)).text_color(rgb(c.text_muted)).child("Action"))
-                            .child(div().w(px(90.)).text_size(px(10.)).text_color(rgb(c.text_muted)).child("By"))
-                            .child(div().flex_1().text_size(px(10.)).text_color(rgb(c.text_muted)).child("At"))
+                            .child(div().w(px(40.)).text_size(rems(0.769)).text_color(rgb(c.text_muted)).child("ID"))
+                            .child(div().w(px(100.)).text_size(rems(0.769)).text_color(rgb(c.text_muted)).child("Table"))
+                            .child(div().w(px(60.)).text_size(rems(0.769)).text_color(rgb(c.text_muted)).child("Record"))
+                            .child(div().w(px(70.)).text_size(rems(0.769)).text_color(rgb(c.text_muted)).child("Action"))
+                            .child(div().w(px(90.)).text_size(rems(0.769)).text_color(rgb(c.text_muted)).child("By"))
+                            .child(div().flex_1().text_size(rems(0.769)).text_color(rgb(c.text_muted)).child("At"))
                     )
                     // ── rows ─────────────────────────────────────────────
                     .child({
@@ -114,7 +115,7 @@ impl Render for AuditLogPanel {
                         if self.rows.is_empty() {
                             body.child(
                                 div().flex().items_center().justify_center().p(px(40.))
-                                    .text_size(px(12.)).text_color(rgb(c.text_muted))
+                                    .text_size(rems(0.923)).text_color(rgb(c.text_muted))
                                     .child("No audit entries yet.")
                             )
                         } else {
@@ -129,12 +130,12 @@ impl Render for AuditLogPanel {
                                     .px(px(20.)).py(px(7.))
                                     .border_b_1()
                                     .border_color(rgb(c.surface_default))
-                                    .child(div().w(px(40.)).text_size(px(11.)).text_color(rgb(c.text_muted)).child(row.id.to_string()))
-                                    .child(div().w(px(100.)).text_size(px(11.)).text_color(rgb(c.text_default)).child(row.table_name.clone()))
-                                    .child(div().w(px(60.)).text_size(px(11.)).text_color(rgb(c.text_muted)).child(row.record_id.to_string()))
-                                    .child(div().w(px(70.)).text_size(px(11.)).text_color(rgb(action_color)).child(row.action.clone()))
-                                    .child(div().w(px(90.)).text_size(px(11.)).text_color(rgb(c.text_default)).child(row.changed_by.clone()))
-                                    .child(div().flex_1().text_size(px(11.)).text_color(rgb(c.text_muted)).child(row.changed_at.chars().take(19).collect::<String>()))
+                                    .child(div().w(px(40.)).text_size(rems(0.846)).text_color(rgb(c.text_muted)).child(row.id.to_string()))
+                                    .child(div().w(px(100.)).text_size(rems(0.846)).text_color(rgb(c.text_default)).child(row.table_name.clone()))
+                                    .child(div().w(px(60.)).text_size(rems(0.846)).text_color(rgb(c.text_muted)).child(row.record_id.to_string()))
+                                    .child(div().w(px(70.)).text_size(rems(0.846)).text_color(rgb(action_color)).child(row.action.clone()))
+                                    .child(div().w(px(90.)).text_size(rems(0.846)).text_color(rgb(c.text_default)).child(row.changed_by.clone()))
+                                    .child(div().flex_1().text_size(rems(0.846)).text_color(rgb(c.text_muted)).child(row.changed_at.chars().take(19).collect::<String>()))
                             }))
                         }
                     })
@@ -146,9 +147,9 @@ impl Render for AuditLogPanel {
                             .border_color(rgb(c.surface_default))
                             .bg(rgb(c.sidebar_bg))
                             .flex().flex_row().items_center()
-                            .child(div().flex_1().text_size(px(11.)).text_color(rgb(c.text_muted))
+                            .child(div().flex_1().text_size(rems(0.846)).text_color(rgb(c.text_muted))
                                 .child(format!("{} entries", self.rows.len())))
-                            .child(div().text_size(px(11.)).text_color(rgb(c.text_muted)).child("Esc to close"))
+                            .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted)).child("Esc to close"))
                     )
             )
     }

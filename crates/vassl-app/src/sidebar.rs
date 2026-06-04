@@ -28,9 +28,10 @@ impl Render for Sidebar {
         let active = self.active;
 
         let make_btn = |module: ActiveModule, label: &'static str, id: &'static str| {
-            let is_active = active == module;
-            let bg = if is_active { rgb(c.surface_active) } else { rgb(c.surface_default) };
-            let fg = if is_active { rgb(c.text_default)   } else { rgb(c.text_muted) };
+            let is_active   = active == module;
+            let bg          = if is_active { rgb(c.surface_active) } else { rgb(c.surface_default) };
+            let fg          = if is_active { rgb(c.text_default)   } else { rgb(c.text_muted) };
+            let hover_bg    = rgb(c.surface_hover);
             div()
                 .id(id)
                 .w(px(36.)).h(px(36.)).m(px(6.))
@@ -38,6 +39,7 @@ impl Render for Sidebar {
                 .bg(bg).text_color(fg)
                 .flex().items_center().justify_center()
                 .cursor_pointer()
+                .when(!is_active, |d| d.hover(move |s| s.bg(hover_bg)))
                 .child(label)
                 .on_mouse_down(MouseButton::Left, cx.listener(move |this, _event, _window, cx| {
                     this.active = module;

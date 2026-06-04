@@ -1,9 +1,8 @@
 use gpui::{Context, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Window,
-           div, prelude::*, px, rgb, rgba};
+           div, prelude::*, px, rems, rgb, rgba};
 use vassl_ui::{TextInput, ThemeHandle, text_field};
 
 use crate::actions::{ConfirmSelection, EscapeModal, SelectNext, SelectPrev};
-use crate::colors;
 
 /// The set of top-level commands the palette can dispatch.
 #[derive(Debug, Clone, PartialEq)]
@@ -129,10 +128,11 @@ impl Render for CommandPalette {
                         if matches.is_empty() {
                             results.child(
                                 div().px(px(10.)).py(px(8.))
-                                    .text_size(px(12.)).text_color(rgb(c.text_muted))
+                                    .text_size(rems(0.923)).text_color(rgb(c.text_muted))
                                     .child("No commands match.")
                             )
                         } else {
+                            let hover_bg = rgb(c.surface_hover);
                             results.children(matches.iter().enumerate().map(|(idx, cmd)| {
                                 let selected = idx == self.selected_idx;
                                 let bg = if selected { c.surface_active } else { c.surface_default };
@@ -141,7 +141,8 @@ impl Render for CommandPalette {
                                     .id(format!("palette-item-{idx}"))
                                     .px(px(10.)).py(px(7.)).rounded(px(4.))
                                     .bg(rgb(bg))
-                                    .text_size(px(13.)).text_color(rgb(c.text_default))
+                                    .when(!selected, |d| d.hover(move |s| s.bg(hover_bg)))
+                                    .text_size(rems(1.)).text_color(rgb(c.text_default))
                                     .cursor_pointer()
                                     .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |_, _, _, cx| {
                                         cx.emit(PaletteEvent::Execute(cmd_clone.clone()));

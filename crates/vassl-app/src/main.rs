@@ -1,7 +1,7 @@
 mod actions;
 mod app;
+mod app_menus;
 mod audit_log;
-mod colors;
 mod command_palette;
 mod first_run;
 mod global_search;
@@ -11,7 +11,7 @@ mod settings_panel;
 mod sidebar;
 mod status_bar;
 
-use actions::{ConfirmSelection, EscapeModal, FocusSearch, NewRecord, OpenAuditLog, OpenGlobalSearch, OpenInventory, OpenPriceBook, OpenQuotations, OpenSettings, SelectNext, SelectPrev};
+use actions::{About, ConfirmSelection, DecreaseFontSize, EscapeModal, FocusSearch, Hide, HideOthers, IncreaseFontSize, Minimize, NewRecord, OpenAuditLog, OpenGlobalSearch, OpenInventory, OpenPriceBook, OpenQuotations, OpenSettings, Quit, SelectNext, SelectPrev, ShowAll};
 use vassl_ui::text_input::{BackTab, Backspace, Copy, Cut, Delete, End, Home, Left, Paste, Right, SelectAll, SelectLeft, SelectRight, ShowCharacterPalette, Tab as TextTab};
 use vassl_inventory::product_form::{EscapeForm as ProductEscapeForm, TabField as ProductTab, BackTabField as ProductBackTab};
 use vassl_inventory::stock_form::{EscapeForm as StockEscapeForm, TabField as StockTab, BackTabField as StockBackTab};
@@ -28,11 +28,13 @@ use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::{fmt, layer::SubscriberExt as _, util::SubscriberInitExt as _, EnvFilter};
 
 fn init_tracing() -> tracing_appender::non_blocking::WorkerGuard {
+    // PANIC: all three expects below are unrecoverable startup failures —
+    // there is no fallback path for missing OS data dirs or a broken log appender.
     let log_dir = dirs::data_local_dir()
-        .expect("no local data dir")
+        .expect("OS has no local data directory (required for log storage)")
         .join("VASSL")
         .join("logs");
-    std::fs::create_dir_all(&log_dir).expect("create log dir");
+    std::fs::create_dir_all(&log_dir).expect("could not create VASSL log directory");
 
     let appender = RollingFileAppender::builder()
         .rotation(Rotation::DAILY)
@@ -40,7 +42,7 @@ fn init_tracing() -> tracing_appender::non_blocking::WorkerGuard {
         .filename_suffix("log")
         .max_log_files(7)
         .build(&log_dir)
-        .expect("init log appender");
+        .expect("could not initialise rolling log appender");
 
     let (non_blocking, guard) = tracing_appender::non_blocking(appender);
 
@@ -82,10 +84,24 @@ fn main() {
 
         cx.activate(true);
 
+        // App-level menu actions (no window context needed)
+        cx.on_action(|_: &Quit,       cx| cx.quit());
+        cx.on_action(|_: &About,      _cx| { /* TODO: show about dialog */ });
+        #[cfg(target_os = "macos")]
+        cx.on_action(|_: &Hide,       cx| cx.hide());
+        #[cfg(target_os = "macos")]
+        cx.on_action(|_: &HideOthers, cx| cx.hide_other_apps());
+        #[cfg(target_os = "macos")]
+        cx.on_action(|_: &ShowAll,    cx| cx.unhide_other_apps());
+
+        cx.set_menus(app_menus::app_menus());
+
         // Keybindings are also documented in assets/keymaps/default.json (kept in sync manually).
         // The JSON is not loaded at runtime — cx.bind_keys is the source of truth.
         cx.bind_keys([
             // App-level shortcuts — "secondary" maps to Cmd on macOS, Ctrl on Windows/Linux
+            KeyBinding::new("secondary-q",       Quit,           None),
+            KeyBinding::new("secondary-m",       Minimize,       Some("VasslRoot")),
             KeyBinding::new("secondary-1",       OpenInventory,  Some("VasslRoot")),
             KeyBinding::new("secondary-2",       OpenQuotations, Some("VasslRoot")),
             KeyBinding::new("secondary-3",       OpenPriceBook,  Some("VasslRoot")),
@@ -93,7 +109,10 @@ fn main() {
             KeyBinding::new("secondary-n",       NewRecord,      Some("VasslRoot")),
             KeyBinding::new("secondary-f",       FocusSearch,      Some("VasslRoot")),
             KeyBinding::new("secondary-shift-f", OpenGlobalSearch, Some("VasslRoot")),
-            KeyBinding::new("secondary-comma",   OpenSettings,   Some("VasslRoot")),
+            KeyBinding::new("secondary-comma",   OpenSettings,      Some("VasslRoot")),
+            KeyBinding::new("secondary-=",       IncreaseFontSize,  Some("VasslRoot")),
+            KeyBinding::new("secondary-shift-=", IncreaseFontSize,  Some("VasslRoot")),
+            KeyBinding::new("secondary--",       DecreaseFontSize,  Some("VasslRoot")),
             // TextInput editing keys
             KeyBinding::new("backspace",        Backspace,   Some("TextInput")),
             KeyBinding::new("delete",           Delete,      Some("TextInput")),
@@ -157,13 +176,15 @@ fn main() {
                 ..Default::default()
             },
             |window, cx| {
-                // Update theme when OS appearance changes.
+                // Update theme when OS appearance changes — preserve font_family.
                 window.observe_window_appearance(|window, cx| {
                     let dark = matches!(
                         window.appearance(),
                         WindowAppearance::Dark | WindowAppearance::VibrantDark
                     );
-                    cx.set_global(ThemeHandle(if dark { ThemeColors::dark() } else { ThemeColors::light() }));
+                    let font_family = cx.global::<ThemeHandle>().0.font_family.clone();
+                    let colors = if dark { ThemeColors::dark() } else { ThemeColors::light() };
+                    cx.set_global(ThemeHandle(colors.with_font(font_family)));
                 })
                 .detach();
                 cx.new(|cx| VasslRoot::new(window, cx))

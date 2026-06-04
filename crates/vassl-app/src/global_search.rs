@@ -1,5 +1,5 @@
 use gpui::{Context, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Window,
-           div, prelude::*, px, rgb, rgba};
+           div, prelude::*, px, rems, rgb, rgba};
 use vassl_core::{Supplier, Project};
 use vassl_ui::{TextInput, ThemeHandle, text_field};
 
@@ -109,12 +109,13 @@ impl Render for GlobalSearch {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = cx.global::<ThemeHandle>().0.clone();
 
-        let products:  Vec<ProductWithStock> = cx.global::<InventoryStoreHandle>().0.read(cx).products.clone();
-        let suppliers: Vec<Supplier>         = cx.global::<SupplierStoreHandle>().0.read(cx).suppliers.clone();
-        let projects:  Vec<Project>          = cx.global::<QuotationStoreHandle>().0.read(cx).projects.clone();
-
         let query_text = self.query.read(cx).text().to_string();
-        let hits       = build_hits(&query_text, &products, &suppliers, &projects);
+        let hits = {
+            let inv  = cx.global::<InventoryStoreHandle>().0.read(cx);
+            let sup  = cx.global::<SupplierStoreHandle>().0.read(cx);
+            let quot = cx.global::<QuotationStoreHandle>().0.read(cx);
+            build_hits(&query_text, &inv.products, &sup.suppliers, &quot.projects)
+        };
 
         if self.selected_idx >= hits.len() && !hits.is_empty() {
             self.selected_idx = hits.len() - 1;
@@ -174,17 +175,18 @@ impl Render for GlobalSearch {
                         if query_text.trim().is_empty() {
                             results.child(
                                 div().px(px(10.)).py(px(8.))
-                                    .text_size(px(12.)).text_color(rgb(c.text_muted))
+                                    .text_size(rems(0.923)).text_color(rgb(c.text_muted))
                                     .child("Type to search products, suppliers, and projects.")
                             )
                         } else if hits.is_empty() {
                             results.child(
                                 div().px(px(10.)).py(px(8.))
-                                    .text_size(px(12.)).text_color(rgb(c.text_muted))
+                                    .text_size(rems(0.923)).text_color(rgb(c.text_muted))
                                     .child(format!("No results for \"{}\".", query_text.trim()))
                             )
                         } else {
                             let selected_idx = self.selected_idx;
+                            let hover_bg     = rgb(c.surface_hover);
                             results.children(hits.iter().enumerate().map(|(idx, hit)| {
                                 let selected  = idx == selected_idx;
                                 let bg        = if selected { c.surface_active } else { c.surface_default };
@@ -199,22 +201,23 @@ impl Render for GlobalSearch {
                                     .id(format!("gs-item-{idx}"))
                                     .px(px(10.)).py(px(7.)).rounded(px(4.))
                                     .bg(rgb(bg))
+                                    .when(!selected, |d| d.hover(move |s| s.bg(hover_bg)))
                                     .flex().flex_row().items_center().gap(px(8.))
                                     .cursor_pointer()
                                     .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |_, _, _, cx| {
                                         cx.emit(GlobalSearchEvent::Navigate(hit_clone.clone()));
                                     }))
                                     .child(
-                                        div().w(px(56.)).text_size(px(10.))
+                                        div().w(px(56.)).text_size(rems(0.769))
                                             .text_color(rgb(c.text_muted))
                                             .child(module_label)
                                     )
                                     .child(
-                                        div().flex_1().text_size(px(13.)).text_color(rgb(c.text_default))
+                                        div().flex_1().text_size(rems(1.)).text_color(rgb(c.text_default))
                                             .child(hit.label.clone())
                                     )
                                     .child(
-                                        div().text_size(px(11.)).text_color(rgb(c.text_muted))
+                                        div().text_size(rems(0.846)).text_color(rgb(c.text_muted))
                                             .child(hit.sub.clone())
                                     )
                             }))
@@ -236,6 +239,7 @@ mod tests {
                 id, sku: sku.into(), name: name.into(),
                 category: None, unit: "pcs".into(),
                 min_stock_level: 0.0, description: None, notes: None,
+                preferred_supplier_id: None,
                 created_at: "2026-01-01T00:00:00Z".into(),
             },
             current_stock: 5.0,

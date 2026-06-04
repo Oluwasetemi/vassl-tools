@@ -1,7 +1,7 @@
 use gpui::{Context, Entity, FocusHandle, Focusable, IntoElement, Render, Subscription, Window, div, prelude::*, px, rgb};
 use vassl_ui::{ThemeColors, ThemeHandle};
 
-use crate::actions::{EscapeModal, FocusSearch, OpenAuditLog, OpenGlobalSearch, OpenInventory, OpenPriceBook, OpenQuotations, OpenSettings};
+use crate::actions::{DecreaseFontSize, EscapeModal, FocusSearch, IncreaseFontSize, Minimize, OpenAuditLog, OpenGlobalSearch, OpenInventory, OpenPriceBook, OpenQuotations, OpenSettings, Zoom};
 use crate::global_search::{GlobalSearch, GlobalSearchEvent, SearchResultKind};
 use crate::settings_panel::SettingsPanel;
 use crate::audit_log::AuditLogPanel;
@@ -69,7 +69,7 @@ impl VasslRoot {
             (None, None)
         };
 
-        // Apply persisted font size and theme before first render
+        // Apply persisted font size, font family, and theme before first render
         {
             let db = vassl_db::AppDatabase::global(&**cx);
             if let Ok(Some(size_str)) = vassl_db::shared::get_setting(db, "appearance.font_size") {
@@ -77,14 +77,18 @@ impl VasslRoot {
                     window.set_rem_size(px(size.max(10.0).min(24.0)));
                 }
             }
-            if let Ok(Some(theme)) = vassl_db::shared::get_setting(db, "appearance.theme") {
-                let colors = if theme == "light" {
-                    ThemeColors::light()
-                } else {
-                    ThemeColors::dark()
-                };
-                cx.set_global(ThemeHandle(colors));
-            }
+            let font_family = vassl_db::shared::get_setting(db, "appearance.font_family")
+                .ok().flatten()
+                .unwrap_or_else(|| "system-ui".into());
+            let theme = vassl_db::shared::get_setting(db, "appearance.theme")
+                .ok().flatten()
+                .unwrap_or_else(|| "dark".into());
+            let colors = if theme == "light" {
+                ThemeColors::light()
+            } else {
+                ThemeColors::dark()
+            };
+            cx.set_global(ThemeHandle(colors.with_font(font_family)));
         }
 
         let focus_handle = cx.focus_handle();
@@ -117,11 +121,13 @@ impl VasslRoot {
                         this._price_history_sub = Some(sub);
                         cx.notify();
                     }
-                    InventoryPanelEvent::ShowPriceEntryForm { product_id, .. } => {
-                        let pid = *product_id;
+                    InventoryPanelEvent::ShowPriceEntryForm { product_id, name } => {
+                        let pid   = *product_id;
+                        let pname = name.clone();
                         this.sidebar.update(cx, |s, cx| { s.active = ActiveModule::PriceBook; cx.notify(); });
                         this.pricebook_panel.update(cx, |panel, cx| {
                             panel.store.update(cx, |s, cx| s.select_product(pid, cx));
+                            panel.open_form_for(pid, pname, cx);
                         });
                     }
                 }
@@ -291,11 +297,35 @@ impl Render for VasslRoot {
             .on_action(cx.listener(|this, _: &OpenSettings, _w, cx| {
                 this.sidebar.update(cx, |s, cx| { s.active = ActiveModule::Settings; cx.notify(); });
             }))
+            .on_action(cx.listener(|this, _: &IncreaseFontSize, window, cx| {
+                this.settings_panel.update(cx, |sp, cx| {
+                    sp.font_size = (sp.font_size + 0.5).min(24.0);
+                    sp.save_setting("appearance.font_size", format!("{:.1}", sp.font_size), cx);
+                    cx.notify();
+                });
+                let font_size = this.settings_panel.read(cx).font_size as f32;
+                window.set_rem_size(px(font_size));
+            }))
+            .on_action(cx.listener(|this, _: &DecreaseFontSize, window, cx| {
+                this.settings_panel.update(cx, |sp, cx| {
+                    sp.font_size = (sp.font_size - 0.5).max(10.0);
+                    sp.save_setting("appearance.font_size", format!("{:.1}", sp.font_size), cx);
+                    cx.notify();
+                });
+                let font_size = this.settings_panel.read(cx).font_size as f32;
+                window.set_rem_size(px(font_size));
+            }))
             .on_action(cx.listener(|this, _: &FocusSearch, window, cx| {
                 this.open_palette(window, cx);
             }))
             .on_action(cx.listener(|this, _: &OpenGlobalSearch, window, cx| {
                 this.open_global_search(window, cx);
+            }))
+            .on_action(cx.listener(|_this, _: &Minimize, window, _cx| {
+                window.minimize_window();
+            }))
+            .on_action(cx.listener(|_this, _: &Zoom, window, _cx| {
+                window.zoom_window();
             }))
             .on_action(cx.listener(|this, _: &EscapeModal, w, cx| {
                 if this.palette.is_some() {
@@ -321,6 +351,7 @@ impl Render for VasslRoot {
             }))
             .relative()
             .flex().flex_col().w_full().h_full()
+            .font_family(gpui::SharedString::from(c.font_family.clone()))
             .bg(rgb(c.canvas_bg))
             .child(
                 div().flex().flex_row().flex_1()
