@@ -1,5 +1,6 @@
 use gpui::{Context, Entity, EventEmitter, IntoElement, MouseButton, MouseDownEvent,
-           Render, Subscription, Window, div, prelude::*, px, rgb};
+           Render, Subscription, Window, div, prelude::*, px, rems, rgb};
+use vassl_inventory::InventoryStoreHandle;
 use vassl_ui::{TextInput, ThemeHandle, text_field};
 
 use crate::price_form::{PriceEntryForm, PriceFormEvent};
@@ -32,6 +33,12 @@ impl PriceBookPanel {
         let price_table = cx.new(|cx| PriceTable::new(store.clone(), cx));
         store.update(cx, |s, cx| s.load_products(cx));
         let search_input = cx.new(|cx| TextInput::with_placeholder("Filter…", cx));
+
+        cx.observe(&search_input, |this, input, cx| {
+            let q = input.read(cx).text().to_string();
+            this.store.update(cx, |s, cx| s.set_search_query(q, cx));
+        }).detach();
+
         Self {
             store,
             price_table,
@@ -53,15 +60,22 @@ impl PriceBookPanel {
                 .unwrap_or_default();
             (pid, name)
         };
-        self.open_form_for(pid, name, window, cx);
+        self.open_form_for(pid, name, cx);
+        if let Some(form) = &self.form {
+            let first = form.read(cx).cost.read(cx).focus_handle.clone();
+            window.focus(&first, cx);
+        }
     }
 
-    pub fn open_form_for(&mut self, product_id: i64, name: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn open_form_for(&mut self, product_id: i64, name: String, cx: &mut Context<Self>) {
         if self.form.is_some() { return; }
-        let form  = cx.new(|cx| PriceEntryForm::new(self.store.clone(), product_id, name, cx));
-        let first = form.read(cx).cost.read(cx).focus_handle.clone();
-        window.focus(&first, cx);
-        let sub  = cx.subscribe(&form, |this, _form, ev: &PriceFormEvent, cx| {
+        let current_stock = cx.global::<InventoryStoreHandle>().0.read(cx)
+            .products.iter()
+            .find(|p| p.product.id == product_id)
+            .map(|p| p.current_stock)
+            .unwrap_or(0.0);
+        let form  = cx.new(|cx| PriceEntryForm::new(self.store.clone(), product_id, name, current_stock, cx));
+        let sub   = cx.subscribe(&form, |this, _form, ev: &PriceFormEvent, cx| {
             match ev {
                 PriceFormEvent::Submitted | PriceFormEvent::Cancelled => {
                     this._form_sub = None;
@@ -82,12 +96,7 @@ impl Render for PriceBookPanel {
         let active_tab    = self.active_tab;
         let has_selection = self.store.read(cx).selected_product_id.is_some();
 
-        // Sync filter input → store
-        let q = self.search_input.read(cx).text().to_string();
-        if q != self.store.read(cx).search_query {
-            self.store.update(cx, |s, cx| s.set_search_query(q.clone(), cx));
-        }
-        let has_query = !q.is_empty();
+        let has_query = !self.search_input.read(cx).text().is_empty();
 
         let history_rows: Vec<_> = {
             let store = self.store.read(cx);
@@ -126,11 +135,11 @@ impl Render for PriceBookPanel {
                         div()
                             .flex().flex_row().items_center().w_full()
                             .px(px(12.)).py(px(6.))
-                            .child(div().w(px(100.)).text_size(px(12.)).text_color(rgb(c.text_muted)).child(date.clone()))
-                            .child(div().w(px(90.)).text_size(px(12.)).text_color(rgb(c.text_default)).child(format!("${cost:.2}")))
-                            .child(div().w(px(80.)).text_size(px(12.)).text_color(rgb(c.text_muted)).child(format!("+${duty:.2}")))
-                            .child(div().w(px(70.)).text_size(px(12.)).text_color(rgb(c.text_muted)).child(format!("{markup:.0}%")))
-                            .child(div().flex_1().text_size(px(13.)).text_color(rgb(c.status_green)).child(format!("${sell:.2}")))
+                            .child(div().w(px(100.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child(date.clone()))
+                            .child(div().w(px(90.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child(format!("${cost:.2}")))
+                            .child(div().w(px(80.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child(format!("+${duty:.2}")))
+                            .child(div().w(px(70.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child(format!("{markup:.0}%")))
+                            .child(div().flex_1().text_size(rems(1.)).text_color(rgb(c.status_green)).child(format!("${sell:.2}")))
                     }).collect();
 
                     content.child(
@@ -152,32 +161,38 @@ impl Render for PriceBookPanel {
                     .flex().flex_row().items_center().gap(px(8.))
                     .px(px(16.)).py(px(8.))
                     .bg(rgb(c.canvas_bg))
-                    .child(
+                    .child({
+                        let is_tab = active_tab == Tab::PriceBook;
+                        let hover_bg = rgb(c.surface_hover);
                         div()
                             .id("pb-tab-pricebook")
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
-                            .bg(rgb(if active_tab == Tab::PriceBook { c.surface_active } else { c.surface_default }))
-                            .text_size(px(12.)).text_color(rgb(c.text_default))
+                            .bg(rgb(if is_tab { c.surface_active } else { c.surface_default }))
+                            .when(!is_tab, |d| d.hover(move |s| s.bg(hover_bg)))
+                            .text_size(rems(0.923)).text_color(rgb(c.text_default))
                             .cursor_pointer()
                             .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| {
                                 this.active_tab = Tab::PriceBook;
                                 cx.notify();
                             }))
                             .child("Price Book")
-                    )
-                    .child(
+                    })
+                    .child({
+                        let is_tab = active_tab == Tab::History;
+                        let hover_bg = rgb(c.surface_hover);
                         div()
                             .id("pb-tab-history")
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
-                            .bg(rgb(if active_tab == Tab::History { c.surface_active } else { c.surface_default }))
-                            .text_size(px(12.)).text_color(rgb(c.text_default))
+                            .bg(rgb(if is_tab { c.surface_active } else { c.surface_default }))
+                            .when(!is_tab, |d| d.hover(move |s| s.bg(hover_bg)))
+                            .text_size(rems(0.923)).text_color(rgb(c.text_default))
                             .cursor_pointer()
                             .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| {
                                 this.active_tab = Tab::History;
                                 cx.notify();
                             }))
                             .child("History")
-                    )
+                    })
                     .child(
                         div()
                             .flex().flex_row().items_center().gap(px(4.))
@@ -193,7 +208,7 @@ impl Render for PriceBookPanel {
                                 let mut clear = div()
                                     .id("pb-search-clear")
                                     .px(px(6.)).py(px(2.)).rounded(px(3.))
-                                    .text_size(px(11.)).text_color(rgb(c.text_muted))
+                                    .text_size(rems(0.846)).text_color(rgb(c.text_muted))
                                     .child("×");
                                 if has_query {
                                     let si = self.search_input.clone();
@@ -212,7 +227,7 @@ impl Render for PriceBookPanel {
                             .id("pb-btn-new-entry")
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
                             .bg(rgb(if has_selection { c.surface_active } else { c.surface_default }))
-                            .text_size(px(12.)).text_color(rgb(c.text_default))
+                            .text_size(rems(0.923)).text_color(rgb(c.text_default))
                             .child("+ New Entry");
                         if has_selection {
                             btn = btn
@@ -276,7 +291,7 @@ impl Render for PriceBookPanel {
                         .child(
                             div()
                                 .px(px(12.)).pt(px(10.)).pb(px(4.))
-                                .text_size(px(13.))
+                                .text_size(rems(1.))
                                 .text_color(rgb(c.text_default))
                                 .font_weight(gpui::FontWeight::BOLD)
                                 .child(target.product_name.clone())
@@ -284,18 +299,20 @@ impl Render for PriceBookPanel {
                         .child(
                             div()
                                 .px(px(12.)).pb(px(8.))
-                                .text_size(px(11.))
+                                .text_size(rems(0.846))
                                 .text_color(rgb(c.text_muted))
                                 .child(info_line)
                         )
                         .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                         .child({
                             let n = name.clone();
+                            let hover_bg = rgb(c.surface_hover);
                             div()
                                 .id("ctx-pb-price-history")
                                 .px(px(12.)).py(px(8.))
                                 .cursor_pointer()
-                                .text_size(px(13.))
+                                .hover(move |s| s.bg(hover_bg))
+                                .text_size(rems(1.))
                                 .text_color(rgb(c.text_default))
                                 .child("Price History")
                                 .on_mouse_down(
@@ -309,22 +326,28 @@ impl Render for PriceBookPanel {
                                     }),
                                 )
                         })
-                        .child(
+                        .child({
+                            let hover_bg = rgb(c.surface_hover);
                             div()
                                 .id("ctx-pb-add-price")
                                 .px(px(12.)).py(px(8.))
                                 .cursor_pointer()
-                                .text_size(px(13.))
+                                .hover(move |s| s.bg(hover_bg))
+                                .text_size(rems(1.))
                                 .text_color(rgb(c.text_default))
                                 .child("Add Price Entry")
                                 .on_mouse_down(
                                     MouseButton::Left,
                                     cx.listener(move |this, _: &MouseDownEvent, window: &mut Window, cx| {
                                         this.store.update(cx, |s, cx| s.clear_context_menu(cx));
-                                        this.open_form_for(pid, name.clone(), window, cx);
+                                        this.open_form_for(pid, name.clone(), cx);
+                                        if let Some(form) = &this.form {
+                                            let first = form.read(cx).cost.read(cx).focus_handle.clone();
+                                            window.focus(&first, cx);
+                                        }
                                     }),
                                 )
-                        )
+                        })
                 );
         }
 

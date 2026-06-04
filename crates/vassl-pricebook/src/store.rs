@@ -145,6 +145,7 @@ mod tests {
         PriceEntry {
             id,
             product_id,
+            quantity:          1.0,
             cost_price_usd:    cost,
             duty_cost_usd:     0.0,
             markup_percent:    30.0,

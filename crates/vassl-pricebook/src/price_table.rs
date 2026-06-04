@@ -1,8 +1,7 @@
 use gpui::{App, Context, Entity, IntoElement, MouseButton, MouseDownEvent, Render, Window,
-           div, prelude::*, px, rgb};
+           div, prelude::*, px, rems, rgb};
 use vassl_ui::{ThemeColors, ThemeHandle};
 
-use crate::colors;
 use crate::store::{ContextMenuTarget, PriceBookStore, ProductPrice};
 
 pub struct PriceTable {
@@ -73,6 +72,7 @@ fn price_row(pp: &ProductPrice, selected: bool, store: Entity<PriceBookStore>, c
     let product_id   = pp.product_id;
     let product_name = pp.name.clone();
     let row_bg       = if selected { c.surface_active } else { c.canvas_bg };
+    let hover_bg     = rgb(c.surface_hover);
     let price_str    = price_display(pp);
     let price_color  = if pp.latest.is_some() { c.text_default } else { c.text_muted };
     let store_right  = store.clone();
@@ -82,6 +82,7 @@ fn price_row(pp: &ProductPrice, selected: bool, store: Entity<PriceBookStore>, c
         .flex().flex_row().items_center().w_full()
         .px(px(12.)).py(px(6.))
         .bg(rgb(row_bg))
+        .when(!selected, |d| d.hover(move |s| s.bg(hover_bg)))
         .cursor_pointer()
         .on_mouse_down(
             MouseButton::Left,
@@ -103,25 +104,28 @@ fn price_row(pp: &ProductPrice, selected: bool, store: Entity<PriceBookStore>, c
         )
         .child(
             div()
-                .w(px(90.)).text_size(px(12.))
+                .w(px(120.)).text_size(rems(0.923))
                 .text_color(rgb(c.text_muted))
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
                 .child(pp.sku.clone())
         )
         .child(
             div()
-                .w(px(160.)).text_size(px(13.))
+                .w(px(160.)).text_size(rems(1.))
                 .text_color(rgb(c.text_default))
                 .child(pp.name.clone())
         )
         .child(
             div()
-                .flex_1().text_size(px(12.))
+                .flex_1().text_size(rems(0.923))
                 .text_color(rgb(price_color))
                 .child(price_str)
         )
         .child(
             div()
-                .w(px(110.)).text_size(px(11.))
+                .w(px(110.)).text_size(rems(0.846))
                 .text_color(rgb(c.text_muted))
                 .child(pp.latest.as_ref().map(|e| e.effective_date.get(..10).unwrap_or(&e.effective_date).to_string()).unwrap_or_default())
         )
@@ -136,6 +140,7 @@ mod tests {
         let latest = cost.map(|c| PriceEntry {
             id,
             product_id:        id,
+            quantity:          1.0,
             cost_price_usd:    c,
             duty_cost_usd:     0.0,
             markup_percent:    30.0,
