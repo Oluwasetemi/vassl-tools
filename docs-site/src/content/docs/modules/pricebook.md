@@ -1,0 +1,74 @@
+---
+title: Price Book
+description: Managing cost prices, markups, and selling prices in VASSL.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+The Price Book module stores the selling price for every product. Each entry records the **cost price**, **duty cost**, **markup percentage**, and the resulting **selling price**. Full history is kept — every pricing change is recorded with a date.
+
+Open with **Cmd+3** (macOS) / **Ctrl+3** (Windows).
+
+## Price table
+
+The main panel shows current prices for all products:
+
+| Column | Description |
+|---|---|
+| Product | Product name |
+| SKU | Product code |
+| Cost Price | Your cost in USD (excluding duty) |
+| Duty Cost | Import duty in USD |
+| Markup % | Percentage added on top of landed cost |
+| Selling Price | Calculated final price shown on quotations |
+| Effective Date | When this price entry came into effect |
+| Qty | Default quantity for this price entry |
+
+### Selling price formula
+
+```
+Selling Price = (Cost Price + Duty Cost) × (1 + Markup % / 100)
+```
+
+### Filtering
+
+Use the search bar at the top to filter by product name or SKU.
+
+## Adding a price entry
+
+<Steps>
+1. Press **Cmd+N** or click **New Record**.
+2. Select the **Product** from the dropdown.
+3. Enter:
+   - **Cost Price (USD)** — landed cost before markup
+   - **Duty Cost (USD)** — import duty (can be 0)
+   - **Markup %** — e.g. `35` for 35%
+   - **Selling Price** — auto-calculated; you can override manually
+   - **Effective Date** — date this price takes effect
+   - **Quantity** — default quantity (usually 1)
+   - **Notes** — optional (e.g. "price valid Q1 2026")
+4. Save.
+</Steps>
+
+<Aside type="tip">
+Add a new entry rather than editing an existing one when prices change. This preserves the full pricing history for auditing and quotation accuracy.
+</Aside>
+
+## Price history
+
+Click the **History** button on any price table row to see all previous price entries for that product in chronological order. This is useful for:
+
+- Tracking price trends over time
+- Understanding why a historical quotation used a certain price
+- Comparing cost changes across suppliers
+
+## Relationship with Inventory and Quotations
+
+- **Inventory** holds cost data through stock entries (unit cost at time of purchase)
+- **Price Book** holds selling prices used when building quotations
+- When stock is added via the Price Book's stock form, a matching stock entry is automatically created in Inventory
+
+## Diagrams
+
+<!-- TODO: Add annotated screenshot of the Price Book panel -->
+<!-- TODO: Add price calculation diagram -->

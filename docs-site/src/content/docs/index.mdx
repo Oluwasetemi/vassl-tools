@@ -1,0 +1,36 @@
+---
+title: VASSL Documentation
+description: Internal operations platform for Kamalu Ltd — inventory, pricing, and quotations.
+template: splash
+hero:
+  tagline: Manage inventory, build quotations, and track pricing — all in one place.
+  image:
+    file: ../../assets/vassl-logo.png
+  actions:
+    - text: Get Started
+      link: /getting-started/introduction
+      icon: right-arrow
+      variant: primary
+    - text: Keyboard Shortcuts
+      link: /reference/keybindings
+      icon: external
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## What's inside
+
+<CardGrid stagger>
+  <Card title="Inventory" icon="list-format">
+    Track products, stock levels, and restock history. Get alerts when stock falls below minimum thresholds.
+  </Card>
+  <Card title="Price Book" icon="open-book">
+    Maintain cost prices, duty costs, markup percentages, and selling prices per product with full history.
+  </Card>
+  <Card title="Quotations" icon="document">
+    Build project-based quotations, add line items from the price book, and approve or reject quotes.
+  </Card>
+  <Card title="Suppliers" icon="puzzle">
+    Manage supplier contacts, assign preferred suppliers to products, and track procurement history.
+  </Card>
+</CardGrid>

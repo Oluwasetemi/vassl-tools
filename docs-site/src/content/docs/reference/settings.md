@@ -1,0 +1,42 @@
+---
+title: Settings
+description: Configuring VASSL appearance and preferences.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Open Settings with **Cmd+,** (macOS) / **Ctrl+,** (Windows), or click **Settings** in the sidebar.
+
+## Appearance
+
+### Font family
+
+Select from the system fonts available on your machine. The font applies to all text in the application immediately.
+
+Popular choices:
+- **system-ui** — matches your OS default (recommended)
+- **SF Pro** — macOS system font (macOS only)
+- **Segoe UI** — Windows system font (Windows only)
+- **JetBrains Mono** — monospace, useful if you prefer a more technical look
+
+### Font size
+
+Controls the base text size for the whole application. Range: **10–24pt**, in 0.5pt increments.
+
+You can also adjust font size with keyboard shortcuts:
+- **Cmd/Ctrl + `=`** — increase
+- **Cmd/Ctrl + `-`** — decrease
+
+<Aside type="note">
+Font family and size are persisted to the database and restored on next launch.
+</Aside>
+
+## Theme
+
+VASSL automatically follows your OS appearance setting (light or dark mode). When you switch your OS theme, VASSL updates immediately without restarting.
+
+You can also toggle the theme manually from the Settings panel.
+
+## Diagrams
+
+<!-- TODO: Add screenshot of the Settings panel showing font controls and theme toggle -->

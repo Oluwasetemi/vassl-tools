@@ -1,0 +1,58 @@
+---
+title: Suppliers
+description: Managing supplier contacts and preferred supplier assignments in VASSL.
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+The Suppliers module stores contact information for companies and individuals that Kamalu Ltd procures from. Suppliers can be assigned as the **preferred supplier** on individual products.
+
+## Supplier list
+
+The panel shows all suppliers with:
+
+| Column | Description |
+|---|---|
+| Name | Supplier company or individual name |
+| Contact Person | Primary contact |
+| Email | Contact email |
+| Phone | Contact phone number |
+
+### Filtering
+
+Use the search bar to filter by supplier name in real time.
+
+## Adding a supplier
+
+<Steps>
+1. Press **Cmd+N** to open the New Supplier form.
+2. Fill in:
+   - **Name** — must be unique
+   - **Contact Person** — optional
+   - **Email** — optional
+   - **Phone** — optional
+   - **Notes** — optional
+3. Save.
+</Steps>
+
+## Preferred suppliers
+
+Each product in the Inventory can have a **preferred supplier** assigned. This is used to:
+
+- Pre-fill the supplier field when adding stock entries
+- Indicate the primary source for re-ordering
+
+To assign a preferred supplier:
+
+1. Open the Inventory module.
+2. Edit a product.
+3. Select a supplier from the **Preferred Supplier** dropdown.
+
+<Aside type="note">
+Preferred supplier is informational only — you can still add stock from any supplier when creating a stock entry.
+</Aside>
+
+## Diagrams
+
+<!-- TODO: Add screenshot of the Suppliers panel -->
+<!-- TODO: Add diagram showing preferred supplier relationship to products -->

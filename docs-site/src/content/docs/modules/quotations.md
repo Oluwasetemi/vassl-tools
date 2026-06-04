@@ -1,0 +1,81 @@
+---
+title: Quotations
+description: Building and approving project quotations in VASSL.
+---
+
+import { Aside, Steps, Badge } from '@astrojs/starlight/components';
+
+The Quotations module manages client quotations for Kamalu Ltd projects. Quotations are grouped under **Projects** — a project represents a client engagement, and can have one or more quotations.
+
+Open with **Cmd+2** (macOS) / **Ctrl+2** (Windows).
+
+## Concepts
+
+| Term | Meaning |
+|---|---|
+| **Project** | A client engagement (e.g. "Accra Mall CCTV Upgrade") |
+| **Quotation** | A priced list of items for a project |
+| **Line Item** | A single product + quantity + price row in a quotation |
+
+## Quotation statuses
+
+| Status | Meaning |
+|---|---|
+| <Badge text="Draft" variant="caution" /> | Being built, not yet sent |
+| <Badge text="Sent" variant="note" /> | Delivered to client |
+| <Badge text="Approved" variant="success" /> | Client accepted — stock is reserved |
+| <Badge text="Rejected" variant="danger" /> | Client declined |
+
+## Creating a project
+
+<Steps>
+1. Press **Cmd+N** to open the New Project form.
+2. Enter:
+   - **Project Name** — descriptive name (e.g. "Accra Mall Phase 2")
+   - **Client Name** — the client organisation or contact
+   - **Notes** — optional
+3. Save. The project appears in the list.
+</Steps>
+
+## Creating a quotation
+
+<Steps>
+1. Select a project in the left panel.
+2. Press **Cmd+N** to create a new quotation under that project.
+3. Enter a **title** and optional **notes**.
+4. Save. The quotation opens in Draft status.
+</Steps>
+
+## Adding line items
+
+<Steps>
+1. Open a quotation in Draft status.
+2. Press **Cmd+N** inside the quotation detail to add a line item.
+3. Select a **product** — price book values are auto-filled.
+4. Adjust **quantity** as needed.
+5. The line total and quotation total update automatically.
+</Steps>
+
+<Aside type="note">
+Line item prices are pulled from the **most recent Price Book entry** for each product at the time you add the line item. If prices change later, the quotation retains the price at the time it was built.
+</Aside>
+
+## Approving a quotation
+
+When a client accepts:
+
+<Steps>
+1. Open the quotation.
+2. Change the status to **Approved**.
+3. VASSL automatically creates **stock entries** in Inventory for each line item — recording the outgoing stock against the project.
+</Steps>
+
+<Aside type="tip">
+Approving a quotation is the primary way outgoing stock is recorded. You do not need to manually adjust inventory after a project is confirmed.
+</Aside>
+
+## Diagrams
+
+<!-- TODO: Add annotated screenshot of the Quotations panel -->
+<!-- TODO: Add workflow diagram: Draft → Sent → Approved/Rejected -->
+<!-- TODO: Add diagram showing stock sync on approval -->

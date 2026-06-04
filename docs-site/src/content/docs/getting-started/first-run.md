@@ -1,0 +1,48 @@
+---
+title: First Run
+description: What to expect when you launch VASSL for the first time.
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+## Setup prompt
+
+When you launch VASSL for the first time, a setup prompt will appear asking for your name. This sets the **current user** recorded against all changes in the audit log.
+
+<Steps>
+1. Enter your full name in the setup prompt.
+2. Press **Enter** or click **Save**.
+3. VASSL will open to the **Inventory** module.
+</Steps>
+
+<Aside type="tip">
+Your name is stored locally in the database. It is used to identify who made changes in the Audit Log. You can change it later via **Settings → Appearance**.
+</Aside>
+
+## Recommended first steps
+
+1. **Add your suppliers** — go to the Suppliers module (`Cmd/Ctrl+4` or the sidebar) and add the suppliers you procure from. This allows you to assign preferred suppliers to products later.
+
+2. **Add your products** — go to the Inventory module (`Cmd/Ctrl+1`) and add your product catalogue. Set SKU, category, unit, and minimum stock level for each.
+
+3. **Set up your price book** — go to the Price Book module (`Cmd/Ctrl+3`) and add cost prices and markups for each product.
+
+4. **Create your first quotation** — go to Quotations (`Cmd/Ctrl+2`), create a project, and build a quotation from your price book.
+
+## Application layout
+
+```
+┌──────────────────────────────────────────────┐
+│  Sidebar   │         Main content area        │
+│            │                                  │
+│  Inventory │   [Module panel renders here]    │
+│  Quotations│                                  │
+│  PriceBook │                                  │
+│  Suppliers │                                  │
+│  Settings  │                                  │
+│            ├──────────────────────────────────┤
+│            │         Status bar               │
+└──────────────────────────────────────────────┘
+```
+
+The **status bar** at the bottom shows the active module name and current user.

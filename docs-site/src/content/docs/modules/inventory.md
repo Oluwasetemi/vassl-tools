@@ -1,0 +1,76 @@
+---
+title: Inventory
+description: Managing products and stock levels in VASSL.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+The Inventory module is the product catalogue for Kamalu Ltd. It tracks what products exist, how much stock is on hand, and whether stock is above or below minimum levels.
+
+Open with **Cmd+1** (macOS) / **Ctrl+1** (Windows).
+
+## Product list
+
+The main panel shows all products as a table with:
+
+| Column | Description |
+|---|---|
+| SKU | Unique product code |
+| Name | Product display name |
+| Category | Optional grouping (e.g. Cameras, Networking) |
+| Unit | Unit of measure (pcs, box, roll, etc.) |
+| In Stock | Current total quantity across all stock entries |
+| Min Level | Minimum acceptable stock quantity |
+| Status | Green = healthy · Amber = low · Red = critical |
+
+### Stock status colours
+
+- **Green** — stock is at or above the minimum level
+- **Amber** — stock is below minimum but greater than zero
+- **Red** — stock is at zero (out of stock)
+
+### Filtering
+
+Use the search bar at the top of the panel (`Cmd+F`) to filter products by name or SKU in real time.
+
+## Adding a product
+
+<Steps>
+1. Press **Cmd+N** (macOS) / **Ctrl+N** (Windows) or click **New Record**.
+2. Fill in the product form:
+   - **SKU** — must be unique across all products
+   - **Name** — display name
+   - **Category** — optional; used for grouping
+   - **Unit** — e.g. `pcs`, `box`, `roll`, `metre`
+   - **Min Stock Level** — triggers amber/red status when breached
+   - **Description** — optional; longer product description
+   - **Preferred Supplier** — select from your supplier list
+3. Press **Enter** or click **Save**.
+</Steps>
+
+<Aside type="note">
+SKU is immutable after creation. Choose a consistent format (e.g. `HIK-DS2CD2143` for Hikvision model DS2CD2143).
+</Aside>
+
+## Adding stock (Restock)
+
+Stock is added through **stock entries** — each entry records a delivery or acquisition event.
+
+<Steps>
+1. Select a product in the list.
+2. Click **Restock** or press **Cmd+N** while a product is selected.
+3. Fill in the stock entry form:
+   - **Quantity** — units received
+   - **Unit Cost (USD)** — cost per unit at time of receipt
+   - **Supplier** — who supplied this batch
+   - **Acquisition Type** — `Purchase`, `Transfer`, or `Donation`
+   - **Acquired At** — date received
+   - **Invoice Ref** — optional invoice or PO reference
+   - **Notes** — optional
+4. Save. The product's **In Stock** count updates immediately.
+</Steps>
+
+## Diagrams
+
+<!-- TODO: Add annotated screenshot of the Inventory panel -->
+<!-- TODO: Add stock status indicator diagram -->

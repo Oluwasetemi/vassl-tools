@@ -1,0 +1,64 @@
+---
+title: Installation
+description: How to install VASSL on macOS and Windows.
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+## Download
+
+Download the latest release from the [GitHub Releases](https://github.com/kamalu-ltd/vassl/releases) page.
+
+<Tabs>
+  <TabItem label="macOS (Apple Silicon)">
+    1. Download `VASSL-macos-arm64.zip`
+    2. Unzip and move `VASSL.app` to your **Applications** folder
+    3. Right-click → **Open** on first launch (required for unsigned apps)
+  </TabItem>
+  <TabItem label="macOS (Intel)">
+    1. Download `VASSL-macos-x86_64.zip`
+    2. Unzip and move the binary to `/usr/local/bin/vassl` or double-click to run
+    3. Right-click → **Open** on first launch
+  </TabItem>
+  <TabItem label="macOS (Universal)">
+    1. Download `VASSL-macos-universal.zip`
+    2. Works on both Apple Silicon and Intel Macs
+    3. Move `VASSL.app` to your **Applications** folder
+  </TabItem>
+  <TabItem label="Windows">
+    1. Download `VASSL-windows-x86_64.zip`
+    2. Unzip and place `vassl.exe` in a folder of your choice
+    3. Double-click to run — no installer required
+  </TabItem>
+</Tabs>
+
+<Aside type="note">
+VASSL is not code-signed. macOS Gatekeeper will block the first launch. Right-click → Open to bypass this once.
+</Aside>
+
+## Data location
+
+VASSL stores its database and logs at:
+
+| Platform | Path |
+|---|---|
+| macOS | `~/Library/Application Support/VASSL/` |
+| Windows | `%LOCALAPPDATA%\VASSL\` |
+
+Log files are written to a `logs/` subdirectory, rotated daily, and kept for 7 days.
+
+## Building from source
+
+```bash
+git clone https://github.com/kamalu-ltd/vassl
+cd vassl/tools
+cargo build --release -p vassl-app
+```
+
+To create a `.app` bundle on macOS:
+
+```bash
+cargo install cargo-bundle --locked
+cargo bundle --release -p vassl-app
+# Output: target/release/bundle/osx/VASSL.app
+```

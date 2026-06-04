@@ -1,0 +1,12 @@
+/* VASSL brand colour — deep navy */
+:root {
+  --sl-color-accent-low: #1a3c5e22;
+  --sl-color-accent: #1a3c5e;
+  --sl-color-accent-high: #4a8abf;
+}
+
+:root[data-theme='dark'] {
+  --sl-color-accent-low: #1a3c5e44;
+  --sl-color-accent: #4a8abf;
+  --sl-color-accent-high: #a0c8e8;
+}
