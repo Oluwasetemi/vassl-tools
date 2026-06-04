@@ -6,16 +6,16 @@ export default defineConfig({
 	integrations: [
 		starlight({
 			title: 'VASSL Docs',
-			description: 'Documentation for VASSL — Kamalu Ltd internal operations platform.',
+			description: 'Documentation for VASSL — Video Access Security Solutions Ltd internal operations platform.',
 			logo: {
 				src: './src/assets/vassl-logo.png',
 				alt: 'VASSL',
 			},
 			social: [
-				{ icon: 'github', label: 'GitHub', href: 'https://github.com/kamalu-ltd/vassl' },
+				{ icon: 'github', label: 'GitHub', href: 'https://github.com/Oluwasetemi/vassl' },
 			],
 			editLink: {
-				baseUrl: 'https://github.com/kamalu-ltd/vassl/edit/main/docs/',
+				baseUrl: 'https://github.com/Oluwasetemi/vassl/edit/main/docs/',
 			},
 			customCss: ['./src/styles/custom.css'],
 			sidebar: [

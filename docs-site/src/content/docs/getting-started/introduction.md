@@ -1,9 +1,9 @@
 ---
 title: What is VASSL?
-description: An overview of VASSL — Kamalu Ltd's internal operations platform.
+description: An overview of VASSL — Video Access Security Solutions Ltd's internal operations platform.
 ---
 
-VASSL is Kamalu Ltd's internal operations platform. It runs as a native desktop application on macOS and Windows, giving the operations team a single place to manage:
+VASSL is Video Access Security Solutions Ltd's internal operations platform. It runs as a native desktop application on macOS and Windows, giving the operations team a single place to manage:
 
 - **Inventory** — products, stock levels, and restocking
 - **Price Book** — cost prices, duty, markup, and selling prices
@@ -14,7 +14,7 @@ All data is stored locally in a SQLite database. There is no cloud sync — data
 
 ## Who is it for?
 
-VASSL is built exclusively for Kamalu Ltd internal staff. It is not a public product.
+VASSL is built exclusively for Video Access Security Solutions Ltd internal staff. It is not a public product.
 
 ## Technology
 
