@@ -27,7 +27,7 @@ VASSL is built with:
 ## Release channels
 
 | Version format | Channel | Database |
-|---|---|---|
+| --- | --- |---|
 | `0.x.y` | Dev | `0-dev/vassl.db` |
 | `x.y.z-preview[.N]` | Preview | `0-preview/vassl.db` |
 | `x.y.z` (major ≥ 1) | Stable | `0-stable/vassl.db` |

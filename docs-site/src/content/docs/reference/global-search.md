@@ -12,7 +12,7 @@ Open with **Cmd+Shift+F** (macOS) / **Ctrl+Shift+F** (Windows).
 Global Search queries across:
 
 | Module | Searched fields |
-|---|---|
+| --- | --- |
 | Inventory | Product name, SKU |
 | Suppliers | Supplier name, contact person |
 | Quotations | Project name, client name |
@@ -30,6 +30,6 @@ Global Search queries across:
 The **Command Palette** (`Cmd+F`) is a module-level search — it searches only within the currently active module. Use it when you know which module your record is in.
 
 | Tool | Shortcut | Scope |
-|---|---|---|
+| --- | --- |---|
 | Command Palette | `Cmd+F` | Current module only |
 | Global Search | `Cmd+Shift+F` | All modules |

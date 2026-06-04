@@ -8,7 +8,7 @@ description: Complete keyboard shortcut reference for VASSL.
 ## Navigation
 
 | Shortcut | Action |
-|---|---|
+| --- | --- |
 | `secondary-1` | Open Inventory |
 | `secondary-2` | Open Quotations |
 | `secondary-3` | Open Price Book |
@@ -20,14 +20,14 @@ description: Complete keyboard shortcut reference for VASSL.
 ## Search
 
 | Shortcut | Action |
-|---|---|
+| --- | --- |
 | `secondary-f` | Open Command Palette (module search) |
 | `secondary-shift-f` | Open Global Search (across all modules) |
 
 ## View
 
 | Shortcut | Action |
-|---|---|
+| --- | --- |
 | `secondary-=` | Increase font size |
 | `secondary-shift-=` | Increase font size (alternative) |
 | `secondary--` | Decrease font size |
@@ -35,13 +35,13 @@ description: Complete keyboard shortcut reference for VASSL.
 ## Overlays & modals
 
 | Shortcut | Action |
-|---|---|
+| --- | --- |
 | `Escape` | Close active overlay / modal |
 
 ## Window (macOS)
 
 | Shortcut | Action |
-|---|---|
+| --- | --- |
 | `Cmd-m` | Minimize window |
 | `Cmd-shift-a` | Open Audit Log |
 
@@ -50,7 +50,7 @@ description: Complete keyboard shortcut reference for VASSL.
 These shortcuts work whenever a text field is focused.
 
 | Shortcut | Action |
-|---|---|
+| --- | --- |
 | `Backspace` | Delete character before cursor |
 | `Delete` | Delete character after cursor |
 | `Left / Right` | Move cursor |
@@ -66,7 +66,7 @@ These shortcuts work whenever a text field is focused.
 ## Form navigation
 
 | Shortcut | Context | Action |
-|---|---|---|
+| --- | --- |---|
 | `Tab` | Product form | Next field |
 | `Shift-Tab` | Product form | Previous field |
 | `Escape` | Product form | Cancel / close form |
@@ -80,7 +80,7 @@ These shortcuts work whenever a text field is focused.
 ## Command Palette
 
 | Shortcut | Action |
-|---|---|
+| --- | --- |
 | `Down` | Next result |
 | `Up` | Previous result |
 | `Enter` | Confirm selection |
@@ -88,7 +88,7 @@ These shortcuts work whenever a text field is focused.
 ## Global Search
 
 | Shortcut | Action |
-|---|---|
+| --- | --- |
 | `Down` | Next result |
 | `Up` | Previous result |
 | `Enter` | Open selected record |

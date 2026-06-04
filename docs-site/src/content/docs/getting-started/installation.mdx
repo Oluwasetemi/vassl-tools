@@ -40,10 +40,15 @@ VASSL is not code-signed. macOS Gatekeeper will block the first launch. Right-cl
 
 VASSL stores its database and logs at:
 
-| Platform | Path |
-|---|---|
-| macOS | `~/Library/Application Support/VASSL/` |
-| Windows | `%LOCALAPPDATA%\VASSL\` |
+<table>
+  <thead>
+    <tr><th>Platform</th><th>Path</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>macOS</td><td><code>~/Library/Application Support/VASSL/</code></td></tr>
+    <tr><td>Windows</td><td><code>%LOCALAPPDATA%\VASSL</code></td></tr>
+  </tbody>
+</table>
 
 Log files are written to a `logs/` subdirectory, rotated daily, and kept for 7 days.
 
