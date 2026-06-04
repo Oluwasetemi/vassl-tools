@@ -1,5 +1,5 @@
-use gpui::{Context, Entity, EventEmitter, IntoElement, MouseButton, MouseDownEvent,
-           Render, Window, div, prelude::*, px, rgb};
+use gpui::{Context, EventEmitter, IntoElement, MouseButton, MouseDownEvent,
+           Render, Window, div, prelude::*, px, rems, rgb};
 
 use crate::ThemeHandle;
 
@@ -78,11 +78,11 @@ impl Render for Dropdown {
                         cx.notify();
                     }))
                     .child(
-                        div().flex_1().text_size(px(12.))
+                        div().flex_1().text_size(rems(0.923))
                             .text_color(rgb(if label.is_some() { c.text_default } else { c.text_muted }))
                             .child(label.unwrap_or_else(|| self.placeholder.clone()))
                     )
-                    .child(div().text_size(px(11.)).text_color(rgb(c.text_muted)).child("◇"))
+                    .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted)).child("◇"))
             )
             // ── inline list ──────────────────────────────────────────
             .when(is_open, |d| {
@@ -96,13 +96,13 @@ impl Render for Dropdown {
                 let list = if self.loading {
                     list.child(
                         div().px(px(10.)).py(px(8.))
-                            .text_size(px(12.)).text_color(rgb(c.text_muted))
+                            .text_size(rems(0.923)).text_color(rgb(c.text_muted))
                             .child("Loading…")
                     )
                 } else if self.items.is_empty() {
                     list.child(
                         div().px(px(10.)).py(px(8.))
-                            .text_size(px(12.)).text_color(rgb(c.text_muted))
+                            .text_size(rems(0.923)).text_color(rgb(c.text_muted))
                             .child(self.empty_message.clone())
                     )
                 } else {
@@ -122,11 +122,11 @@ impl Render for Dropdown {
                                 cx.notify();
                             }))
                             .child(
-                                div().flex_1().text_size(px(12.)).text_color(rgb(c.text_default))
+                                div().flex_1().text_size(rems(0.923)).text_color(rgb(c.text_default))
                                     .child(item.label.clone())
                             )
                             .when_some(item.sublabel.clone(), |d, sub| {
-                                d.child(div().text_size(px(11.)).text_color(rgb(c.text_muted)).child(sub))
+                                d.child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted)).child(sub))
                             })
                     }))
                 };

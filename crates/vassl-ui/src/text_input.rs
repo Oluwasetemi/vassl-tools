@@ -5,7 +5,7 @@ use gpui::{
     EntityInputHandler, FocusHandle, Focusable, GlobalElementId, IntoElement, LayoutId,
     MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, Pixels, Point,
     ShapedLine, SharedString, Style, TextAlign, TextRun, UTF16Selection, Window,
-    actions, div, fill, point, prelude::*, px, relative, rgb, rgba, size,
+    actions, div, fill, point, prelude::*, px, relative, rems, rgb, rgba, size,
 };
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -427,23 +427,25 @@ pub fn text_field(
 ) -> impl IntoElement {
     let c            = cx.global::<ThemeHandle>().0.clone();
     let border_color = if focused { c.surface_active } else { c.surface_default };
+    let field_bg     = if focused { c.canvas_bg } else { c.surface_default };
     gpui::div().flex().flex_col().gap(px(4.))
         .when(!label.is_empty(), |d| {
             d.child(
                 gpui::div()
-                    .text_size(px(11.))
+                    .text_size(rems(0.846))
                     .text_color(gpui::rgb(c.text_muted))
                     .child(label.to_string())
             )
         })
         .child(
             gpui::div()
-                .px(px(8.)).py(px(6.))
-                .bg(gpui::rgb(c.surface_default))
+                .px(px(8.)).py(px(4.))
+                .bg(gpui::rgb(field_bg))
                 .rounded(px(4.))
-                .border_1()
+                .when(focused, |d| d.border_2())
+                .when(!focused, |d| d.border_1())
                 .border_color(gpui::rgb(border_color))
-                .text_size(px(13.))
+                .text_size(rems(1.))
                 .text_color(gpui::rgb(c.text_default))
                 .child(input)
         )
