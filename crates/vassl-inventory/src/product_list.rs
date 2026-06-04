@@ -149,7 +149,9 @@ fn product_row(p: &ProductWithStock, selected: bool, store: Entity<InventoryStor
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::colors;
+
+use super::*;
 
     #[test]
     fn badge_color_healthy_is_green() {
