@@ -1,8 +1,7 @@
-use gpui::{App, Context, Entity, IntoElement, MouseButton, MouseDownEvent, Render, Window, div, prelude::*, px, rgb};
+use gpui::{App, Context, Entity, IntoElement, MouseButton, MouseDownEvent, Render, Window, div, prelude::*, px, rems, rgb};
 use vassl_ui::{ThemeColors, ThemeHandle};
 
 use crate::store::{ContextMenuTarget, InventoryStore, ProductWithStock, StockStatus};
-use crate::colors;
 
 pub struct ProductList {
     store: Entity<InventoryStore>,
@@ -76,6 +75,7 @@ fn product_row(p: &ProductWithStock, selected: bool, store: Entity<InventoryStor
     };
 
     let row_bg      = if selected { c.surface_active } else { c.canvas_bg };
+    let hover_bg    = rgb(c.surface_hover);
     let store_right = store.clone();
 
     div()
@@ -87,6 +87,7 @@ fn product_row(p: &ProductWithStock, selected: bool, store: Entity<InventoryStor
         .px(px(12.))
         .py(px(6.))
         .bg(rgb(row_bg))
+        .when(!selected, |d| d.hover(move |s| s.bg(hover_bg)))
         .cursor_pointer()
         .on_mouse_down(
             MouseButton::Left,
@@ -115,29 +116,32 @@ fn product_row(p: &ProductWithStock, selected: bool, store: Entity<InventoryStor
         )
         .child(
             div()
-                .w(px(80.))
-                .text_size(px(12.))
+                .w(px(120.))
+                .text_size(rems(0.923))
                 .text_color(rgb(c.text_muted))
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
                 .child(p.product.sku.clone())
         )
         .child(
             div()
                 .flex_1()
-                .text_size(px(13.))
+                .text_size(rems(1.))
                 .text_color(rgb(c.text_default))
                 .child(p.product.name.clone())
         )
         .child(
             div()
                 .w(px(70.))
-                .text_size(px(12.))
+                .text_size(rems(0.923))
                 .text_color(rgb(c.text_default))
                 .child(format!("{:.1} {}", p.current_stock, p.product.unit))
         )
         .child(
             div()
                 .w(px(70.))
-                .text_size(px(12.))
+                .text_size(rems(0.923))
                 .text_color(rgb(c.text_muted))
                 .child(format!("min {:.1}", p.product.min_stock_level))
         )

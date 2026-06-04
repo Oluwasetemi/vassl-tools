@@ -1,9 +1,8 @@
 use gpui::{Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Window,
-           actions, div, prelude::*, px, rgb, rgba, SharedString};
+           actions, div, prelude::*, px, rems, rgb, rgba, SharedString};
 use vassl_core::AcquisitionType;
 use vassl_ui::{TextInput, ThemeHandle, text_field};
 
-use crate::colors;
 
 actions!(stock_form, [EscapeForm, TabField, BackTabField]);
 use crate::db::InventoryDb;
@@ -20,7 +19,6 @@ pub struct StockEntryForm {
     product_name:     String,
     pub quantity:     Entity<TextInput>,
     unit_cost:        Entity<TextInput>,
-    supplier:         Entity<TextInput>,
     invoice_ref:      Entity<TextInput>,
     acquisition_type: AcquisitionType,
     error:            Option<String>,
@@ -45,7 +43,6 @@ impl StockEntryForm {
             product_name,
             quantity:    cx.new(|cx| TextInput::with_placeholder("e.g. 10", cx)),
             unit_cost:   cx.new(|cx| TextInput::with_placeholder("e.g. 120.00", cx)),
-            supplier:    cx.new(|cx| TextInput::with_placeholder("optional", cx)),
             invoice_ref: cx.new(|cx| TextInput::with_placeholder("optional", cx)),
             acquisition_type: AcquisitionType::Restock,
             error:       None,
@@ -65,18 +62,27 @@ impl StockEntryForm {
             Ok((qty, cost)) => {
                 let db       = InventoryDb::global(&**cx);
                 let pid      = self.product_id;
-                let sup      = self.supplier.read(cx).text().trim().to_string();
                 let invref   = self.invoice_ref.read(cx).text().trim().to_string();
                 let acq      = self.acquisition_type.clone();
                 let store    = self.store.clone();
-                let sup_opt: Option<String>    = if sup.is_empty()    { None } else { Some(sup) };
                 let invref_opt: Option<String> = if invref.is_empty() { None } else { Some(invref) };
 
                 cx.spawn(async move |this, cx| {
-                    let result = db.insert_stock_entry(pid, qty, cost, sup_opt.as_deref(), acq, None, invref_opt.as_deref(), None).await;
-                    if let Err(e) = result { tracing::error!("insert_stock_entry failed: {e:?}"); return Ok(()); }
-                    let _ = store.update(cx, |s, cx| s.load_products(cx));
-                    this.update(cx, |_, cx| cx.emit(StockFormEvent::Submitted))
+                    let result = db.insert_stock_entry(pid, qty, cost, None, acq, None, invref_opt.as_deref(), None).await;
+                    let _ = this.update(cx, |form, cx| {
+                        match result {
+                            Err(e) => {
+                                tracing::error!("insert_stock_entry failed: {e:?}");
+                                form.error = Some(format!("Save failed: {e}"));
+                                cx.notify();
+                            }
+                            Ok(_) => {
+                                let _ = store.update(cx, |s, cx| s.load_products(cx));
+                                cx.emit(StockFormEvent::Submitted);
+                            }
+                        }
+                    });
+                    Ok::<(), anyhow::Error>(())
                 }).detach();
             }
         }
@@ -92,7 +98,6 @@ impl Render for StockEntryForm {
         let c = cx.global::<ThemeHandle>().0.clone();
         let qty_focused  = self.quantity.read(cx).focus_handle.is_focused(window);
         let cost_focused = self.unit_cost.read(cx).focus_handle.is_focused(window);
-        let sup_focused  = self.supplier.read(cx).focus_handle.is_focused(window);
         let inv_focused  = self.invoice_ref.read(cx).focus_handle.is_focused(window);
 
         div()
@@ -107,7 +112,6 @@ impl Render for StockEntryForm {
                 let handles = [
                     this.quantity.read(cx).focus_handle.clone(),
                     this.unit_cost.read(cx).focus_handle.clone(),
-                    this.supplier.read(cx).focus_handle.clone(),
                     this.invoice_ref.read(cx).focus_handle.clone(),
                 ];
                 let current = handles.iter().position(|h| h.is_focused(window));
@@ -118,7 +122,6 @@ impl Render for StockEntryForm {
                 let handles = [
                     this.quantity.read(cx).focus_handle.clone(),
                     this.unit_cost.read(cx).focus_handle.clone(),
-                    this.supplier.read(cx).focus_handle.clone(),
                     this.invoice_ref.read(cx).focus_handle.clone(),
                 ];
                 let current = handles.iter().position(|h| h.is_focused(window));
@@ -141,39 +144,33 @@ impl Render for StockEntryForm {
                             .bg(rgb(c.sidebar_bg))
                             .flex().flex_row().items_center()
                             .child(div().flex_1()
-                                .text_size(px(13.)).text_color(rgb(c.text_default))
+                                .text_size(rems(1.)).text_color(rgb(c.text_default))
                                 .child(format!("New Stock Entry — {}", self.product_name)))
-                            .child(div().text_size(px(11.)).text_color(rgb(c.text_muted)).child("Esc to cancel"))
+                            .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted)).child("Esc to cancel"))
                     )
                     // ── fields ──────────────────────────────────────────
                     .child(
                         div().flex().flex_col().px(px(20.)).pt(px(8.)).pb(px(4.))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
-                                    .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Quantity"))
+                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Quantity"))
                                     .child(div().flex_1().child(text_field("", self.quantity.clone(), qty_focused, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
-                                    .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Unit Cost (USD)"))
+                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Unit Cost (USD)"))
                                     .child(div().flex_1().child(text_field("", self.unit_cost.clone(), cost_focused, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
-                                    .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Supplier"))
-                                    .child(div().flex_1().child(text_field("", self.supplier.clone(), sup_focused, cx)))
-                            )
-                            .child(div().h(px(1.)).bg(rgb(c.surface_default)))
-                            .child(
-                                div().flex().flex_row().items_center().py(px(10.))
-                                    .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Invoice Ref"))
+                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Invoice Ref"))
                                     .child(div().flex_1().child(text_field("", self.invoice_ref.clone(), inv_focused, cx)))
                             )
                             .child(
                                 div().h(px(18.)).flex().items_center()
-                                    .child(div().text_size(px(11.)).text_color(rgb(c.status_red))
+                                    .child(div().text_size(rems(0.846)).text_color(rgb(c.status_red))
                                         .child(self.error.as_deref().map(SharedString::from).unwrap_or_default()))
                             )
                     )
@@ -185,12 +182,12 @@ impl Render for StockEntryForm {
                             .border_color(rgb(c.surface_default))
                             .flex().flex_row().justify_end().gap(px(8.))
                             .child(div().id("btn-cancel").px(px(18.)).py(px(7.)).rounded(px(5.))
-                                .bg(rgb(c.surface_default)).text_size(px(12.)).text_color(rgb(c.text_default))
+                                .bg(rgb(c.surface_default)).text_size(rems(0.923)).text_color(rgb(c.text_default))
                                 .cursor_pointer()
                                 .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| { cx.emit(StockFormEvent::Cancelled); }))
                                 .child("Cancel"))
                             .child(div().id("btn-save").px(px(18.)).py(px(7.)).rounded(px(5.))
-                                .bg(rgb(c.surface_active)).text_size(px(12.)).text_color(rgb(c.text_default))
+                                .bg(rgb(c.surface_active)).text_size(rems(0.923)).text_color(rgb(c.text_default))
                                 .cursor_pointer()
                                 .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| { this.submit(cx); }))
                                 .child("Save Entry"))

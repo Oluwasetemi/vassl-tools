@@ -1,8 +1,7 @@
-use gpui::{Context, Entity, IntoElement, Render, Window, div, prelude::*, px, rgb};
+use gpui::{Context, Entity, IntoElement, Render, Window, div, prelude::*, px, rems, rgb};
 use vassl_ui::ThemeHandle;
 
 use crate::store::{InventoryStore, StockStatus};
-use crate::colors;
 
 pub struct RestockAlerts {
     store: Entity<InventoryStore>,
@@ -56,11 +55,11 @@ impl Render for RestockAlerts {
                     div().w(px(8.)).h(px(8.)).rounded_full().bg(rgb(badge)).mr(px(8.))
                 )
                 .child(
-                    div().flex_1().text_size(px(13.)).text_color(rgb(c.text_default))
+                    div().flex_1().text_size(rems(1.)).text_color(rgb(c.text_default))
                         .child(name.clone())
                 )
                 .child(
-                    div().text_size(px(12.)).text_color(rgb(badge))
+                    div().text_size(rems(0.923)).text_color(rgb(badge))
                         .child(format!("{current:.1} / min {min:.1} {unit}"))
                 )
         }).collect();
@@ -91,6 +90,7 @@ mod tests {
             min_stock_level: 5.0,
             description: None,
             notes: None,
+            preferred_supplier_id: None,
             created_at: "2026-01-01T00:00:00Z".to_string(),
         }
     }

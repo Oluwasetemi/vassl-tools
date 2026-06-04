@@ -1,7 +1,8 @@
 use gpui::{Context, Entity, EventEmitter, IntoElement, MouseButton, MouseDownEvent,
-           Render, Subscription, Window, div, prelude::*, px, rgb};
+           Render, Subscription, Window, div, prelude::*, px, rems, rgb};
 use vassl_ui::{TextInput, ThemeHandle, text_field};
 
+use vassl_core::Product;
 use crate::product_form::{ProductForm, ProductFormEvent};
 use crate::product_list::ProductList;
 use crate::restock::RestockAlerts;
@@ -40,6 +41,11 @@ impl InventoryPanel {
 
         store.update(cx, |s, cx| s.load_products(cx));
         let search_input = cx.new(|cx| TextInput::with_placeholder("Filter…", cx));
+
+        cx.observe(&search_input, |this, input, cx| {
+            let q = input.read(cx).text().to_string();
+            this.store.update(cx, |s, cx| s.set_search_query(q, cx));
+        }).detach();
 
         Self {
             store,
@@ -102,6 +108,29 @@ impl InventoryPanel {
         self._prod_form_sub = Some(sub);
         cx.notify();
     }
+
+    fn open_edit_form(&mut self, product: Product, window: &mut Window, cx: &mut Context<Self>) {
+        if self.product_form.is_some() { return; }
+        let current_stock = self.store.read(cx).products.iter()
+            .find(|p| p.product.id == product.id)
+            .map(|p| p.current_stock)
+            .unwrap_or(0.0);
+        let form  = cx.new(|cx| ProductForm::new_edit(self.store.clone(), &product, current_stock, cx));
+        let first = form.read(cx).sku.read(cx).focus_handle.clone();
+        window.focus(&first, cx);
+        let sub  = cx.subscribe(&form, |this, _form, ev: &ProductFormEvent, cx| {
+            match ev {
+                ProductFormEvent::Submitted | ProductFormEvent::Cancelled => {
+                    this._prod_form_sub = None;
+                    this.product_form   = None;
+                    cx.notify();
+                }
+            }
+        });
+        self.product_form   = Some(form);
+        self._prod_form_sub = Some(sub);
+        cx.notify();
+    }
 }
 
 impl Render for InventoryPanel {
@@ -110,12 +139,7 @@ impl Render for InventoryPanel {
         let active_tab    = self.active_tab;
         let has_selection = self.store.read(cx).selected_product_id.is_some();
 
-        // Sync filter input → store (GPUI re-renders on TextInput change)
-        let q = self.search_input.read(cx).text().to_string();
-        if q != self.store.read(cx).search_query {
-            self.store.update(cx, |s, cx| s.set_search_query(q.clone(), cx));
-        }
-        let has_query = !q.is_empty();
+        let has_query = !self.search_input.read(cx).text().is_empty();
 
         let content = div().flex_1().h_full().flex().flex_col();
         let content = match active_tab {
@@ -131,32 +155,38 @@ impl Render for InventoryPanel {
                     .flex().flex_row().items_center().gap(px(8.))
                     .px(px(16.)).py(px(8.))
                     .bg(rgb(c.canvas_bg))
-                    .child(
+                    .child({
+                        let is_tab = active_tab == Tab::Products;
+                        let hover_bg = rgb(c.surface_hover);
                         div()
                             .id("tab-products")
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
-                            .bg(rgb(if active_tab == Tab::Products { c.surface_active } else { c.surface_default }))
-                            .text_size(px(12.)).text_color(rgb(c.text_default))
+                            .bg(rgb(if is_tab { c.surface_active } else { c.surface_default }))
+                            .when(!is_tab, |d| d.hover(move |s| s.bg(hover_bg)))
+                            .text_size(rems(0.923)).text_color(rgb(c.text_default))
                             .cursor_pointer()
                             .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| {
                                 this.active_tab = Tab::Products;
                                 cx.notify();
                             }))
                             .child("Products")
-                    )
-                    .child(
+                    })
+                    .child({
+                        let is_tab = active_tab == Tab::Restock;
+                        let hover_bg = rgb(c.surface_hover);
                         div()
                             .id("tab-restock")
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
-                            .bg(rgb(if active_tab == Tab::Restock { c.surface_active } else { c.surface_default }))
-                            .text_size(px(12.)).text_color(rgb(c.text_default))
+                            .bg(rgb(if is_tab { c.surface_active } else { c.surface_default }))
+                            .when(!is_tab, |d| d.hover(move |s| s.bg(hover_bg)))
+                            .text_size(rems(0.923)).text_color(rgb(c.text_default))
                             .cursor_pointer()
                             .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| {
                                 this.active_tab = Tab::Restock;
                                 cx.notify();
                             }))
                             .child("Restock Alerts")
-                    )
+                    })
                     .child(
                         div()
                             .flex().flex_row().items_center().gap(px(4.))
@@ -172,7 +202,7 @@ impl Render for InventoryPanel {
                                 let mut clear = div()
                                     .id("inv-search-clear")
                                     .px(px(6.)).py(px(2.)).rounded(px(3.))
-                                    .text_size(px(11.)).text_color(rgb(c.text_muted))
+                                    .text_size(rems(0.846)).text_color(rgb(c.text_muted))
                                     .child("×");
                                 if has_query {
                                     let si = self.search_input.clone();
@@ -186,24 +216,26 @@ impl Render for InventoryPanel {
                             })
                     )
                     .child(div().flex_1())
-                    .child(
+                    .child({
+                        let hover_bg = rgb(c.surface_hover);
                         div()
                             .id("btn-new-product")
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
                             .bg(rgb(c.surface_default))
-                            .text_size(px(12.)).text_color(rgb(c.text_default))
+                            .hover(move |s| s.bg(hover_bg))
+                            .text_size(rems(0.923)).text_color(rgb(c.text_default))
                             .cursor_pointer()
                             .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| {
                                 this.open_product_form(window, cx);
                             }))
                             .child("+ New Product")
-                    )
+                    })
                     .child({
                         let mut btn = div()
                             .id("btn-new-entry")
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
                             .bg(rgb(if has_selection { c.surface_active } else { c.surface_default }))
-                            .text_size(px(12.)).text_color(rgb(c.text_default))
+                            .text_size(rems(0.923)).text_color(rgb(c.text_default))
                             .child("+ New Entry");
 
                         if has_selection {
@@ -266,7 +298,7 @@ impl Render for InventoryPanel {
                         .child(
                             div()
                                 .px(px(12.)).pt(px(10.)).pb(px(4.))
-                                .text_size(px(13.))
+                                .text_size(rems(1.))
                                 .text_color(rgb(c.text_default))
                                 .font_weight(gpui::FontWeight::BOLD)
                                 .child(target.product_name.clone())
@@ -274,7 +306,7 @@ impl Render for InventoryPanel {
                         .child(
                             div()
                                 .px(px(12.)).pb(px(8.))
-                                .text_size(px(11.))
+                                .text_size(rems(0.846))
                                 .text_color(rgb(c.text_muted))
                                 .child(info_line)
                         )
@@ -284,12 +316,38 @@ impl Render for InventoryPanel {
                                 .bg(rgb(c.surface_default))
                         )
                         .child({
+                            let product_for_edit = {
+                                let store = self.store.read(cx);
+                                store.products.iter().find(|p| p.product.id == pid).map(|p| p.product.clone())
+                            };
+                            let hover_bg = rgb(c.surface_hover);
+                            div()
+                                .id("ctx-inv-edit-product")
+                                .px(px(12.)).py(px(8.))
+                                .cursor_pointer()
+                                .hover(move |s| s.bg(hover_bg))
+                                .text_size(rems(1.))
+                                .text_color(rgb(c.text_default))
+                                .child("Edit Product")
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(move |this, _: &MouseDownEvent, window, cx| {
+                                        this.store.update(cx, |s, cx| s.clear_context_menu(cx));
+                                        if let Some(product) = product_for_edit.clone() {
+                                            this.open_edit_form(product, window, cx);
+                                        }
+                                    }),
+                                )
+                        })
+                        .child({
                             let n = name.clone();
+                            let hover_bg = rgb(c.surface_hover);
                             div()
                                 .id("ctx-inv-price-history")
                                 .px(px(12.)).py(px(8.))
                                 .cursor_pointer()
-                                .text_size(px(13.))
+                                .hover(move |s| s.bg(hover_bg))
+                                .text_size(rems(1.))
                                 .text_color(rgb(c.text_default))
                                 .child("Price History")
                                 .on_mouse_down(
@@ -303,12 +361,14 @@ impl Render for InventoryPanel {
                                     }),
                                 )
                         })
-                        .child(
+                        .child({
+                            let hover_bg = rgb(c.surface_hover);
                             div()
                                 .id("ctx-inv-add-price")
                                 .px(px(12.)).py(px(8.))
                                 .cursor_pointer()
-                                .text_size(px(13.))
+                                .hover(move |s| s.bg(hover_bg))
+                                .text_size(rems(1.))
                                 .text_color(rgb(c.text_default))
                                 .child("Add Price Entry")
                                 .on_mouse_down(
@@ -321,7 +381,7 @@ impl Render for InventoryPanel {
                                         });
                                     }),
                                 )
-                        )
+                        })
                 );
         }
 

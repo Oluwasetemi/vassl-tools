@@ -15,7 +15,7 @@ pub enum StockStatus {
 
 impl StockStatus {
     pub fn from_levels(current: f64, min: f64) -> Self {
-        if min == 0.0 { return Self::NoAlert; }
+        if min < f64::EPSILON { return Self::NoAlert; }
         if current <= min { Self::Critical }
         else if current <= min * 1.2 { Self::Low }
         else { Self::Healthy }
@@ -116,6 +116,7 @@ impl InventoryStore {
                 .await;
 
             let _ = this.update(cx, |store, cx| {
+                if store.selected_product_id != Some(product_id) { return; } // stale response
                 match result {
                     Ok(entries) => {
                         store.stock_entries = entries;
@@ -181,6 +182,7 @@ mod tests {
                 category: category.map(String::from),
                 unit: "pcs".into(), min_stock_level: 0.0,
                 description: None, notes: None,
+                preferred_supplier_id: None,
                 created_at: "2026-01-01T00:00:00Z".into(),
             },
             current_stock: 10.0,
