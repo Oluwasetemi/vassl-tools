@@ -2,6 +2,7 @@ use anyhow::Context as _;
 use sqlez::domain::Domain;
 use vassl_core::{Project, ProjectStatus, QuotationItem, QuotationStatus};
 use vassl_db::SharedDomain;
+use vassl_inventory::db::InventoryDb;
 
 pub struct QuotationDb(pub sqlez::thread_safe_connection::ThreadSafeConnection);
 
@@ -53,7 +54,7 @@ impl Domain for QuotationDb {
     fn should_allow_migration_change(_: usize, _: &str, _: &str) -> bool { false }
 }
 
-vassl_db::static_connection!(QuotationDb, [SharedDomain]);
+vassl_db::static_connection!(QuotationDb, [SharedDomain, InventoryDb]);
 
 #[derive(Debug, Clone)]
 pub struct QuotationRow {
@@ -229,6 +230,48 @@ impl QuotationDb {
         .await
     }
 
+    /// Like `insert_quotation_with_notes` but generates the reference number atomically
+    /// inside the write lock, eliminating the TOCTOU race between COUNT and INSERT.
+    pub async fn insert_quotation_atomic(
+        &self,
+        project_id: i64,
+        created_by: impl Into<String>,
+        notes:      Option<&str>,
+    ) -> anyhow::Result<i64> {
+        let created_by = created_by.into();
+        let notes      = notes.map(String::from);
+        let now        = chrono::Utc::now().to_rfc3339();
+        let year       = chrono::Utc::now().format("%Y").to_string();
+
+        self.write(move |conn| {
+            let pattern = format!("VASSL-{year}-%");
+            let count: i64 = conn
+                .select_bound::<String, i64>(
+                    "SELECT COALESCE(COUNT(*), 0) FROM quotations WHERE reference_number LIKE ?1",
+                )
+                .context("prepare count")?
+                (pattern)
+                .context("execute count")?
+                .into_iter().next().unwrap_or(0);
+            let ref_num = format!("VASSL-{year}-{:04}", count + 1);
+
+            conn.exec_bound::<(i64, String, Option<String>, String, String, String)>(
+                "INSERT INTO quotations
+                 (project_id, reference_number, notes, created_by, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            )
+            .context("prepare insert_quotation_atomic")?
+            ((project_id, ref_num, notes, created_by, now.clone(), now))
+            .context("execute insert_quotation_atomic")?;
+
+            conn.select_row::<i64>("SELECT last_insert_rowid()")
+                .context("prepare rowid")?()
+                .context("execute rowid")?
+                .context("rowid was None")
+        })
+        .await
+    }
+
     pub async fn insert_project(&self, name: String, client_name: String) -> anyhow::Result<i64> {
         let now = chrono::Utc::now().to_rfc3339();
         self.write(move |conn| {
@@ -284,6 +327,113 @@ impl QuotationDb {
             .context("prepare update_status")?
             ((status_str, now, id))
             .context("execute update_status")
+        })
+        .await
+    }
+
+    /// Atomically marks a quotation as Accepted and inserts a negative stock_entry for every
+    /// line item that references a product (acquisition_type = 'project').
+    pub async fn accept_quotation(&self, id: i64) -> anyhow::Result<()> {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.write(move |conn| {
+            conn.exec_bound::<(String, i64)>(
+                "UPDATE quotations SET status = 'accepted', updated_at = ?1 WHERE id = ?2 AND status != 'accepted'",
+            )
+            .context("prepare accept_quotation update")?
+            ((now.clone(), id))
+            .context("execute accept_quotation update")?;
+
+            // Fetch all line items with products + the quotation's project_id
+            type ItemRow = (i64, f64, Option<i64>);
+            let items = conn
+                .select_bound::<i64, ItemRow>(
+                    "SELECT qi.product_id, qi.quantity, q.project_id
+                     FROM quotation_items qi
+                     JOIN quotations q ON q.id = qi.quotation_id
+                     WHERE qi.quotation_id = ?1 AND qi.product_id IS NOT NULL",
+                )
+                .context("prepare accept items select")?
+                (id)
+                .context("execute accept items select")?;
+
+            // Deduct stock for each product item
+            for (product_id, quantity, project_id) in items {
+                conn.exec_bound::<(i64, f64, String, Option<i64>)>(
+                    "INSERT INTO stock_entries
+                     (product_id, quantity, unit_cost_usd, acquired_at, acquisition_type, project_id)
+                     VALUES (?1, ?2, 0.0, ?3, 'project', ?4)",
+                )
+                .context("prepare stock deduct")?
+                ((product_id, -quantity, now.clone(), project_id))
+                .context("execute stock deduct")?;
+            }
+
+            Ok(())
+        })
+        .await
+    }
+
+    /// Deletes a line item. If the parent quotation is accepted and the item had a product,
+    /// inserts a positive stock_entry to reverse the prior deduction.
+    pub async fn delete_item(&self, item_id: i64) -> anyhow::Result<()> {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.write(move |conn| {
+            // Read the item before deleting
+            type ItemInfo = (Option<i64>, f64, i64);
+            let item = conn
+                .select_bound::<i64, ItemInfo>(
+                    "SELECT qi.product_id, qi.quantity, qi.quotation_id
+                     FROM quotation_items qi WHERE qi.id = ?1",
+                )
+                .context("prepare delete_item select")?
+                (item_id)
+                .context("execute delete_item select")?
+                .into_iter().next()
+                .ok_or_else(|| anyhow::anyhow!("line item {item_id} not found"))?;
+
+            let (product_id, quantity, quotation_id) = item;
+
+            // Check whether the quotation is accepted
+            let status_str = conn
+                .select_bound::<i64, String>(
+                    "SELECT status FROM quotations WHERE id = ?1",
+                )
+                .context("prepare status select")?
+                (quotation_id)
+                .context("execute status select")?
+                .into_iter().next()
+                .unwrap_or_default();
+
+            conn.exec_bound::<i64>("DELETE FROM quotation_items WHERE id = ?1")
+                .context("prepare delete_item")?
+                (item_id)
+                .context("execute delete_item")?;
+
+            // Reverse the stock deduction only if the quote was accepted and item had a product
+            if status_str == "accepted" {
+                if let Some(pid) = product_id {
+                    let project_id: Option<i64> = conn
+                        .select_bound::<i64, Option<i64>>(
+                            "SELECT project_id FROM quotations WHERE id = ?1",
+                        )
+                        .context("prepare project_id select")?
+                        (quotation_id)
+                        .context("execute project_id select")?
+                        .into_iter().next()
+                        .flatten();
+
+                    conn.exec_bound::<(i64, f64, String, Option<i64>)>(
+                        "INSERT INTO stock_entries
+                         (product_id, quantity, unit_cost_usd, acquired_at, acquisition_type, project_id)
+                         VALUES (?1, ?2, 0.0, ?3, 'project', ?4)",
+                    )
+                    .context("prepare stock reversal")?
+                    ((pid, quantity, now, project_id))
+                    .context("execute stock reversal")?;
+                }
+            }
+
+            Ok(())
         })
         .await
     }

@@ -15,9 +15,13 @@ sqlez.workspace      = true
 tracing.workspace    = true
 vassl-core           = { path = "../vassl-core" }
 vassl-db             = { path = "../vassl-db" }
+vassl-inventory      = { path = "../vassl-inventory" }
 vassl-pricebook      = { path = "../vassl-pricebook" }
 vassl-ui             = { path = "../vassl-ui" }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt"] }
 db    = { path = "../db", features = ["test-support"] }
+
+[features]
+test-support = []

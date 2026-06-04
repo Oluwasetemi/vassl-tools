@@ -1,8 +1,7 @@
-use gpui::{Context, Entity, IntoElement, Render, Window, div, prelude::*, px, rgb};
+use gpui::{Context, Entity, IntoElement, Render, Window, div, prelude::*, px, rems, rgb};
 use vassl_core::QuotationStatus;
 use vassl_ui::ThemeHandle;
 
-use crate::colors;
 use crate::store::{QuotationStore, status_badge_color};
 
 pub struct QuotationDetail {
@@ -71,7 +70,7 @@ impl Render for QuotationDetail {
                             .id(format!("status-btn-{}", transition_label(&next_status)))
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
                             .bg(rgb(status_badge_color(next_status.clone())))
-                            .text_size(px(12.)).text_color(rgb(c.canvas_bg))
+                            .text_size(rems(0.923)).text_color(rgb(c.canvas_bg))
                             .cursor_pointer()
                             .on_mouse_down(gpui::MouseButton::Left,
                                 move |_, _, cx: &mut gpui::App| {
@@ -83,16 +82,19 @@ impl Render for QuotationDetail {
             }
         }
 
+        let can_delete = matches!(current_status, Some(QuotationStatus::Draft) | Some(QuotationStatus::Sent) | Some(QuotationStatus::Accepted));
+
         // Line items header
         root = root.child(
             div()
                 .flex().flex_row().items_center()
                 .px(px(12.)).py(px(4.))
                 .bg(rgb(c.surface_default))
-                .child(div().flex_1().text_size(px(11.)).text_color(rgb(c.text_muted)).child("Description"))
-                .child(div().w(px(70.)).text_size(px(11.)).text_color(rgb(c.text_muted)).child("Qty"))
-                .child(div().w(px(90.)).text_size(px(11.)).text_color(rgb(c.text_muted)).child("Unit Price"))
-                .child(div().w(px(90.)).text_size(px(11.)).text_color(rgb(c.text_muted)).child("Total"))
+                .child(div().flex_1().text_size(rems(0.846)).text_color(rgb(c.text_muted)).child("Description"))
+                .child(div().w(px(70.)).text_size(rems(0.846)).text_color(rgb(c.text_muted)).child("Qty"))
+                .child(div().w(px(90.)).text_size(rems(0.846)).text_color(rgb(c.text_muted)).child("Unit Price"))
+                .child(div().w(px(90.)).text_size(rems(0.846)).text_color(rgb(c.text_muted)).child("Total"))
+                .child(div().w(px(28.)))  // column for delete button
         );
 
         if items.is_empty() {
@@ -100,19 +102,38 @@ impl Render for QuotationDetail {
                 div()
                     .flex_1().flex().items_center().justify_center()
                     .text_color(rgb(c.text_muted))
-                    .child("No line items. (Add items in Plan 5 once text input is available.)")
+                    .child("No line items yet — use \"Add Item\" above to add one.")
             );
         } else {
+            let store = self.store.clone();
             let item_rows = div()
                 .id("items-scroll").flex_1().flex().flex_col().overflow_y_scroll()
                 .children(items.iter().map(|item| {
+                    let item_id  = item.id;
+                    let store2   = store.clone();
                     div()
                         .flex().flex_row().items_center().w_full()
                         .px(px(12.)).py(px(6.))
-                        .child(div().flex_1().text_size(px(13.)).text_color(rgb(c.text_default)).child(item.description.clone()))
-                        .child(div().w(px(70.)).text_size(px(12.)).text_color(rgb(c.text_default)).child(format!("{:.2}", item.quantity)))
-                        .child(div().w(px(90.)).text_size(px(12.)).text_color(rgb(c.text_default)).child(format!("${:.2}", item.unit_price_usd)))
-                        .child(div().w(px(90.)).text_size(px(12.)).text_color(rgb(c.status_green)).child(format!("${:.2}", item.total_usd)))
+                        .child(div().flex_1().text_size(rems(1.)).text_color(rgb(c.text_default)).child(item.description.clone()))
+                        .child(div().w(px(70.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child(format!("{:.2}", item.quantity)))
+                        .child(div().w(px(90.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child(format!("${:.2}", item.unit_price_usd)))
+                        .child(div().w(px(90.)).text_size(rems(0.923)).text_color(rgb(c.status_green)).child(format!("${:.2}", item.total_usd)))
+                        .child(
+                            div()
+                                .id(format!("del-item-{item_id}"))
+                                .w(px(28.)).flex().items_center().justify_center()
+                                .when(can_delete, move |d| {
+                                    d.px(px(6.)).py(px(2.)).rounded(px(3.))
+                                        .text_size(rems(0.923)).text_color(rgb(c.text_muted))
+                                        .cursor_pointer()
+                                        .hover(|s| s.text_color(rgb(c.status_red)))
+                                        .on_mouse_down(gpui::MouseButton::Left,
+                                            move |_, _, cx: &mut gpui::App| {
+                                                store2.update(cx, |s, cx| s.delete_item(item_id, cx));
+                                            })
+                                        .child("×")
+                                })
+                        )
                 }));
             root = root.child(item_rows);
         }
@@ -124,7 +145,7 @@ impl Render for QuotationDetail {
                 .px(px(12.)).py(px(8.))
                 .bg(rgb(c.surface_default))
                 .child(
-                    div().text_size(px(13.)).text_color(rgb(c.status_green))
+                    div().text_size(rems(1.)).text_color(rgb(c.status_green))
                         .child(format!("Total: ${total:.2}"))
                 )
         )

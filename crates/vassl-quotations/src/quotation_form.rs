@@ -1,9 +1,8 @@
 use gpui::{Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
-           Render, Window, actions, div, prelude::*, px, rgb, rgba, SharedString};
+           Render, Subscription, Window, actions, div, prelude::*, px, rems, rgb, rgba, SharedString};
 use vassl_core::Project;
 use vassl_ui::{Dropdown, DropdownItem, TextInput, ThemeHandle, text_field};
 
-use crate::colors;
 
 actions!(quotation_form, [EscapeForm]);
 use crate::db::QuotationDb;
@@ -21,6 +20,7 @@ pub struct QuotationForm {
     pub notes:          Entity<TextInput>,
     error:              Option<String>,
     focus_handle:       FocusHandle,
+    _store_sub:         Subscription,
 }
 
 pub fn validate_form(selected_project: Option<i64>) -> Option<String> {
@@ -51,13 +51,13 @@ impl QuotationForm {
         }
 
         // Keep dropdown fresh as the store changes (projects may load after form opens)
-        cx.observe(&store, |this, store_entity, cx| {
+        let _store_sub = cx.observe(&store, |this, store_entity, cx| {
             let (items, loading) = {
                 let s = store_entity.read(cx);
                 (projects_to_items(&s.projects), s.loading)
             };
             this.project_dropdown.update(cx, |d, cx| d.set_items(items, loading, cx));
-        }).detach();
+        });
 
         Self {
             store,
@@ -66,6 +66,7 @@ impl QuotationForm {
             notes:        cx.new(|cx| TextInput::with_placeholder("optional", cx)),
             error:        None,
             focus_handle: cx.focus_handle(),
+            _store_sub,
         }
     }
 
@@ -74,18 +75,34 @@ impl QuotationForm {
         match validate_form(selected) {
             Some(msg) => { self.error = Some(msg); cx.notify(); }
             None => {
-                let pid     = selected.unwrap();
-                let ref_num = self.reference_number.clone();
-                let notes_s = self.notes.read(cx).text().trim().to_string();
-                let notes   = if notes_s.is_empty() { None } else { Some(notes_s) };
-                let store   = self.store.clone();
-                let db      = QuotationDb::global(&**cx);
+                let pid        = selected.unwrap();
+                let ref_num    = self.reference_number.clone();
+                let notes_s    = self.notes.read(cx).text().trim().to_string();
+                let notes      = if notes_s.is_empty() { None } else { Some(notes_s) };
+                let store      = self.store.clone();
+                let db         = QuotationDb::global(&**cx);
+                let app_db     = vassl_db::AppDatabase::global(&**cx).clone();
 
                 cx.spawn(async move |this, cx| {
-                    let result = db.insert_quotation_with_notes(pid, ref_num, "user", notes.as_deref()).await;
-                    if let Err(e) = result { tracing::error!("insert_quotation failed: {e:?}"); return Ok(()); }
-                    let _ = store.update(cx, |s, cx| s.load_quotations(cx));
-                    this.update(cx, |_, cx| cx.emit(QuotationFormEvent::Submitted))
+                    let created_by = vassl_db::shared::current_user(&app_db)
+                        .ok().flatten().unwrap_or_else(|| "unknown".into());
+                    // ref_num is held for display only; the DB generates atomically
+                    let _ = ref_num;
+                    let result = db.insert_quotation_atomic(pid, &created_by, notes.as_deref()).await;
+                    let _ = this.update(cx, |form, cx| {
+                        match result {
+                            Err(e) => {
+                                tracing::error!("insert_quotation failed: {e:?}");
+                                form.error = Some(format!("Save failed: {e}"));
+                                cx.notify();
+                            }
+                            Ok(_) => {
+                                let _ = store.update(cx, |s, cx| s.load_quotations(cx));
+                                cx.emit(QuotationFormEvent::Submitted);
+                            }
+                        }
+                    });
+                    Ok::<(), anyhow::Error>(())
                 }).detach();
             }
         }
@@ -125,9 +142,9 @@ impl Render for QuotationForm {
                             .bg(rgb(c.sidebar_bg))
                             .flex().flex_row().items_center()
                             .child(div().flex_1()
-                                .text_size(px(13.)).text_color(rgb(c.text_default))
+                                .text_size(rems(1.)).text_color(rgb(c.text_default))
                                 .child("New Quotation"))
-                            .child(div().text_size(px(11.)).text_color(rgb(c.text_muted)).child("Esc to cancel"))
+                            .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted)).child("Esc to cancel"))
                     )
                     // ── fields ──────────────────────────────────────────
                     .child(
@@ -135,29 +152,29 @@ impl Render for QuotationForm {
                             // Reference number (read-only)
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
-                                    .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Reference"))
+                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Reference"))
                                     .child(div().flex_1()
                                         .px(px(8.)).py(px(6.)).bg(rgb(c.surface_default)).rounded(px(4.))
-                                        .text_size(px(12.)).text_color(rgb(c.text_muted))
+                                        .text_size(rems(0.923)).text_color(rgb(c.text_muted))
                                         .child(self.reference_number.clone()))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             // Project dropdown
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
-                                    .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Project"))
+                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Project"))
                                     .child(div().flex_1().child(self.project_dropdown.clone()))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             // Notes
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
-                                    .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Notes"))
+                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Notes"))
                                     .child(div().flex_1().child(text_field("", self.notes.clone(), notes_focused, cx)))
                             )
                             .child(
                                 div().h(px(18.)).flex().items_center()
-                                    .child(div().text_size(px(11.)).text_color(rgb(c.status_red))
+                                    .child(div().text_size(rems(0.846)).text_color(rgb(c.status_red))
                                         .child(self.error.as_deref().map(SharedString::from).unwrap_or_default()))
                             )
                     )
@@ -169,12 +186,12 @@ impl Render for QuotationForm {
                             .border_color(rgb(c.surface_default))
                             .flex().flex_row().justify_end().gap(px(8.))
                             .child(div().id("quot-btn-cancel").px(px(18.)).py(px(7.)).rounded(px(5.))
-                                .bg(rgb(c.surface_default)).text_size(px(12.)).text_color(rgb(c.text_default))
+                                .bg(rgb(c.surface_default)).text_size(rems(0.923)).text_color(rgb(c.text_default))
                                 .cursor_pointer()
                                 .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| { cx.emit(QuotationFormEvent::Cancelled); }))
                                 .child("Cancel"))
                             .child(div().id("quot-btn-create").px(px(18.)).py(px(7.)).rounded(px(5.))
-                                .bg(rgb(c.surface_active)).text_size(px(12.)).text_color(rgb(c.text_default))
+                                .bg(rgb(c.surface_active)).text_size(rems(0.923)).text_color(rgb(c.text_default))
                                 .cursor_pointer()
                                 .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| { this.submit(cx); }))
                                 .child("Create Quotation"))

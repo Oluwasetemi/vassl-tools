@@ -1,9 +1,8 @@
 use gpui::{Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
-           MouseButton, MouseDownEvent, Render, Window, actions, div, prelude::*, px, rgb, rgba, SharedString};
+           MouseButton, MouseDownEvent, Render, Window, actions, div, prelude::*, px, rems, rgb, rgba, SharedString};
 use vassl_pricebook::store::ProductPrice;
 use vassl_ui::{TextInput, ThemeHandle, text_field};
 
-use crate::colors;
 use crate::db::QuotationDb;
 use crate::store::QuotationStore;
 
@@ -36,7 +35,7 @@ pub fn validate_line_item(description: &str, quantity: &str, unit_price: &str) -
     let qty: f64 = quantity.trim().parse().map_err(|_| "Quantity must be a valid number".to_string())?;
 
     if qty <= 0.0 {
-        return Err("Quantity must be great than 0".to_string());
+        return Err("Quantity must be greater than 0".to_string());
     }
 
     let price: f64 = unit_price.trim().parse().map_err(|_| "Unit price must be a valid number".to_string())?;
@@ -45,7 +44,7 @@ pub fn validate_line_item(description: &str, quantity: &str, unit_price: &str) -
         return Err("Unit price must be ≥ 0".to_string());
     }
 
-    let total = qty * price;
+    let total = (qty * price * 100.0).round() / 100.0;
 
     Ok((desc.to_string(), qty, price, total))
 }
@@ -86,10 +85,23 @@ impl LineItemForm {
                 let qid = self.quotation_id;
                 let pid = self.selected_product;
                 let db  = QuotationDb::global(&**cx);
+                let store = self.store.clone();
                 cx.spawn(async move |this, cx| {
                     let result = db.insert_item(qid, pid, description, quantity, unit_price, total).await;
-                    if let Err(e) = result { tracing::error!("insert_item failed: {e:?}"); return Ok(()); }
-                    this.update(cx, |_, cx| cx.emit(LineItemFormEvent::Submitted))
+                    let _ = this.update(cx, |form, cx| {
+                        match result {
+                            Err(e) => {
+                                tracing::error!("insert_item failed: {e:?}");
+                                form.error = Some(format!("Save failed: {e}"));
+                                cx.notify();
+                            }
+                            Ok(_) => {
+                                let _ = store.update(cx, |s, cx| s.load_line_items(qid, cx));
+                                cx.emit(LineItemFormEvent::Submitted);
+                            }
+                        }
+                    });
+                    Ok::<(), anyhow::Error>(())
                 }).detach();
             }
         }
@@ -152,16 +164,16 @@ impl Render for LineItemForm {
                             .bg(rgb(c.sidebar_bg))
                             .flex().flex_row().items_center()
                             .child(div().flex_1()
-                                .text_size(px(13.)).text_color(rgb(c.text_default))
+                                .text_size(rems(1.)).text_color(rgb(c.text_default))
                                 .child("Add Line Item"))
-                            .child(div().text_size(px(11.)).text_color(rgb(c.text_muted)).child("Esc to cancel"))
+                            .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted)).child("Esc to cancel"))
                     )
                     // ── product picker ──────────────────────────────────
                     .child(
                         div().flex().flex_col().px(px(20.)).pt(px(8.))
                             .child(
                                 div().flex().flex_row().py(px(10.))
-                                    .child(div().w(px(160.)).pt(px(2.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Product (optional)"))
+                                    .child(div().w(px(160.)).pt(px(2.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Product (optional)"))
                                     .child(
                                         div().id("item-product-picker").flex_1().h(px(110.)).overflow_y_scroll()
                                             .bg(rgb(c.surface_default)).rounded(px(4.))
@@ -185,8 +197,8 @@ impl Render for LineItemForm {
                                                         this.error = None;
                                                         cx.notify();
                                                     }))
-                                                    .child(div().flex_1().text_size(px(12.)).text_color(rgb(c.text_default)).child(p.name.clone()))
-                                                    .child(div().text_size(px(11.)).text_color(rgb(c.status_green)).child(format!("${price:.2}"))))
+                                                    .child(div().flex_1().text_size(rems(0.923)).text_color(rgb(c.text_default)).child(p.name.clone()))
+                                                    .child(div().text_size(rems(0.846)).text_color(rgb(c.status_green)).child(format!("${price:.2}"))))
                                             })
                                             )
                                     )
@@ -198,32 +210,32 @@ impl Render for LineItemForm {
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
-                                    .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Description"))
+                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Description"))
                                     .child(div().flex_1().child(text_field("", self.description.clone(), desc_focused, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
-                                    .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Quantity"))
+                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Quantity"))
                                     .child(div().flex_1().child(text_field("", self.quantity.clone(), qty_focused, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
-                                    .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Unit Price (USD)"))
+                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Unit Price (USD)"))
                                     .child(div().flex_1().child(text_field("", self.unit_price.clone(), up_focused, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
-                                    .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_muted)).child("Total"))
+                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child("Total"))
                                     .child(div().flex_1()
                                         .px(px(8.)).py(px(6.)).bg(rgb(c.surface_default)).rounded(px(4.))
-                                        .text_size(px(13.)).text_color(rgb(c.status_green)).child(total))
+                                        .text_size(rems(1.)).text_color(rgb(c.status_green)).child(total))
                             )
                             .child(
                                 div().h(px(18.)).flex().items_center()
-                                    .child(div().text_size(px(11.)).text_color(rgb(c.status_red))
+                                    .child(div().text_size(rems(0.846)).text_color(rgb(c.status_red))
                                         .child(self.error.as_deref().map(SharedString::from).unwrap_or_default()))
                             )
                     )
@@ -235,12 +247,12 @@ impl Render for LineItemForm {
                             .border_color(rgb(c.surface_default))
                             .flex().flex_row().justify_end().gap(px(8.))
                             .child(div().id("item-btn-cancel").px(px(18.)).py(px(7.)).rounded(px(5.))
-                                .bg(rgb(c.surface_default)).text_size(px(12.)).text_color(rgb(c.text_default))
+                                .bg(rgb(c.surface_default)).text_size(rems(0.923)).text_color(rgb(c.text_default))
                                 .cursor_pointer()
                                 .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| { cx.emit(LineItemFormEvent::Cancelled); }))
                                 .child("Cancel"))
                             .child(div().id("item-btn-add").px(px(18.)).py(px(7.)).rounded(px(5.))
-                                .bg(rgb(c.surface_active)).text_size(px(12.)).text_color(rgb(c.text_default))
+                                .bg(rgb(c.surface_active)).text_size(rems(0.923)).text_color(rgb(c.text_default))
                                 .cursor_pointer()
                                 .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| { this.submit(cx); }))
                                 .child("Add Item"))

@@ -1,8 +1,7 @@
 use gpui::{Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Window,
-           actions, div, prelude::*, px, rgb, rgba, SharedString};
+           actions, div, prelude::*, px, rems, rgb, rgba, SharedString};
 use vassl_ui::{TextInput, ThemeHandle, text_field};
 
-use crate::colors;
 use crate::db::QuotationDb;
 use crate::store::QuotationStore;
 
@@ -111,27 +110,27 @@ impl Render for ProjectForm {
                             .bg(rgb(c.sidebar_bg))
                             .flex().flex_row().items_center()
                             .child(div().flex_1()
-                                .text_size(px(13.)).text_color(rgb(c.text_default))
+                                .text_size(rems(1.)).text_color(rgb(c.text_default))
                                 .child("New Project"))
-                            .child(div().text_size(px(11.)).text_color(rgb(c.text_muted)).child("Esc to cancel"))
+                            .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted)).child("Esc to cancel"))
                     )
                     // ── fields ──────────────────────────────────────────
                     .child(
                         div().flex().flex_col().px(px(20.)).pt(px(8.)).pb(px(4.))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
-                                    .child(div().w(px(140.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Project Name"))
+                                    .child(div().w(px(140.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Project Name"))
                                     .child(div().flex_1().child(text_field("", self.name.clone(), name_focused, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
-                                    .child(div().w(px(140.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Client Name"))
+                                    .child(div().w(px(140.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Client Name"))
                                     .child(div().flex_1().child(text_field("", self.client_name.clone(), cli_focused, cx)))
                             )
                             .child(
                                 div().h(px(18.)).flex().items_center()
-                                    .child(div().text_size(px(11.)).text_color(rgb(c.status_red))
+                                    .child(div().text_size(rems(0.846)).text_color(rgb(c.status_red))
                                         .child(self.error.as_deref().map(SharedString::from).unwrap_or_default()))
                             )
                     )
@@ -143,12 +142,12 @@ impl Render for ProjectForm {
                             .border_color(rgb(c.surface_default))
                             .flex().flex_row().justify_end().gap(px(8.))
                             .child(div().id("proj-btn-cancel").px(px(18.)).py(px(7.)).rounded(px(5.))
-                                .bg(rgb(c.surface_default)).text_size(px(12.)).text_color(rgb(c.text_default))
+                                .bg(rgb(c.surface_default)).text_size(rems(0.923)).text_color(rgb(c.text_default))
                                 .cursor_pointer()
                                 .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| { cx.emit(ProjectFormEvent::Cancelled); }))
                                 .child("Cancel"))
                             .child(div().id("proj-btn-save").px(px(18.)).py(px(7.)).rounded(px(5.))
-                                .bg(rgb(c.surface_active)).text_size(px(12.)).text_color(rgb(c.text_default))
+                                .bg(rgb(c.surface_active)).text_size(rems(0.923)).text_color(rgb(c.text_default))
                                 .cursor_pointer()
                                 .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| { this.submit(cx); }))
                                 .child("Create Project"))

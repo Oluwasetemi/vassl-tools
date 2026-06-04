@@ -1,9 +1,8 @@
 use gpui::{Context, Entity, IntoElement, Render, Subscription, Window,
-           div, prelude::*, px, rgb};
+           div, prelude::*, px, rems, rgb};
 use vassl_pricebook::store::PriceBookStoreHandle;
 use vassl_ui::ThemeHandle;
 
-use crate::colors;
 use crate::line_item_form::{LineItemForm, LineItemFormEvent};
 use crate::quotation_detail::QuotationDetail;
 use crate::project_form::{ProjectForm, ProjectFormEvent};
@@ -148,51 +147,59 @@ impl Render for QuotationPanel {
                     .flex().flex_row().items_center().gap(px(8.))
                     .px(px(16.)).py(px(8.))
                     .bg(rgb(c.canvas_bg))
-                    .child(
+                    .child({
+                        let is_tab = active_tab == Tab::Quotations;
+                        let hover_bg = rgb(c.surface_hover);
                         div()
                             .id("quot-tab-quotations")
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
-                            .bg(rgb(if active_tab == Tab::Quotations { c.surface_active } else { c.surface_default }))
-                            .text_size(px(12.)).text_color(rgb(c.text_default))
+                            .bg(rgb(if is_tab { c.surface_active } else { c.surface_default }))
+                            .when(!is_tab, |d| d.hover(move |s| s.bg(hover_bg)))
+                            .text_size(rems(0.923)).text_color(rgb(c.text_default))
                             .cursor_pointer()
                             .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
                                 this.active_tab = Tab::Quotations;
                                 cx.notify();
                             }))
                             .child("Quotations")
-                    )
-                    .child(
+                    })
+                    .child({
+                        let is_tab = active_tab == Tab::Items;
+                        let hover_bg = rgb(c.surface_hover);
                         div()
                             .id("quot-tab-items")
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
-                            .bg(rgb(if active_tab == Tab::Items { c.surface_active } else { c.surface_default }))
-                            .text_size(px(12.)).text_color(rgb(c.text_default))
+                            .bg(rgb(if is_tab { c.surface_active } else { c.surface_default }))
+                            .when(!is_tab, |d| d.hover(move |s| s.bg(hover_bg)))
+                            .text_size(rems(0.923)).text_color(rgb(c.text_default))
                             .cursor_pointer()
                             .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
                                 this.active_tab = Tab::Items;
                                 cx.notify();
                             }))
                             .child("Items")
-                    )
+                    })
                     .child(div().flex_1())
-                    .child(
+                    .child({
+                        let hover_bg = rgb(c.surface_hover);
                         div()
                             .id("quot-btn-new-project")
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
                             .bg(rgb(c.surface_default))
-                            .text_size(px(12.)).text_color(rgb(c.text_muted))
+                            .hover(move |s| s.bg(hover_bg))
+                            .text_size(rems(0.923)).text_color(rgb(c.text_muted))
                             .cursor_pointer()
                             .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, cx| {
                                 this.open_project_form(window, cx);
                             }))
                             .child("+ New Project")
-                    )
+                    })
                     .child(
                         div()
                             .id("quot-btn-new")
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
                             .bg(rgb(c.surface_active))
-                            .text_size(px(12.)).text_color(rgb(c.text_default))
+                            .text_size(rems(0.923)).text_color(rgb(c.text_default))
                             .cursor_pointer()
                             .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, cx| {
                                 this.open_form(window, cx);
@@ -205,7 +212,7 @@ impl Render for QuotationPanel {
                             .id("quot-btn-add-item")
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
                             .bg(rgb(if active_tab == Tab::Items && has_selection { c.surface_active } else { c.surface_default }))
-                            .text_size(px(12.)).text_color(rgb(c.text_default))
+                            .text_size(rems(0.923)).text_color(rgb(c.text_default))
                             .child("+ Add Item");
                         if active_tab == Tab::Items && has_selection {
                             btn = btn.cursor_pointer()

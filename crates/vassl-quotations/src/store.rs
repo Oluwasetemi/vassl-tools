@@ -1,5 +1,6 @@
 use gpui::{Context, Entity, EventEmitter, Global};
 use vassl_core::{Project, QuotationItem, QuotationStatus};
+use vassl_inventory::InventoryStoreHandle;
 
 use crate::db::{QuotationDb, QuotationRow};
 
@@ -50,8 +51,11 @@ impl QuotationStore {
         let db = QuotationDb::global(&**cx);
         cx.spawn(async move |this, cx| {
             let db2 = db.clone();
-            let quot_result = cx.background_executor().spawn(async move { db.list_quotations_with_project() }).await;
-            let proj_result = cx.background_executor().spawn(async move { db2.list_projects() }).await;
+            // Spawn both before awaiting either so they run concurrently.
+            let quot_task = cx.background_executor().spawn(async move { db.list_quotations_with_project() });
+            let proj_task = cx.background_executor().spawn(async move { db2.list_projects() });
+            let quot_result = quot_task.await;
+            let proj_result = proj_task.await;
 
             let _ = this.update(cx, |store, cx| {
                 store.loading = false;
@@ -107,14 +111,46 @@ impl QuotationStore {
     }
 
     pub fn transition_status(&mut self, id: i64, new_status: QuotationStatus, cx: &mut Context<Self>) {
-        let db = QuotationDb::global(&**cx);
+        let db        = QuotationDb::global(&**cx);
+        let inv_store = cx.global::<InventoryStoreHandle>().0.clone();
+        let is_accept = new_status == QuotationStatus::Accepted;
         cx.spawn(async move |this, cx| {
-            let result = db.update_status(id, new_status).await;
+            let result = if is_accept {
+                db.accept_quotation(id).await
+            } else {
+                db.update_status(id, new_status).await
+            };
             if let Err(e) = result {
-                tracing::error!("update_status failed: {e:?}");
+                tracing::error!("transition_status failed: {e:?}");
                 return Ok::<(), anyhow::Error>(());
             }
-            let _ = this.update(cx, |store, cx| store.load_quotations(cx));
+            let _ = this.update(cx, |store, cx| {
+                store.load_quotations(cx);
+                if is_accept {
+                    let _ = inv_store.update(cx, |s, cx| s.load_products(cx));
+                }
+            });
+            Ok(())
+        }).detach();
+    }
+
+    pub fn delete_item(&mut self, item_id: i64, cx: &mut Context<Self>) {
+        let quotation_id = match self.selected_id {
+            Some(id) => id,
+            None     => return,
+        };
+        let db        = QuotationDb::global(&**cx);
+        let inv_store = cx.global::<InventoryStoreHandle>().0.clone();
+        cx.spawn(async move |this, cx| {
+            if let Err(e) = db.delete_item(item_id).await {
+                tracing::error!("delete_item failed: {e:?}");
+                return Ok::<(), anyhow::Error>(());
+            }
+            let _ = this.update(cx, |store, cx| {
+                store.load_line_items(quotation_id, cx);
+                store.load_quotations(cx);
+                let _ = inv_store.update(cx, |s, cx| s.load_products(cx));
+            });
             Ok(())
         }).detach();
     }

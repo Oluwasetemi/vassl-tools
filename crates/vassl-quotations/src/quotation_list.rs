@@ -1,8 +1,7 @@
 use gpui::{App, Context, Entity, IntoElement, MouseButton, MouseDownEvent, Render, Window,
-           div, prelude::*, px, rgb};
+           div, prelude::*, px, rems, rgb};
 use vassl_ui::{ThemeColors, ThemeHandle};
 
-use crate::colors;
 use crate::db::QuotationRow;
 use crate::store::{QuotationStore, status_badge_color};
 
@@ -58,6 +57,7 @@ impl Render for QuotationList {
 fn quotation_row(q: &QuotationRow, selected: bool, store: Entity<QuotationStore>, c: &ThemeColors) -> impl IntoElement {
     let id        = q.id;
     let row_bg    = if selected { c.surface_active } else { c.canvas_bg };
+    let hover_bg  = rgb(c.surface_hover);
     let badge_col = status_badge_color(q.status.clone());
     let date_str  = q.created_at.get(..10).unwrap_or("").to_string();
 
@@ -66,6 +66,7 @@ fn quotation_row(q: &QuotationRow, selected: bool, store: Entity<QuotationStore>
         .flex().flex_row().items_center().w_full()
         .px(px(12.)).py(px(6.))
         .bg(rgb(row_bg))
+        .when(!selected, |d| d.hover(move |s| s.bg(hover_bg)))
         .cursor_pointer()
         .on_mouse_down(
             MouseButton::Left,
@@ -77,22 +78,22 @@ fn quotation_row(q: &QuotationRow, selected: bool, store: Entity<QuotationStore>
         .child(div().w(px(8.)).h(px(8.)).rounded_full().bg(rgb(badge_col)).mr(px(8.)))
         // Reference number
         .child(
-            div().w(px(130.)).text_size(px(12.)).text_color(rgb(c.text_default))
+            div().w(px(130.)).text_size(rems(0.923)).text_color(rgb(c.text_default))
                 .child(q.reference_number.clone())
         )
         // Project + client
         .child(
-            div().flex_1().text_size(px(12.)).text_color(rgb(c.text_muted))
+            div().flex_1().text_size(rems(0.923)).text_color(rgb(c.text_muted))
                 .child(format!("{} / {}", q.project_name, q.client_name))
         )
         // Total
         .child(
-            div().w(px(90.)).text_size(px(12.)).text_color(rgb(c.text_default))
+            div().w(px(90.)).text_size(rems(0.923)).text_color(rgb(c.text_default))
                 .child(format_total(q.total_usd))
         )
         // Date
         .child(
-            div().w(px(90.)).text_size(px(11.)).text_color(rgb(c.text_muted))
+            div().w(px(90.)).text_size(rems(0.846)).text_color(rgb(c.text_muted))
                 .child(date_str)
         )
 }
