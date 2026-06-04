@@ -6090,6 +6090,7 @@ dependencies = [
  "tracing-appender",
  "tracing-log",
  "tracing-subscriber",
+ "vassl-core",
  "vassl-db",
  "vassl-inventory",
  "vassl-pricebook",
@@ -6140,6 +6141,7 @@ dependencies = [
  "tracing",
  "vassl-core",
  "vassl-db",
+ "vassl-suppliers",
  "vassl-ui",
 ]
 
@@ -6181,6 +6183,7 @@ dependencies = [
  "tracing",
  "vassl-core",
  "vassl-db",
+ "vassl-inventory",
  "vassl-pricebook",
  "vassl-ui",
 ]

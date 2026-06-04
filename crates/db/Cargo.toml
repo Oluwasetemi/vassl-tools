@@ -9,9 +9,6 @@ license = "GPL-3.0-or-later"
 path = "src/db.rs"
 doctest = false
 
-[features]
-test-support = []
-
 [dependencies]
 anyhow = "1"
 gpui = { git = "https://github.com/zed-industries/zed" }
@@ -28,3 +25,7 @@ zed_env_vars = { path = "../zed_env_vars" }
 
 [dev-dependencies]
 tempfile = "3"
+
+[features]
+test-support    = []
+zed-test-harness = []
