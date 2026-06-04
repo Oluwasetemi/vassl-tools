@@ -1,5 +1,5 @@
 use gpui::{Context, Entity, IntoElement, Render, Subscription, Window,
-           div, prelude::*, px, rgb};
+           div, prelude::*, px, rems, rgb};
 use vassl_ui::{TextInput, ThemeHandle, text_field};
 
 use crate::store::SupplierStore;
@@ -19,6 +19,12 @@ impl SupplierPanel {
         let list = cx.new(|cx| SupplierList::new(store.clone(), cx));
         store.update(cx, |s, cx| s.load_suppliers(cx));
         let search_input = cx.new(|cx| TextInput::with_placeholder("Filter…", cx));
+
+        cx.observe(&search_input, |this, input, cx| {
+            let q = input.read(cx).text().to_string();
+            this.store.update(cx, |s, cx| s.set_search_query(q, cx));
+        }).detach();
+
         Self { store, list, form: None, _form_sub: None, search_input }
     }
 
@@ -65,12 +71,7 @@ impl Render for SupplierPanel {
         let c             = cx.global::<ThemeHandle>().0.clone();
         let has_selection = self.store.read(cx).selected_supplier_id.is_some();
 
-        // Sync filter input → store
-        let q = self.search_input.read(cx).text().to_string();
-        if q != self.store.read(cx).search_query {
-            self.store.update(cx, |s, cx| s.set_search_query(q.clone(), cx));
-        }
-        let has_query = !q.is_empty();
+        let has_query = !self.search_input.read(cx).text().is_empty();
 
         let mut root = div()
             .relative()
@@ -95,7 +96,7 @@ impl Render for SupplierPanel {
                                 let mut clear = div()
                                     .id("sup-search-clear")
                                     .px(px(6.)).py(px(2.)).rounded(px(3.))
-                                    .text_size(px(11.)).text_color(rgb(c.text_muted))
+                                    .text_size(rems(0.846)).text_color(rgb(c.text_muted))
                                     .child("×");
                                 if has_query {
                                     let si = self.search_input.clone();
@@ -109,24 +110,26 @@ impl Render for SupplierPanel {
                             })
                     )
                     .child(div().flex_1())
-                    .child(
+                    .child({
+                        let hover_bg = rgb(c.surface_hover);
                         div()
                             .id("sup-btn-new")
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
                             .bg(rgb(c.surface_default))
-                            .text_size(px(12.)).text_color(rgb(c.text_default))
+                            .hover(move |s| s.bg(hover_bg))
+                            .text_size(rems(0.923)).text_color(rgb(c.text_default))
                             .cursor_pointer()
                             .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, cx| {
                                 this.open_new_form(window, cx);
                             }))
                             .child("+ New Supplier")
-                    )
+                    })
                     .child({
                         let mut btn = div()
                             .id("sup-btn-edit")
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
                             .bg(rgb(if has_selection { c.surface_active } else { c.surface_default }))
-                            .text_size(px(12.)).text_color(rgb(c.text_default))
+                            .text_size(rems(0.923)).text_color(rgb(c.text_default))
                             .child("Edit");
                         if has_selection {
                             btn = btn

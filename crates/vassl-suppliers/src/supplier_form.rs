@@ -1,5 +1,5 @@
 use gpui::{Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Window,
-           actions, div, prelude::*, px, rgb, rgba, SharedString};
+           actions, div, prelude::*, px, rems, rgb, rgba, SharedString};
 use vassl_core::Supplier;
 use vassl_ui::{TextInput, ThemeHandle, text_field};
 
@@ -190,43 +190,43 @@ impl Render for SupplierForm {
                             .px(px(20.)).py(px(14.))
                             .bg(rgb(c.sidebar_bg))
                             .flex().flex_row().items_center()
-                            .child(div().flex_1().text_size(px(13.)).text_color(rgb(c.text_default)).child(title))
-                            .child(div().text_size(px(11.)).text_color(rgb(c.text_muted)).child("Esc to cancel"))
+                            .child(div().flex_1().text_size(rems(1.)).text_color(rgb(c.text_default)).child(title))
+                            .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted)).child("Esc to cancel"))
                     )
                     .child(
                         div().flex().flex_col().px(px(20.)).pt(px(8.)).pb(px(4.))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
-                                    .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_default)).child("Name"))
+                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Name"))
                                     .child(div().flex_1().child(text_field("", self.name.clone(), name_f, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
-                                    .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_muted)).child("Contact Person"))
+                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child("Contact Person"))
                                     .child(div().flex_1().child(text_field("", self.contact_person.clone(), contact_f, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
-                                    .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_muted)).child("Email"))
+                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child("Email"))
                                     .child(div().flex_1().child(text_field("", self.email.clone(), email_f, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
-                                    .child(div().w(px(160.)).text_size(px(12.)).text_color(rgb(c.text_muted)).child("Phone"))
+                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child("Phone"))
                                     .child(div().flex_1().child(text_field("", self.phone.clone(), phone_f, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_start().py(px(10.))
-                                    .child(div().w(px(160.)).pt(px(6.)).text_size(px(12.)).text_color(rgb(c.text_muted)).child("Notes"))
+                                    .child(div().w(px(160.)).pt(px(6.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child("Notes"))
                                     .child(div().flex_1().h(px(64.)).child(text_field("", self.notes.clone(), notes_f, cx)))
                             )
                             .child(
                                 div().h(px(18.)).flex().items_center()
-                                    .child(div().text_size(px(11.)).text_color(rgb(c.status_red))
+                                    .child(div().text_size(rems(0.846)).text_color(rgb(c.status_red))
                                         .child(self.error.as_deref().map(SharedString::from).unwrap_or_default()))
                             )
                     )
@@ -236,12 +236,12 @@ impl Render for SupplierForm {
                             .border_t_1().border_color(rgb(c.surface_default))
                             .flex().flex_row().justify_end().gap(px(8.))
                             .child(div().id("sup-btn-cancel").px(px(18.)).py(px(7.)).rounded(px(5.))
-                                .bg(rgb(c.surface_default)).text_size(px(12.)).text_color(rgb(c.text_default))
+                                .bg(rgb(c.surface_default)).text_size(rems(0.923)).text_color(rgb(c.text_default))
                                 .cursor_pointer()
                                 .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| cx.emit(SupplierFormEvent::Cancelled)))
                                 .child("Cancel"))
                             .child(div().id("sup-btn-save").px(px(18.)).py(px(7.)).rounded(px(5.))
-                                .bg(rgb(c.surface_active)).text_size(px(12.)).text_color(rgb(c.text_default))
+                                .bg(rgb(c.surface_active)).text_size(rems(0.923)).text_color(rgb(c.text_default))
                                 .cursor_pointer()
                                 .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| this.submit(cx)))
                                 .child(save_label))

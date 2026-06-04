@@ -1,5 +1,5 @@
 use gpui::{App, Context, Entity, IntoElement, MouseButton, MouseDownEvent, Render, Window,
-           div, prelude::*, px, rgb};
+           div, prelude::*, px, rems, rgb};
 use vassl_core::Supplier;
 use vassl_ui::{ThemeColors, ThemeHandle};
 
@@ -69,14 +69,22 @@ impl Render for SupplierList {
 }
 
 fn supplier_row(s: &Supplier, selected: bool, store: Entity<SupplierStore>, c: &ThemeColors) -> impl IntoElement {
-    let id     = s.id;
-    let row_bg = if selected { c.surface_active } else { c.canvas_bg };
+    let id       = s.id;
+    let row_bg   = if selected { c.surface_active } else { c.canvas_bg };
+    let hover_bg = rgb(c.surface_hover);
+    let contact = match (&s.email, &s.phone) {
+        (Some(e), Some(p)) => format!("{e}  {p}"),
+        (Some(e), None)    => e.clone(),
+        (None, Some(p))    => p.clone(),
+        (None, None)       => String::new(),
+    };
 
     div()
         .id(format!("supplier-{id}"))
         .flex().flex_row().items_center().w_full()
         .px(px(12.)).py(px(7.))
         .bg(rgb(row_bg))
+        .when(!selected, |d| d.hover(move |s| s.bg(hover_bg)))
         .cursor_pointer()
         .on_mouse_down(
             MouseButton::Left,
@@ -84,7 +92,21 @@ fn supplier_row(s: &Supplier, selected: bool, store: Entity<SupplierStore>, c: &
                 store.update(cx, |s, cx| s.select_supplier(id, cx));
             },
         )
-        .child(format_supplier_row(s))
+        .child(
+            div()
+                .flex_1()
+                .text_size(rems(1.))
+                .text_color(rgb(c.text_default))
+                .child(s.name.clone())
+        )
+        .when(!contact.is_empty(), |el| {
+            el.child(
+                div()
+                    .text_size(rems(0.846))
+                    .text_color(rgb(c.text_muted))
+                    .child(contact)
+            )
+        })
 }
 
 #[cfg(test)]
