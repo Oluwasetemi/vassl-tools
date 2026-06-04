@@ -10,6 +10,7 @@ pub struct Product {
     pub min_stock_level: f64,
     pub description: Option<String>,
     pub notes: Option<String>,
+    pub preferred_supplier_id: Option<i64>,
     pub created_at: String,
 }
 
@@ -22,6 +23,7 @@ pub struct NewProduct {
     pub min_stock_level: f64,
     pub description: Option<String>,
     pub notes: Option<String>,
+    pub preferred_supplier_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,6 +45,7 @@ pub struct StockEntry {
 pub enum AcquisitionType {
     Project,
     Restock,
+    Adjustment, // manual stock correction; quantity may be negative
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,6 +76,7 @@ mod tests {
             min_stock_level: 0.0,
             description: Some("Wide-angle, 24mm".into()),
             notes: None,
+            preferred_supplier_id: None,
             created_at: "2026-01-01T00:00:00Z".into(),
         };
         assert_eq!(p.description.as_deref(), Some("Wide-angle, 24mm"));
@@ -88,6 +92,7 @@ mod tests {
             min_stock_level: 0.0,
             description: None,
             notes: None,
+            preferred_supplier_id: None,
         };
         assert!(np.description.is_none());
     }

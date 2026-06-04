@@ -5,6 +5,7 @@ use thiserror::Error;
 pub struct PriceEntry {
     pub id: i64,
     pub product_id: i64,
+    pub quantity: f64,
     pub cost_price_usd: f64,
     pub duty_cost_usd: f64,
     pub markup_percent: f64,
