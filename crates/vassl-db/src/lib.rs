@@ -47,8 +47,10 @@ impl AppDatabase {
 /// | Windows  | `%LOCALAPPDATA%\VASSL\0-global\db.sqlite` |
 /// | Linux    | `$XDG_DATA_HOME/VASSL/0-global/db.sqlite` |
 pub fn db_path() -> PathBuf {
+    // PANIC: if the OS has no local data directory there is nowhere to store the
+    // database and the application cannot function.  No recovery path exists.
     dirs::data_local_dir()
-        .expect("platform has no local data dir")
+        .expect("OS has no local data directory (required for database storage)")
         .join("VASSL")
         .join("0-global")
         .join("db.sqlite")
