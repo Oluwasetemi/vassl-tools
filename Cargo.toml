@@ -8,6 +8,7 @@ members = [
     "crates/vassl-pricebook",
     "crates/vassl-suppliers",
     "crates/vassl-ui",
+    "crates/vassl-seed",
     # Vendored from Zed monorepo
     "crates/collections",
     "crates/util",
@@ -51,6 +52,10 @@ unicode-segmentation = "1"
 
 # Live config reload
 arc-swap = "1"
+
+# XLSX import
+calamine  = "0.26"
+rusqlite  = { version = "0.32", features = ["bundled"] }
 
 vassl-ui = { path = "crates/vassl-ui" }
 

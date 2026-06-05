@@ -1,0 +1,15 @@
+[package]
+name    = "vassl-seed"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "seed"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace   = true
+calamine.workspace = true
+chrono.workspace   = true
+dirs.workspace     = true
+rusqlite.workspace = true
