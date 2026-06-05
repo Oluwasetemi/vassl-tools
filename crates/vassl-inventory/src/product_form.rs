@@ -28,12 +28,17 @@ pub struct ProductForm {
     name:               Entity<TextInput>,
     category:           Entity<TextInput>,
     unit:               Entity<TextInput>,
+    model_number:       Entity<TextInput>,
+    part_number:        Entity<TextInput>,
+    duty_percent:       Entity<TextInput>,
     initial_qty:        Entity<TextInput>,  // create mode only
     edit_stock:         Entity<TextInput>,  // edit mode only; pre-filled with current stock
     min_stock:          Entity<TextInput>,
     description:        Entity<TextInput>,
     supplier_dropdown:  Entity<Dropdown>,
     _supplier_sub:      Subscription,
+    cancel_focus:       FocusHandle,
+    save_focus:         FocusHandle,
     error:              Option<String>,
     focus_handle:       FocusHandle,
 }
@@ -58,8 +63,8 @@ impl ProductForm {
     fn make_supplier_dropdown(preselect: Option<i64>, cx: &mut Context<Self>) -> (Entity<Dropdown>, Subscription) {
         let sup_store = cx.global::<SupplierStoreHandle>().0.clone();
         let suppliers = sup_store.read(cx).suppliers.clone();
-        let dropdown  = cx.new(|_| {
-            let mut d = Dropdown::new("No preferred supplier", "No suppliers yet — add one in Suppliers.");
+        let dropdown  = cx.new(|cx| {
+            let mut d = Dropdown::new("No preferred supplier", "No suppliers yet — add one in Suppliers.", cx);
             d.items = Self::suppliers_to_items(&suppliers);
             d.loading = false;
             d.selected_id = preselect;
@@ -92,6 +97,11 @@ impl ProductForm {
 
     pub fn new(store: Entity<InventoryStore>, cx: &mut Context<Self>) -> Self {
         let (supplier_dropdown, _supplier_sub) = Self::make_supplier_dropdown(None, cx);
+        let description = cx.new(|cx| {
+            let mut f = TextInput::with_placeholder("", cx);
+            f.suppress_placeholder = true;
+            f
+        });
         Self {
             mode:           FormMode::Create,
             store,
@@ -101,14 +111,17 @@ impl ProductForm {
             name:         cx.new(|cx| TextInput::with_placeholder("e.g. IP Camera 2MP", cx)),
             category:     cx.new(|cx| TextInput::with_placeholder("optional: Cameras, Cabling…", cx)),
             unit:         cx.new(|cx| TextInput::with_placeholder("pcs, meters, rolls…", cx)),
+            model_number: cx.new(|cx| TextInput::with_placeholder("e.g. DS-2CD2143G2-I", cx)),
+            part_number:  cx.new(|cx| TextInput::with_placeholder("e.g. PN-001", cx)),
+            duty_percent: cx.new(|cx| TextInput::with_placeholder("e.g. 42.5", cx)),
             initial_qty:  cx.new(|cx| TextInput::with_placeholder("e.g. 10  (optional)", cx)),
-            edit_stock:   cx.new(|cx| TextInput::with_placeholder("", cx)), // unused in create
+            edit_stock:   cx.new(|cx| TextInput::with_placeholder("", cx)),
             min_stock:    cx.new(|cx| TextInput::with_placeholder("0", cx)),
-            description:  cx.new(|cx| TextInput::with_placeholder(
-                "e.g. Wide-angle camera lens, 24mm, F/1.8, compatible with Sony E-mount", cx
-            )),
+            description,
             supplier_dropdown,
             _supplier_sub,
+            cancel_focus: cx.focus_handle(),
+            save_focus:   cx.focus_handle(),
             error:        None,
             focus_handle: cx.focus_handle(),
         }
@@ -138,12 +151,30 @@ impl ProductForm {
         });
         let desc_field = cx.new(|cx| {
             let mut f = TextInput::with_placeholder("optional", cx);
+            f.suppress_placeholder = true;
             if let Some(d) = &product.description { f.set_text(d, cx); }
             f
         });
         let stock_field = cx.new(|cx| {
             let mut f = TextInput::with_placeholder("0", cx);
             f.set_text(&format!("{current_stock:.2}"), cx);
+            f
+        });
+        let model_field = cx.new(|cx| {
+            let mut f = TextInput::with_placeholder("e.g. DS-2CD2143G2-I", cx);
+            if let Some(m) = &product.model_number { f.set_text(m, cx); }
+            f
+        });
+        let part_field = cx.new(|cx| {
+            let mut f = TextInput::with_placeholder("e.g. PN-001", cx);
+            if let Some(p) = &product.part_number { f.set_text(p, cx); }
+            f
+        });
+        let duty_field = cx.new(|cx| {
+            let mut f = TextInput::with_placeholder("e.g. 42.5", cx);
+            if product.duty_percent > 0.0 {
+                f.set_text(&format!("{:.1}", product.duty_percent), cx);
+            }
             f
         });
         let preselect = product.preferred_supplier_id;
@@ -157,12 +188,17 @@ impl ProductForm {
             name:         name_field,
             category:     cat_field,
             unit:         unit_field,
+            model_number: model_field,
+            part_number:  part_field,
+            duty_percent: duty_field,
             initial_qty:  cx.new(|cx| TextInput::with_placeholder("", cx)), // unused in edit
             edit_stock:   stock_field,
             min_stock:    min_field,
             description:  desc_field,
             supplier_dropdown,
             _supplier_sub,
+            cancel_focus: cx.focus_handle(),
+            save_focus:   cx.focus_handle(),
             error:        None,
             focus_handle: cx.focus_handle(),
         }
@@ -176,6 +212,11 @@ impl ProductForm {
         let cat_opt   = if category.is_empty() { None } else { Some(category) };
         let desc      = self.description.read(cx).text().trim().to_string();
         let desc_opt  = if desc.is_empty() { None } else { Some(desc) };
+        let model     = self.model_number.read(cx).text().trim().to_string();
+        let model_opt = if model.is_empty() { None } else { Some(model) };
+        let part      = self.part_number.read(cx).text().trim().to_string();
+        let part_opt  = if part.is_empty() { None } else { Some(part) };
+        let duty: f64 = self.duty_percent.read(cx).text().trim().parse::<f64>().unwrap_or(0.0).max(0.0);
         // -1 is the sentinel "(None)" item; treat as no supplier
         let sup_id    = self.supplier_dropdown.read(cx).selected_id.filter(|&id| id > 0);
 
@@ -201,6 +242,7 @@ impl ProductForm {
                             let insert_result = db.insert_product(
                                 &sku, &name, cat_opt.as_deref(), &unit, min,
                                 desc_opt.as_deref(), None, sup_id,
+                                model_opt.as_deref(), part_opt.as_deref(), duty,
                             ).await;
                             match insert_result {
                                 Err(e) => {
@@ -248,6 +290,7 @@ impl ProductForm {
                             let update_result = db.update_product(
                                 pid, &name, cat_opt.as_deref(), &unit, min,
                                 desc_opt.as_deref(), sup_id,
+                                model_opt.as_deref(), part_opt.as_deref(), duty,
                             ).await;
                             if let Err(e) = update_result {
                                 tracing::error!("update_product failed: {e:?}");
@@ -284,13 +327,19 @@ impl Render for ProductForm {
         let c      = cx.global::<ThemeHandle>().0.clone();
         let is_edit = matches!(self.mode, FormMode::Edit { .. });
 
-        let name_f    = self.name.read(cx).focus_handle.is_focused(window);
-        let cat_f     = self.category.read(cx).focus_handle.is_focused(window);
-        let unit_f    = self.unit.read(cx).focus_handle.is_focused(window);
-        let qty_f     = self.initial_qty.read(cx).focus_handle.is_focused(window);
-        let stock_f   = self.edit_stock.read(cx).focus_handle.is_focused(window);
-        let min_f     = self.min_stock.read(cx).focus_handle.is_focused(window);
-        let desc_f    = self.description.read(cx).focus_handle.is_focused(window);
+        let name_f      = self.name.read(cx).focus_handle.is_focused(window);
+        let cat_f       = self.category.read(cx).focus_handle.is_focused(window);
+        let unit_f      = self.unit.read(cx).focus_handle.is_focused(window);
+        let model_f     = self.model_number.read(cx).focus_handle.is_focused(window);
+        let part_f      = self.part_number.read(cx).focus_handle.is_focused(window);
+        let duty_f      = self.duty_percent.read(cx).focus_handle.is_focused(window);
+        let qty_f       = self.initial_qty.read(cx).focus_handle.is_focused(window);
+        let stock_f     = self.edit_stock.read(cx).focus_handle.is_focused(window);
+        let min_f       = self.min_stock.read(cx).focus_handle.is_focused(window);
+        let desc_f      = self.description.read(cx).focus_handle.is_focused(window);
+        let cancel_f    = self.cancel_focus.is_focused(window);
+        let save_f      = self.save_focus.is_focused(window);
+        let has_desc    = !self.description.read(cx).content.is_empty();
 
         let (title, save_label) = if is_edit {
             (format!("Edit Product — {}", self.sku_display), "Update Product")
@@ -303,22 +352,35 @@ impl Render for ProductForm {
             .flex().items_center().justify_center()
             .bg(rgba(0x00000099))
             .key_context("ProductForm")
-            .on_action(cx.listener(|_, _: &EscapeForm, _, cx| {
-                cx.emit(ProductFormEvent::Cancelled);
+            .on_action(cx.listener(|this, _: &EscapeForm, _, cx| {
+                // Close an open dropdown first; only cancel the form on the second Esc
+                if this.supplier_dropdown.read(cx).is_open {
+                    this.supplier_dropdown.update(cx, |d, cx| { d.is_open = false; cx.notify(); });
+                } else {
+                    cx.emit(ProductFormEvent::Cancelled);
+                }
             }))
             .on_action(cx.listener(move |this, _: &TabField, window, cx| {
                 let mut handles = vec![
                     this.name.read(cx).focus_handle.clone(),
                     this.category.read(cx).focus_handle.clone(),
                     this.unit.read(cx).focus_handle.clone(),
+                    this.model_number.read(cx).focus_handle.clone(),
+                    this.part_number.read(cx).focus_handle.clone(),
+                    this.duty_percent.read(cx).focus_handle.clone(),
                     this.min_stock.read(cx).focus_handle.clone(),
                     this.description.read(cx).focus_handle.clone(),
+                    this.supplier_dropdown.read(cx).trigger_focus.clone(),
+                    this.cancel_focus.clone(),
+                    this.save_focus.clone(),
                 ];
                 if !is_edit {
                     handles.insert(0, this.sku.read(cx).focus_handle.clone());
-                    handles.insert(4, this.initial_qty.read(cx).focus_handle.clone());
+                    // initial_qty sits after duty_percent (index 6 after sku insert → insert at 7)
+                    handles.insert(7, this.initial_qty.read(cx).focus_handle.clone());
                 } else {
-                    handles.insert(3, this.edit_stock.read(cx).focus_handle.clone());
+                    // edit_stock is the first focusable field (SKU is read-only in edit)
+                    handles.insert(0, this.edit_stock.read(cx).focus_handle.clone());
                 }
                 let current = handles.iter().position(|h| h.is_focused(window));
                 let next = handles[(current.map(|i| i + 1).unwrap_or(0)) % handles.len()].clone();
@@ -329,14 +391,20 @@ impl Render for ProductForm {
                     this.name.read(cx).focus_handle.clone(),
                     this.category.read(cx).focus_handle.clone(),
                     this.unit.read(cx).focus_handle.clone(),
+                    this.model_number.read(cx).focus_handle.clone(),
+                    this.part_number.read(cx).focus_handle.clone(),
+                    this.duty_percent.read(cx).focus_handle.clone(),
                     this.min_stock.read(cx).focus_handle.clone(),
                     this.description.read(cx).focus_handle.clone(),
+                    this.supplier_dropdown.read(cx).trigger_focus.clone(),
+                    this.cancel_focus.clone(),
+                    this.save_focus.clone(),
                 ];
                 if !is_edit {
                     handles.insert(0, this.sku.read(cx).focus_handle.clone());
-                    handles.insert(4, this.initial_qty.read(cx).focus_handle.clone());
+                    handles.insert(7, this.initial_qty.read(cx).focus_handle.clone());
                 } else {
-                    handles.insert(3, this.edit_stock.read(cx).focus_handle.clone());
+                    handles.insert(0, this.edit_stock.read(cx).focus_handle.clone());
                 }
                 let current = handles.iter().position(|h| h.is_focused(window));
                 let prev = handles[(current.unwrap_or(0) + handles.len() - 1) % handles.len()].clone();
@@ -345,26 +413,32 @@ impl Render for ProductForm {
             .child(
                 div()
                     .w(px(580.))
+                    .max_h(px(680.))
                     .bg(rgb(c.canvas_bg))
                     .rounded(px(10.))
                     .border_1()
                     .border_color(rgb(c.surface_default))
-                    .overflow_hidden()
                     .flex().flex_col()
                     // ── header ──────────────────────────────────────────
                     .child(
                         div()
                             .px(px(20.)).py(px(14.))
+                            .rounded_t(px(10.))
                             .bg(rgb(c.sidebar_bg))
                             .flex().flex_row().items_center()
+                            .flex_shrink_0()
                             .child(div().flex_1()
                                 .text_size(rems(1.)).text_color(rgb(c.text_default))
                                 .child(title))
                             .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted)).child("Esc to cancel"))
                     )
-                    // ── fields ──────────────────────────────────────────
+                    // ── fields (scrollable) ──────────────────────────────
                     .child(
-                        div().flex().flex_col().px(px(20.)).pt(px(8.)).pb(px(4.))
+                        div()
+                            .id("prod-form-scroll")
+                            .flex_1()
+                            .overflow_y_scroll()
+                            .child(div().flex().flex_col().px(px(20.)).pt(px(8.)).pb(px(4.))
                             // SKU — editable only in Create mode
                             .child(if is_edit {
                                 div().flex().flex_row().items_center().py(px(10.))
@@ -407,6 +481,24 @@ impl Render for ProductForm {
                                     .child(div().flex_1().child(text_field("", self.unit.clone(), unit_f, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
+                            .child(
+                                div().flex().flex_row().items_center().py(px(10.))
+                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child("Model #"))
+                                    .child(div().flex_1().child(text_field("", self.model_number.clone(), model_f, cx)))
+                            )
+                            .child(div().h(px(1.)).bg(rgb(c.surface_default)))
+                            .child(
+                                div().flex().flex_row().items_center().py(px(10.))
+                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child("Part #"))
+                                    .child(div().flex_1().child(text_field("", self.part_number.clone(), part_f, cx)))
+                            )
+                            .child(div().h(px(1.)).bg(rgb(c.surface_default)))
+                            .child(
+                                div().flex().flex_row().items_center().py(px(10.))
+                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Duty %"))
+                                    .child(div().flex_1().child(text_field("", self.duty_percent.clone(), duty_f, cx)))
+                            )
+                            .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .when(!is_edit, |d| d
                                 .child(
                                     div().flex().flex_row().items_center().py(px(10.))
@@ -425,15 +517,25 @@ impl Render for ProductForm {
                                 div().flex().flex_row().items_start().py(px(10.))
                                     .child(div().w(px(160.)).pt(px(6.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child("Description"))
                                     .child(
-                                        div().flex_1().h(px(80.))
+                                        div().flex_1().h(px(80.)).relative()
                                             .border_1().border_color(rgb(if desc_f { c.surface_active } else { c.surface_default }))
                                             .when(desc_f, |d| d.border_2())
                                             .rounded(px(4.))
                                             .bg(rgb(if desc_f { c.canvas_bg } else { c.surface_default }))
-                                            .px(px(8.)).py(px(4.))
-                                            .text_size(rems(1.)).text_color(rgb(c.text_default))
                                             .overflow_hidden()
-                                            .child(self.description.clone())
+                                            // Wrapping placeholder — shows behind the TextInput when empty
+                                            .when(!has_desc, |d| d.child(
+                                                div()
+                                                    .absolute().top(px(4.)).left(px(8.)).right(px(8.))
+                                                    .text_size(rems(0.923))
+                                                    .text_color(rgba(((c.text_muted as u64) << 8 | 0x99) as u32))
+                                                    .child("e.g. Wide-angle camera lens, 24mm, F/1.8, compatible with Sony E-mount")
+                                            ))
+                                            .child(
+                                                div().px(px(8.)).py(px(4.))
+                                                    .text_size(rems(1.)).text_color(rgb(c.text_default))
+                                                    .child(self.description.clone())
+                                            )
                                     )
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
@@ -448,7 +550,8 @@ impl Render for ProductForm {
                                     .child(div().text_size(rems(0.846)).text_color(rgb(c.status_red))
                                         .child(self.error.as_deref().map(SharedString::from).unwrap_or_default()))
                             )
-                    )
+                        ) // close inner content div
+                    )   // close scroll wrapper
                     // ── footer ──────────────────────────────────────────
                     .child(
                         div()
@@ -456,16 +559,34 @@ impl Render for ProductForm {
                             .border_t_1()
                             .border_color(rgb(c.surface_default))
                             .flex().flex_row().justify_end().gap(px(8.))
-                            .child(div().id("prod-btn-cancel").px(px(18.)).py(px(7.)).rounded(px(5.))
-                                .bg(rgb(c.surface_default)).text_size(rems(0.923)).text_color(rgb(c.text_default))
-                                .cursor_pointer()
-                                .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| { cx.emit(ProductFormEvent::Cancelled); }))
-                                .child("Cancel"))
-                            .child(div().id("prod-btn-save").px(px(18.)).py(px(7.)).rounded(px(5.))
-                                .bg(rgb(c.surface_active)).text_size(rems(0.923)).text_color(rgb(c.text_default))
-                                .cursor_pointer()
-                                .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| { this.submit(cx); }))
-                                .child(save_label))
+                            .child(
+                                div().id("prod-btn-cancel")
+                                    .track_focus(&self.cancel_focus)
+                                    .px(px(18.)).py(px(7.)).rounded(px(5.))
+                                    .bg(rgb(c.surface_default))
+                                    .text_size(rems(0.923)).text_color(rgb(c.text_default))
+                                    .cursor_pointer()
+                                    .when(cancel_f, |d| d.border_2().border_color(rgb(c.surface_active)))
+                                    .when(!cancel_f, |d| d.border_1().border_color(rgb(c.surface_default)))
+                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| {
+                                        cx.emit(ProductFormEvent::Cancelled);
+                                    }))
+                                    .child("Cancel")
+                            )
+                            .child(
+                                div().id("prod-btn-save")
+                                    .track_focus(&self.save_focus)
+                                    .px(px(18.)).py(px(7.)).rounded(px(5.))
+                                    .bg(rgb(c.surface_active))
+                                    .text_size(rems(0.923)).text_color(rgb(c.text_default))
+                                    .cursor_pointer()
+                                    .when(save_f, |d| d.border_2().border_color(rgb(c.text_default)))
+                                    .when(!save_f, |d| d.border_1().border_color(rgb(c.surface_active)))
+                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
+                                        this.submit(cx);
+                                    }))
+                                    .child(save_label)
+                            )
                     )
             )
     }

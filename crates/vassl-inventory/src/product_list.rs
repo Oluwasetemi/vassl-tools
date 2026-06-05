@@ -1,15 +1,17 @@
-use gpui::{App, Context, Entity, IntoElement, MouseButton, MouseDownEvent, Render, Window, div, prelude::*, px, rems, rgb};
+use gpui::{App, Context, Entity, IntoElement, MouseButton, MouseDownEvent, Render, Window,
+           div, prelude::*, px, rems, rgb, uniform_list, UniformListScrollHandle};
 use vassl_ui::{ThemeColors, ThemeHandle};
 
 use crate::store::{ContextMenuTarget, InventoryStore, ProductWithStock, StockStatus};
 
 pub struct ProductList {
     store: Entity<InventoryStore>,
+    scroll_handle: UniformListScrollHandle,
 }
 
 impl ProductList {
     pub fn new(store: Entity<InventoryStore>, _cx: &mut Context<Self>) -> Self {
-        Self { store }
+        Self { store, scroll_handle: UniformListScrollHandle::default() }
     }
 }
 
@@ -48,19 +50,26 @@ impl Render for ProductList {
                 .child(format!("No results for \"{}\".", store.search_query))
                 .into_any_element();
         }
-        let rows: Vec<_> = filtered.iter().map(|p| {
-            let selected = store.selected_product_id == Some(p.product.id);
-            product_row(p, selected, self.store.clone(), &c)
-        }).collect();
+        let count = filtered.len();
+        let store_entity = self.store.clone();
 
-        div()
-            .id("product-list-scroll")
-            .flex_1()
-            .flex()
-            .flex_col()
-            .overflow_y_scroll()
-            .children(rows)
-            .into_any_element()
+        uniform_list(
+            "product-list",
+            count,
+            cx.processor(move |this, range: std::ops::Range<usize>, _window, cx| {
+                let store = this.store.read(cx);
+                let filtered = store.filtered_products();
+                let c = cx.global::<ThemeHandle>().0.clone();
+                range.map(|ix| {
+                    let p = &filtered[ix];
+                    let selected = store.selected_product_id == Some(p.product.id);
+                    product_row(p, selected, store_entity.clone(), &c)
+                }).collect()
+            }),
+        )
+        .track_scroll(&self.scroll_handle)
+        .flex_1()
+        .into_any_element()
     }
 }
 

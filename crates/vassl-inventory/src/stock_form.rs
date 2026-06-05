@@ -21,6 +21,8 @@ pub struct StockEntryForm {
     unit_cost:        Entity<TextInput>,
     invoice_ref:      Entity<TextInput>,
     acquisition_type: AcquisitionType,
+    cancel_focus:     FocusHandle,
+    save_focus:       FocusHandle,
     error:            Option<String>,
     focus_handle:     FocusHandle,
 }
@@ -45,6 +47,8 @@ impl StockEntryForm {
             unit_cost:   cx.new(|cx| TextInput::with_placeholder("e.g. 120.00", cx)),
             invoice_ref: cx.new(|cx| TextInput::with_placeholder("optional", cx)),
             acquisition_type: AcquisitionType::Restock,
+            cancel_focus: cx.focus_handle(),
+            save_focus:   cx.focus_handle(),
             error:       None,
             focus_handle: cx.focus_handle(),
         }
@@ -99,6 +103,8 @@ impl Render for StockEntryForm {
         let qty_focused  = self.quantity.read(cx).focus_handle.is_focused(window);
         let cost_focused = self.unit_cost.read(cx).focus_handle.is_focused(window);
         let inv_focused  = self.invoice_ref.read(cx).focus_handle.is_focused(window);
+        let cancel_f     = self.cancel_focus.is_focused(window);
+        let save_f       = self.save_focus.is_focused(window);
 
         div()
             .absolute().top_0().left_0().right_0().bottom_0()
@@ -113,6 +119,8 @@ impl Render for StockEntryForm {
                     this.quantity.read(cx).focus_handle.clone(),
                     this.unit_cost.read(cx).focus_handle.clone(),
                     this.invoice_ref.read(cx).focus_handle.clone(),
+                    this.cancel_focus.clone(),
+                    this.save_focus.clone(),
                 ];
                 let current = handles.iter().position(|h| h.is_focused(window));
                 let next = handles[(current.map(|i| i + 1).unwrap_or(0)) % handles.len()].clone();
@@ -123,6 +131,8 @@ impl Render for StockEntryForm {
                     this.quantity.read(cx).focus_handle.clone(),
                     this.unit_cost.read(cx).focus_handle.clone(),
                     this.invoice_ref.read(cx).focus_handle.clone(),
+                    this.cancel_focus.clone(),
+                    this.save_focus.clone(),
                 ];
                 let current = handles.iter().position(|h| h.is_focused(window));
                 let prev = handles[(current.unwrap_or(0) + handles.len() - 1) % handles.len()].clone();
@@ -135,12 +145,12 @@ impl Render for StockEntryForm {
                     .rounded(px(10.))
                     .border_1()
                     .border_color(rgb(c.surface_default))
-                    .overflow_hidden()
                     .flex().flex_col()
                     // ── header ──────────────────────────────────────────
                     .child(
                         div()
                             .px(px(20.)).py(px(14.))
+                            .rounded_t(px(10.))
                             .bg(rgb(c.sidebar_bg))
                             .flex().flex_row().items_center()
                             .child(div().flex_1()
@@ -181,16 +191,28 @@ impl Render for StockEntryForm {
                             .border_t_1()
                             .border_color(rgb(c.surface_default))
                             .flex().flex_row().justify_end().gap(px(8.))
-                            .child(div().id("btn-cancel").px(px(18.)).py(px(7.)).rounded(px(5.))
-                                .bg(rgb(c.surface_default)).text_size(rems(0.923)).text_color(rgb(c.text_default))
-                                .cursor_pointer()
-                                .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| { cx.emit(StockFormEvent::Cancelled); }))
-                                .child("Cancel"))
-                            .child(div().id("btn-save").px(px(18.)).py(px(7.)).rounded(px(5.))
-                                .bg(rgb(c.surface_active)).text_size(rems(0.923)).text_color(rgb(c.text_default))
-                                .cursor_pointer()
-                                .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| { this.submit(cx); }))
-                                .child("Save Entry"))
+                            .child(
+                                div().id("btn-cancel")
+                                    .track_focus(&self.cancel_focus)
+                                    .px(px(18.)).py(px(7.)).rounded(px(5.))
+                                    .bg(rgb(c.surface_default)).text_size(rems(0.923)).text_color(rgb(c.text_default))
+                                    .cursor_pointer()
+                                    .when(cancel_f, |d| d.border_2().border_color(rgb(c.surface_active)))
+                                    .when(!cancel_f, |d| d.border_1().border_color(rgb(c.surface_default)))
+                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| { cx.emit(StockFormEvent::Cancelled); }))
+                                    .child("Cancel")
+                            )
+                            .child(
+                                div().id("btn-save")
+                                    .track_focus(&self.save_focus)
+                                    .px(px(18.)).py(px(7.)).rounded(px(5.))
+                                    .bg(rgb(c.surface_active)).text_size(rems(0.923)).text_color(rgb(c.text_default))
+                                    .cursor_pointer()
+                                    .when(save_f, |d| d.border_2().border_color(rgb(c.text_default)))
+                                    .when(!save_f, |d| d.border_1().border_color(rgb(c.surface_active)))
+                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| { this.submit(cx); }))
+                                    .child("Save Entry")
+                            )
                     )
             )
     }

@@ -16,6 +16,7 @@ vassl-db             = { path = "../vassl-db" }
 vassl-core           = { path = "../vassl-core" }
 vassl-suppliers      = { path = "../vassl-suppliers" }
 vassl-ui             = { path = "../vassl-ui" }
+calamine.workspace   = true
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt"] }

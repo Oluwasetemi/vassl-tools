@@ -1,5 +1,6 @@
 use gpui::{Context, Entity, EventEmitter, IntoElement, MouseButton, MouseDownEvent,
            Render, Subscription, Window, div, prelude::*, px, rems, rgb};
+use vassl_ui::NewRecord;
 use vassl_ui::{TextInput, ThemeHandle, text_field};
 
 use vassl_core::Product;
@@ -14,6 +15,7 @@ use crate::InventoryStoreHandle;
 pub enum InventoryPanelEvent {
     ShowPriceHistory   { product_id: i64, name: String },
     ShowPriceEntryForm { product_id: i64, name: String },
+    ImportXlsxRequested,
 }
 
 impl EventEmitter<InventoryPanelEvent> for InventoryPanel {}
@@ -90,11 +92,10 @@ impl InventoryPanel {
         cx.notify();
     }
 
-    fn open_product_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.product_form.is_some() { return; }
+    pub fn create_product_form(&mut self, cx: &mut Context<Self>) -> Option<gpui::FocusHandle> {
+        if self.product_form.is_some() { return None; }
         let form  = cx.new(|cx| ProductForm::new(self.store.clone(), cx));
         let first = form.read(cx).sku.read(cx).focus_handle.clone();
-        window.focus(&first, cx);
         let sub  = cx.subscribe(&form, |this, _form, ev: &ProductFormEvent, cx| {
             match ev {
                 ProductFormEvent::Submitted | ProductFormEvent::Cancelled => {
@@ -107,6 +108,13 @@ impl InventoryPanel {
         self.product_form   = Some(form);
         self._prod_form_sub = Some(sub);
         cx.notify();
+        Some(first)
+    }
+
+    pub fn open_product_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(fh) = self.create_product_form(cx) {
+            window.focus(&fh, cx);
+        }
     }
 
     fn open_edit_form(&mut self, product: Product, window: &mut Window, cx: &mut Context<Self>) {
@@ -138,6 +146,7 @@ impl Render for InventoryPanel {
         let c = cx.global::<ThemeHandle>().0.clone();
         let active_tab    = self.active_tab;
         let has_selection = self.store.read(cx).selected_product_id.is_some();
+        let viewport      = window.viewport_size();
 
         let has_query = !self.search_input.read(cx).text().is_empty();
 
@@ -148,6 +157,10 @@ impl Render for InventoryPanel {
         };
 
         let mut root = div()
+            .key_context("InventoryPanel")
+            .on_action(cx.listener(|this, _: &NewRecord, window, cx| {
+                this.open_product_form(window, cx);
+            }))
             .relative()
             .flex_1().flex().flex_col().h_full()
             .child(
@@ -247,6 +260,20 @@ impl Render for InventoryPanel {
                         }
                         btn
                     })
+                    // .child({  // Import XLSX — disabled for alpha release
+                    //     let hover_bg = rgb(c.surface_hover);
+                    //     div()
+                    //         .id("btn-import-xlsx")
+                    //         .px(px(12.)).py(px(4.)).rounded(px(4.))
+                    //         .bg(rgb(c.surface_default))
+                    //         .hover(move |s| s.bg(hover_bg))
+                    //         .text_size(rems(0.923)).text_color(rgb(c.text_muted))
+                    //         .cursor_pointer()
+                    //         .on_mouse_down(MouseButton::Left, cx.listener(|_, _: &MouseDownEvent, _: &mut Window, cx| {
+                    //             cx.emit(InventoryPanelEvent::ImportXlsxRequested);
+                    //         }))
+                    //         .child("↑ Import XLSX")
+                    // })
             )
             .child(content);
 
@@ -275,6 +302,13 @@ impl Render for InventoryPanel {
             let pid  = target.product_id;
             let name = target.product_name.clone();
 
+            // Clamp so the menu stays fully within the window viewport.
+            // Menu is 220px wide; height estimate covers all items (~200px).
+            const MENU_W: f32 = 220.0;
+            const MENU_H: f32 = 200.0;
+            let menu_x = target.x.min((viewport.width.as_f32()  - MENU_W).max(0.0));
+            let menu_y = target.y.min((viewport.height.as_f32() - MENU_H).max(0.0));
+
             root = root
                 .child(
                     div()
@@ -289,8 +323,8 @@ impl Render for InventoryPanel {
                 .child(
                     div()
                         .absolute()
-                        .left(px(target.x))
-                        .top(px(target.y))
+                        .left(px(menu_x))
+                        .top(px(menu_y))
                         .w(px(220.))
                         .bg(rgb(c.surface_default))
                         .rounded(px(6.))

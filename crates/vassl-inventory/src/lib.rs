@@ -1,5 +1,6 @@
 pub mod colors;
 pub mod db;
+pub mod importer;
 pub mod panel;
 pub mod product_form;
 pub mod product_list;
