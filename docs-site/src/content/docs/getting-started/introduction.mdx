@@ -26,10 +26,15 @@ VASSL is built with:
 
 ## Release channels
 
-| Version format | Channel | Database |
-| --- | --- |---|
-| `0.x.y` | Dev | `0-dev/vassl.db` |
-| `x.y.z-preview[.N]` | Preview | `0-preview/vassl.db` |
-| `x.y.z` (major ≥ 1) | Stable | `0-stable/vassl.db` |
+<table>
+  <thead>
+    <tr><th>Version format</th><th>Channel</th><th>Database</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>0.x.y</code></td><td>Dev</td><td><code>0-dev/vassl.db</code></td></tr>
+    <tr><td><code>x.y.z-preview[.N]</code></td><td>Preview</td><td><code>0-preview/vassl.db</code></td></tr>
+    <tr><td><code>x.y.z</code> (major ≥ 1)</td><td>Stable</td><td><code>0-stable/vassl.db</code></td></tr>
+  </tbody>
+</table>
 
 Each channel uses a separate database so dev and stable builds can coexist on the same machine without affecting each other.
