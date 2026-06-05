@@ -1,8 +1,17 @@
 use gpui::{Context, Entity, IntoElement, Render, Window, div, prelude::*, px, rems, rgb};
 use vassl_core::QuotationStatus;
-use vassl_ui::ThemeHandle;
+use vassl_ui::{ThemeColors, ThemeHandle};
 
-use crate::store::{QuotationStore, status_badge_color};
+use crate::store::QuotationStore;
+
+fn status_color(status: &QuotationStatus, c: &ThemeColors) -> u32 {
+    match status {
+        QuotationStatus::Draft    => c.status_grey,
+        QuotationStatus::Sent     => c.status_amber,
+        QuotationStatus::Accepted => c.status_green,
+        QuotationStatus::Rejected => c.status_red,
+    }
+}
 
 pub struct QuotationDetail {
     store: Entity<QuotationStore>,
@@ -65,12 +74,13 @@ impl Render for QuotationDetail {
                     .px(px(12.)).py(px(8.))
                     .children(transitions.into_iter().map(|next_status| {
                         let store = self.store.clone();
-                        let ns = next_status.clone();
+                        let ns    = next_status.clone();
+                        let bg    = status_color(&next_status, &c);
                         div()
                             .id(format!("status-btn-{}", transition_label(&next_status)))
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
-                            .bg(rgb(status_badge_color(next_status.clone())))
-                            .text_size(rems(0.923)).text_color(rgb(c.canvas_bg))
+                            .bg(rgb(bg))
+                            .text_size(rems(0.923)).text_color(rgb(c.text_default))
                             .cursor_pointer()
                             .on_mouse_down(gpui::MouseButton::Left,
                                 move |_, _, cx: &mut gpui::App| {

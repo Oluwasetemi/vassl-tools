@@ -1,7 +1,7 @@
 use gpui::{Context, Entity, IntoElement, Render, Subscription, Window,
            div, prelude::*, px, rems, rgb};
 use vassl_pricebook::store::PriceBookStoreHandle;
-use vassl_ui::ThemeHandle;
+use vassl_ui::{NewRecord, ThemeHandle};
 
 use crate::line_item_form::{LineItemForm, LineItemFormEvent};
 use crate::quotation_detail::QuotationDetail;
@@ -66,15 +66,14 @@ impl QuotationPanel {
         cx.notify();
     }
 
-    fn open_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.form.is_some() { return; }
+    pub fn create_form(&mut self, cx: &mut Context<Self>) -> Option<gpui::FocusHandle> {
+        if self.form.is_some() { return None; }
         let ref_num = {
             let db = crate::db::QuotationDb::global(&**cx);
             db.next_reference_number().unwrap_or_else(|_| "VASSL-ERR-0000".to_string())
         };
-        let form = cx.new(|cx| QuotationForm::new(self.store.clone(), ref_num, cx));
+        let form  = cx.new(|cx| QuotationForm::new(self.store.clone(), ref_num, cx));
         let first = form.read(cx).notes.read(cx).focus_handle.clone();
-        window.focus(&first, cx);
         let sub  = cx.subscribe(&form, |this, _form, ev: &QuotationFormEvent, cx| {
             match ev {
                 QuotationFormEvent::Submitted | QuotationFormEvent::Cancelled => {
@@ -87,6 +86,13 @@ impl QuotationPanel {
         self.form      = Some(form);
         self._form_sub = Some(sub);
         cx.notify();
+        Some(first)
+    }
+
+    pub fn open_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(fh) = self.create_form(cx) {
+            window.focus(&fh, cx);
+        }
     }
 
     fn open_item_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -140,6 +146,10 @@ impl Render for QuotationPanel {
         };
 
         let mut root = div()
+            .key_context("QuotationPanel")
+            .on_action(cx.listener(|this, _: &NewRecord, window, cx| {
+                this.open_form(window, cx);
+            }))
             .relative()
             .flex_1().flex().flex_col().h_full()
             .child(

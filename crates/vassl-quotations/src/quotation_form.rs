@@ -4,7 +4,7 @@ use vassl_core::Project;
 use vassl_ui::{Dropdown, DropdownItem, TextInput, ThemeHandle, text_field};
 
 
-actions!(quotation_form, [EscapeForm]);
+actions!(quotation_form, [EscapeForm, TabField, BackTabField]);
 use crate::db::QuotationDb;
 use crate::store::QuotationStore;
 
@@ -18,6 +18,8 @@ pub struct QuotationForm {
     reference_number:   String,
     project_dropdown:   Entity<Dropdown>,
     pub notes:          Entity<TextInput>,
+    cancel_focus:       FocusHandle,
+    save_focus:         FocusHandle,
     error:              Option<String>,
     focus_handle:       FocusHandle,
     _store_sub:         Subscription,
@@ -37,8 +39,8 @@ fn projects_to_items(projects: &[Project]) -> Vec<DropdownItem> {
 
 impl QuotationForm {
     pub fn new(store: Entity<QuotationStore>, reference_number: String, cx: &mut Context<Self>) -> Self {
-        let project_dropdown = cx.new(|_| {
-            Dropdown::new("Select a project…", "No projects yet — create one first.")
+        let project_dropdown = cx.new(|cx| {
+            Dropdown::new("Select a project…", "No projects yet — create one first.", cx)
         });
 
         // Populate dropdown from current store state immediately
@@ -64,6 +66,8 @@ impl QuotationForm {
             reference_number,
             project_dropdown,
             notes:        cx.new(|cx| TextInput::with_placeholder("optional", cx)),
+            cancel_focus: cx.focus_handle(),
+            save_focus:   cx.focus_handle(),
             error:        None,
             focus_handle: cx.focus_handle(),
             _store_sub,
@@ -116,7 +120,9 @@ impl Focusable for QuotationForm {
 impl Render for QuotationForm {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = cx.global::<ThemeHandle>().0.clone();
-        let notes_focused = self.notes.read(cx).focus_handle.is_focused(window);
+        let notes_focused  = self.notes.read(cx).focus_handle.is_focused(window);
+        let cancel_f       = self.cancel_focus.is_focused(window);
+        let save_f         = self.save_focus.is_focused(window);
 
         div()
             .absolute().top_0().left_0().right_0().bottom_0()
@@ -126,6 +132,28 @@ impl Render for QuotationForm {
             .on_action(cx.listener(|_, _: &EscapeForm, _, cx| {
                 cx.emit(QuotationFormEvent::Cancelled);
             }))
+            .on_action(cx.listener(|this, _: &TabField, window, cx| {
+                let handles = [
+                    this.project_dropdown.read(cx).trigger_focus.clone(),
+                    this.notes.read(cx).focus_handle.clone(),
+                    this.cancel_focus.clone(),
+                    this.save_focus.clone(),
+                ];
+                let current = handles.iter().position(|h| h.is_focused(window));
+                let next = handles[(current.map(|i| i + 1).unwrap_or(0)) % handles.len()].clone();
+                window.focus(&next, cx);
+            }))
+            .on_action(cx.listener(|this, _: &BackTabField, window, cx| {
+                let handles = [
+                    this.project_dropdown.read(cx).trigger_focus.clone(),
+                    this.notes.read(cx).focus_handle.clone(),
+                    this.cancel_focus.clone(),
+                    this.save_focus.clone(),
+                ];
+                let current = handles.iter().position(|h| h.is_focused(window));
+                let prev = handles[(current.unwrap_or(0) + handles.len() - 1) % handles.len()].clone();
+                window.focus(&prev, cx);
+            }))
             .child(
                 div()
                     .w(px(580.))
@@ -133,12 +161,12 @@ impl Render for QuotationForm {
                     .rounded(px(10.))
                     .border_1()
                     .border_color(rgb(c.surface_default))
-                    .overflow_hidden()
                     .flex().flex_col()
                     // ── header ──────────────────────────────────────────
                     .child(
                         div()
                             .px(px(20.)).py(px(14.))
+                            .rounded_t(px(10.))
                             .bg(rgb(c.sidebar_bg))
                             .flex().flex_row().items_center()
                             .child(div().flex_1()
@@ -185,16 +213,28 @@ impl Render for QuotationForm {
                             .border_t_1()
                             .border_color(rgb(c.surface_default))
                             .flex().flex_row().justify_end().gap(px(8.))
-                            .child(div().id("quot-btn-cancel").px(px(18.)).py(px(7.)).rounded(px(5.))
-                                .bg(rgb(c.surface_default)).text_size(rems(0.923)).text_color(rgb(c.text_default))
-                                .cursor_pointer()
-                                .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| { cx.emit(QuotationFormEvent::Cancelled); }))
-                                .child("Cancel"))
-                            .child(div().id("quot-btn-create").px(px(18.)).py(px(7.)).rounded(px(5.))
-                                .bg(rgb(c.surface_active)).text_size(rems(0.923)).text_color(rgb(c.text_default))
-                                .cursor_pointer()
-                                .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| { this.submit(cx); }))
-                                .child("Create Quotation"))
+                            .child(
+                                div().id("quot-btn-cancel")
+                                    .track_focus(&self.cancel_focus)
+                                    .px(px(18.)).py(px(7.)).rounded(px(5.))
+                                    .bg(rgb(c.surface_default)).text_size(rems(0.923)).text_color(rgb(c.text_default))
+                                    .cursor_pointer()
+                                    .when(cancel_f, |d| d.border_2().border_color(rgb(c.surface_active)))
+                                    .when(!cancel_f, |d| d.border_1().border_color(rgb(c.surface_default)))
+                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| { cx.emit(QuotationFormEvent::Cancelled); }))
+                                    .child("Cancel")
+                            )
+                            .child(
+                                div().id("quot-btn-create")
+                                    .track_focus(&self.save_focus)
+                                    .px(px(18.)).py(px(7.)).rounded(px(5.))
+                                    .bg(rgb(c.surface_active)).text_size(rems(0.923)).text_color(rgb(c.text_default))
+                                    .cursor_pointer()
+                                    .when(save_f, |d| d.border_2().border_color(rgb(c.text_default)))
+                                    .when(!save_f, |d| d.border_1().border_color(rgb(c.surface_active)))
+                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| { this.submit(cx); }))
+                                    .child("Create Quotation")
+                            )
                     )
             )
     }

@@ -1,5 +1,5 @@
 use gpui::{App, Context, Entity, IntoElement, MouseButton, MouseDownEvent, Render, Window,
-           div, prelude::*, px, rems, rgb};
+           div, prelude::*, px, rems, rgb, uniform_list, UniformListScrollHandle};
 use vassl_ui::{ThemeColors, ThemeHandle};
 
 use crate::db::QuotationRow;
@@ -7,11 +7,12 @@ use crate::store::{QuotationStore, status_badge_color};
 
 pub struct QuotationList {
     store: Entity<QuotationStore>,
+    scroll_handle: UniformListScrollHandle,
 }
 
 impl QuotationList {
     pub fn new(store: Entity<QuotationStore>, _cx: &mut Context<Self>) -> Self {
-        Self { store }
+        Self { store, scroll_handle: UniformListScrollHandle::default() }
     }
 }
 
@@ -40,17 +41,25 @@ impl Render for QuotationList {
                 .into_any_element();
         }
 
-        let selected = store.selected_id;
-        let rows: Vec<_> = store.quotations.iter().map(|q| {
-            quotation_row(q, selected == Some(q.id), self.store.clone(), &c)
-        }).collect();
+        let count = store.quotations.len();
+        let store_entity = self.store.clone();
 
-        div()
-            .id("quotation-list-scroll")
-            .flex_1().flex().flex_col()
-            .overflow_y_scroll()
-            .children(rows)
-            .into_any_element()
+        uniform_list(
+            "quotation-list",
+            count,
+            cx.processor(move |this, range: std::ops::Range<usize>, _window, cx| {
+                let store = this.store.read(cx);
+                let c = cx.global::<ThemeHandle>().0.clone();
+                let selected = store.selected_id;
+                range.map(|ix| {
+                    let q = &store.quotations[ix];
+                    quotation_row(q, selected == Some(q.id), store_entity.clone(), &c)
+                }).collect()
+            }),
+        )
+        .track_scroll(&self.scroll_handle)
+        .flex_1()
+        .into_any_element()
     }
 }
 

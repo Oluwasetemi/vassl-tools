@@ -16,6 +16,8 @@ pub struct ProjectForm {
     store:        Entity<QuotationStore>,
     pub name:     Entity<TextInput>,
     client_name:  Entity<TextInput>,
+    cancel_focus: FocusHandle,
+    save_focus:   FocusHandle,
     error:        Option<String>,
     focus_handle: FocusHandle,
 }
@@ -34,6 +36,8 @@ impl ProjectForm {
             store,
             name:         cx.new(|cx| TextInput::with_placeholder("e.g. Office Renovation", cx)),
             client_name:  cx.new(|cx| TextInput::with_placeholder("e.g. Acme Corp", cx)),
+            cancel_focus: cx.focus_handle(),
+            save_focus:   cx.focus_handle(),
             error:        None,
             focus_handle: cx.focus_handle(),
         }
@@ -67,6 +71,8 @@ impl Render for ProjectForm {
         let c            = cx.global::<ThemeHandle>().0.clone();
         let name_focused = self.name.read(cx).focus_handle.is_focused(window);
         let cli_focused  = self.client_name.read(cx).focus_handle.is_focused(window);
+        let cancel_f     = self.cancel_focus.is_focused(window);
+        let save_f       = self.save_focus.is_focused(window);
 
         div()
             .absolute().top_0().left_0().right_0().bottom_0()
@@ -80,6 +86,8 @@ impl Render for ProjectForm {
                 let handles = [
                     this.name.read(cx).focus_handle.clone(),
                     this.client_name.read(cx).focus_handle.clone(),
+                    this.cancel_focus.clone(),
+                    this.save_focus.clone(),
                 ];
                 let current = handles.iter().position(|h| h.is_focused(window));
                 let next = handles[(current.map(|i| i + 1).unwrap_or(0)) % handles.len()].clone();
@@ -89,6 +97,8 @@ impl Render for ProjectForm {
                 let handles = [
                     this.name.read(cx).focus_handle.clone(),
                     this.client_name.read(cx).focus_handle.clone(),
+                    this.cancel_focus.clone(),
+                    this.save_focus.clone(),
                 ];
                 let current = handles.iter().position(|h| h.is_focused(window));
                 let prev = handles[(current.unwrap_or(0) + handles.len() - 1) % handles.len()].clone();
@@ -101,12 +111,12 @@ impl Render for ProjectForm {
                     .rounded(px(10.))
                     .border_1()
                     .border_color(rgb(c.surface_default))
-                    .overflow_hidden()
                     .flex().flex_col()
                     // ── header ──────────────────────────────────────────
                     .child(
                         div()
                             .px(px(20.)).py(px(14.))
+                            .rounded_t(px(10.))
                             .bg(rgb(c.sidebar_bg))
                             .flex().flex_row().items_center()
                             .child(div().flex_1()
@@ -141,16 +151,28 @@ impl Render for ProjectForm {
                             .border_t_1()
                             .border_color(rgb(c.surface_default))
                             .flex().flex_row().justify_end().gap(px(8.))
-                            .child(div().id("proj-btn-cancel").px(px(18.)).py(px(7.)).rounded(px(5.))
-                                .bg(rgb(c.surface_default)).text_size(rems(0.923)).text_color(rgb(c.text_default))
-                                .cursor_pointer()
-                                .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| { cx.emit(ProjectFormEvent::Cancelled); }))
-                                .child("Cancel"))
-                            .child(div().id("proj-btn-save").px(px(18.)).py(px(7.)).rounded(px(5.))
-                                .bg(rgb(c.surface_active)).text_size(rems(0.923)).text_color(rgb(c.text_default))
-                                .cursor_pointer()
-                                .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| { this.submit(cx); }))
-                                .child("Create Project"))
+                            .child(
+                                div().id("proj-btn-cancel")
+                                    .track_focus(&self.cancel_focus)
+                                    .px(px(18.)).py(px(7.)).rounded(px(5.))
+                                    .bg(rgb(c.surface_default)).text_size(rems(0.923)).text_color(rgb(c.text_default))
+                                    .cursor_pointer()
+                                    .when(cancel_f, |d| d.border_2().border_color(rgb(c.surface_active)))
+                                    .when(!cancel_f, |d| d.border_1().border_color(rgb(c.surface_default)))
+                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| { cx.emit(ProjectFormEvent::Cancelled); }))
+                                    .child("Cancel")
+                            )
+                            .child(
+                                div().id("proj-btn-save")
+                                    .track_focus(&self.save_focus)
+                                    .px(px(18.)).py(px(7.)).rounded(px(5.))
+                                    .bg(rgb(c.surface_active)).text_size(rems(0.923)).text_color(rgb(c.text_default))
+                                    .cursor_pointer()
+                                    .when(save_f, |d| d.border_2().border_color(rgb(c.text_default)))
+                                    .when(!save_f, |d| d.border_1().border_color(rgb(c.surface_active)))
+                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| { this.submit(cx); }))
+                                    .child("Create Project")
+                            )
                     )
             )
     }
