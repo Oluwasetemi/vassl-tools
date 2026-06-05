@@ -12,6 +12,7 @@ pub struct PriceEntry {
     pub selling_price_usd: f64,
     pub effective_date: String,
     pub notes: Option<String>,
+    pub currency: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,15 +23,16 @@ pub struct NewPriceEntry {
     pub markup_percent: f64,
     pub effective_date: String,
     pub notes: Option<String>,
+    pub currency: String,
 }
 
 #[derive(Debug, Error)]
 pub enum PriceEntryError {
     #[error("markup_percent must be > 0, got {0}")]
     InvalidMarkup(f64),
-    #[error("cost_price_usd must be >= 0, got {0}")]
+    #[error("cost_price must be >= 0, got {0}")]
     InvalidCostPrice(f64),
-    #[error("duty_cost_usd must be >= 0, got {0}")]
+    #[error("duty_cost must be >= 0, got {0}")]
     InvalidDuty(f64),
 }
 

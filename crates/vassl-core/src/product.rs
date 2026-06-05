@@ -12,6 +12,9 @@ pub struct Product {
     pub notes: Option<String>,
     pub preferred_supplier_id: Option<i64>,
     pub created_at: String,
+    pub model_number: Option<String>,
+    pub part_number: Option<String>,
+    pub duty_percent: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,6 +27,9 @@ pub struct NewProduct {
     pub description: Option<String>,
     pub notes: Option<String>,
     pub preferred_supplier_id: Option<i64>,
+    pub model_number: Option<String>,
+    pub part_number: Option<String>,
+    pub duty_percent: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,6 +84,9 @@ mod tests {
             notes: None,
             preferred_supplier_id: None,
             created_at: "2026-01-01T00:00:00Z".into(),
+            model_number: None,
+            part_number: None,
+            duty_percent: 0.0,
         };
         assert_eq!(p.description.as_deref(), Some("Wide-angle, 24mm"));
     }
@@ -93,6 +102,9 @@ mod tests {
             description: None,
             notes: None,
             preferred_supplier_id: None,
+            model_number: None,
+            part_number: None,
+            duty_percent: 0.0,
         };
         assert!(np.description.is_none());
     }
