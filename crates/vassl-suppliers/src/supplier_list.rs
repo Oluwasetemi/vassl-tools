@@ -1,5 +1,5 @@
 use gpui::{App, Context, Entity, IntoElement, MouseButton, MouseDownEvent, Render, Window,
-           div, prelude::*, px, rems, rgb};
+           div, prelude::*, px, rems, rgb, uniform_list, UniformListScrollHandle};
 use vassl_core::Supplier;
 use vassl_ui::{ThemeColors, ThemeHandle};
 
@@ -7,11 +7,12 @@ use crate::store::SupplierStore;
 
 pub struct SupplierList {
     store: Entity<SupplierStore>,
+    scroll_handle: UniformListScrollHandle,
 }
 
 impl SupplierList {
     pub fn new(store: Entity<SupplierStore>, _cx: &mut Context<Self>) -> Self {
-        Self { store }
+        Self { store, scroll_handle: UniformListScrollHandle::default() }
     }
 }
 
@@ -46,7 +47,6 @@ impl Render for SupplierList {
                 .into_any_element();
         }
 
-        let selected = store.selected_supplier_id;
         let filtered = store.filtered_suppliers();
         if filtered.is_empty() && !store.suppliers.is_empty() {
             return div()
@@ -55,16 +55,26 @@ impl Render for SupplierList {
                 .child(format!("No results for \"{}\".", store.search_query))
                 .into_any_element();
         }
-        let rows: Vec<_> = filtered.iter().map(|s| {
-            supplier_row(s, selected == Some(s.id), self.store.clone(), &c)
-        }).collect();
+        let count = filtered.len();
+        let store_entity = self.store.clone();
 
-        div()
-            .id("supplier-list-scroll")
-            .flex_1().flex().flex_col()
-            .overflow_y_scroll()
-            .children(rows)
-            .into_any_element()
+        uniform_list(
+            "supplier-list",
+            count,
+            cx.processor(move |this, range: std::ops::Range<usize>, _window, cx| {
+                let store = this.store.read(cx);
+                let filtered = store.filtered_suppliers();
+                let c = cx.global::<ThemeHandle>().0.clone();
+                let selected = store.selected_supplier_id;
+                range.map(|ix| {
+                    let s = &filtered[ix];
+                    supplier_row(s, selected == Some(s.id), store_entity.clone(), &c)
+                }).collect()
+            }),
+        )
+        .track_scroll(&self.scroll_handle)
+        .flex_1()
+        .into_any_element()
     }
 }
 

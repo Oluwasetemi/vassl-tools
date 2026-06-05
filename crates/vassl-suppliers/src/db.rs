@@ -2,6 +2,7 @@ use anyhow::Context as _;
 use sqlez::domain::Domain;
 use vassl_core::Supplier;
 use vassl_db::SharedDomain;
+use vassl_db::shared::{current_user, log_audit};
 
 pub struct SupplierDb(pub sqlez::thread_safe_connection::ThreadSafeConnection);
 
@@ -61,10 +62,17 @@ impl SupplierDb {
             .context("prepare insert_supplier")?
             ((name, contact, email, phone, notes, now))
             .context("execute insert_supplier")?;
-            conn.select_row::<i64>("SELECT last_insert_rowid()")
+            let new_id = conn.select_row::<i64>("SELECT last_insert_rowid()")
                 .context("prepare last_insert_rowid")?()
                 .context("execute last_insert_rowid")?
-                .ok_or_else(|| anyhow::anyhow!("no rowid after insert"))
+                .ok_or_else(|| anyhow::anyhow!("no rowid after insert"))?;
+
+            let changed_by = current_user(conn).ok().flatten().unwrap_or_else(|| "system".into());
+            if let Err(e) = log_audit(conn, "suppliers", new_id, "CREATE", &changed_by, None, None) {
+                tracing::warn!("audit log failed for insert_supplier: {e:?}");
+            }
+
+            Ok(new_id)
         })
         .await
     }
@@ -92,7 +100,14 @@ impl SupplierDb {
             )
             .context("prepare update_supplier")?
             ((name, contact, email, phone, notes, id))
-            .context("execute update_supplier")
+            .context("execute update_supplier")?;
+
+            let changed_by = current_user(conn).ok().flatten().unwrap_or_else(|| "system".into());
+            if let Err(e) = log_audit(conn, "suppliers", id, "UPDATE", &changed_by, None, None) {
+                tracing::warn!("audit log failed for update_supplier: {e:?}");
+            }
+
+            Ok(())
         })
         .await
     }

@@ -20,6 +20,8 @@ pub struct SupplierForm {
     email:          Entity<TextInput>,
     phone:          Entity<TextInput>,
     notes:          Entity<TextInput>,
+    cancel_focus:   FocusHandle,
+    save_focus:     FocusHandle,
     error:          Option<String>,
     focus_handle:   FocusHandle,
 }
@@ -40,6 +42,8 @@ impl SupplierForm {
             email:          cx.new(|cx| TextInput::with_placeholder("optional", cx)),
             phone:          cx.new(|cx| TextInput::with_placeholder("optional", cx)),
             notes:          cx.new(|cx| TextInput::with_placeholder("optional", cx)),
+            cancel_focus:   cx.focus_handle(),
+            save_focus:     cx.focus_handle(),
             error:          None,
             focus_handle:   cx.focus_handle(),
         }
@@ -74,6 +78,8 @@ impl SupplierForm {
             email:          email_f,
             phone:          phone_f,
             notes:          notes_f,
+            cancel_focus:   cx.focus_handle(),
+            save_focus:     cx.focus_handle(),
             error:          None,
             focus_handle:   cx.focus_handle(),
         }
@@ -135,14 +141,16 @@ impl Focusable for SupplierForm {
 
 impl Render for SupplierForm {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let c         = cx.global::<ThemeHandle>().0.clone();
-        let name_f    = self.name.read(cx).focus_handle.is_focused(window);
-        let contact_f = self.contact_person.read(cx).focus_handle.is_focused(window);
-        let email_f   = self.email.read(cx).focus_handle.is_focused(window);
-        let phone_f   = self.phone.read(cx).focus_handle.is_focused(window);
-        let notes_f   = self.notes.read(cx).focus_handle.is_focused(window);
-        let title     = if self.editing_id.is_some() { "Edit Supplier" } else { "New Supplier" };
-        let save_label= if self.editing_id.is_some() { "Save Changes" } else { "Save Supplier" };
+        let c          = cx.global::<ThemeHandle>().0.clone();
+        let name_f     = self.name.read(cx).focus_handle.is_focused(window);
+        let contact_f  = self.contact_person.read(cx).focus_handle.is_focused(window);
+        let email_f    = self.email.read(cx).focus_handle.is_focused(window);
+        let phone_f    = self.phone.read(cx).focus_handle.is_focused(window);
+        let notes_f    = self.notes.read(cx).focus_handle.is_focused(window);
+        let cancel_f   = self.cancel_focus.is_focused(window);
+        let save_f     = self.save_focus.is_focused(window);
+        let title      = if self.editing_id.is_some() { "Edit Supplier" } else { "New Supplier" };
+        let save_label = if self.editing_id.is_some() { "Save Changes" } else { "Save Supplier" };
 
         div()
             .absolute().top_0().left_0().right_0().bottom_0()
@@ -159,6 +167,8 @@ impl Render for SupplierForm {
                     this.email.read(cx).focus_handle.clone(),
                     this.phone.read(cx).focus_handle.clone(),
                     this.notes.read(cx).focus_handle.clone(),
+                    this.cancel_focus.clone(),
+                    this.save_focus.clone(),
                 ];
                 let current = handles.iter().position(|h| h.is_focused(window));
                 let next = handles[(current.map(|i| i + 1).unwrap_or(0)) % handles.len()].clone();
@@ -171,6 +181,8 @@ impl Render for SupplierForm {
                     this.email.read(cx).focus_handle.clone(),
                     this.phone.read(cx).focus_handle.clone(),
                     this.notes.read(cx).focus_handle.clone(),
+                    this.cancel_focus.clone(),
+                    this.save_focus.clone(),
                 ];
                 let current = handles.iter().position(|h| h.is_focused(window));
                 let prev = handles[(current.unwrap_or(0) + handles.len() - 1) % handles.len()].clone();
@@ -183,11 +195,11 @@ impl Render for SupplierForm {
                     .rounded(px(10.))
                     .border_1()
                     .border_color(rgb(c.surface_default))
-                    .overflow_hidden()
                     .flex().flex_col()
                     .child(
                         div()
                             .px(px(20.)).py(px(14.))
+                            .rounded_t(px(10.))
                             .bg(rgb(c.sidebar_bg))
                             .flex().flex_row().items_center()
                             .child(div().flex_1().text_size(rems(1.)).text_color(rgb(c.text_default)).child(title))
@@ -235,16 +247,28 @@ impl Render for SupplierForm {
                             .px(px(20.)).py(px(14.))
                             .border_t_1().border_color(rgb(c.surface_default))
                             .flex().flex_row().justify_end().gap(px(8.))
-                            .child(div().id("sup-btn-cancel").px(px(18.)).py(px(7.)).rounded(px(5.))
-                                .bg(rgb(c.surface_default)).text_size(rems(0.923)).text_color(rgb(c.text_default))
-                                .cursor_pointer()
-                                .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| cx.emit(SupplierFormEvent::Cancelled)))
-                                .child("Cancel"))
-                            .child(div().id("sup-btn-save").px(px(18.)).py(px(7.)).rounded(px(5.))
-                                .bg(rgb(c.surface_active)).text_size(rems(0.923)).text_color(rgb(c.text_default))
-                                .cursor_pointer()
-                                .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| this.submit(cx)))
-                                .child(save_label))
+                            .child(
+                                div().id("sup-btn-cancel")
+                                    .track_focus(&self.cancel_focus)
+                                    .px(px(18.)).py(px(7.)).rounded(px(5.))
+                                    .bg(rgb(c.surface_default)).text_size(rems(0.923)).text_color(rgb(c.text_default))
+                                    .cursor_pointer()
+                                    .when(cancel_f, |d| d.border_2().border_color(rgb(c.surface_active)))
+                                    .when(!cancel_f, |d| d.border_1().border_color(rgb(c.surface_default)))
+                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| cx.emit(SupplierFormEvent::Cancelled)))
+                                    .child("Cancel")
+                            )
+                            .child(
+                                div().id("sup-btn-save")
+                                    .track_focus(&self.save_focus)
+                                    .px(px(18.)).py(px(7.)).rounded(px(5.))
+                                    .bg(rgb(c.surface_active)).text_size(rems(0.923)).text_color(rgb(c.text_default))
+                                    .cursor_pointer()
+                                    .when(save_f, |d| d.border_2().border_color(rgb(c.text_default)))
+                                    .when(!save_f, |d| d.border_1().border_color(rgb(c.surface_active)))
+                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| this.submit(cx)))
+                                    .child(save_label)
+                            )
                     )
             )
     }

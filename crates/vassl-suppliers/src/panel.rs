@@ -1,6 +1,6 @@
 use gpui::{Context, Entity, IntoElement, Render, Subscription, Window,
            div, prelude::*, px, rems, rgb};
-use vassl_ui::{TextInput, ThemeHandle, text_field};
+use vassl_ui::{NewRecord, TextInput, ThemeHandle, text_field};
 
 use crate::store::SupplierStore;
 use crate::supplier_form::{SupplierForm, SupplierFormEvent};
@@ -28,12 +28,18 @@ impl SupplierPanel {
         Self { store, list, form: None, _form_sub: None, search_input }
     }
 
-    fn open_new_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.form.is_some() { return; }
+    pub fn create_new_form(&mut self, cx: &mut Context<Self>) -> Option<gpui::FocusHandle> {
+        if self.form.is_some() { return None; }
         let form  = cx.new(|cx| SupplierForm::new(self.store.clone(), cx));
         let first = form.read(cx).name.read(cx).focus_handle.clone();
-        window.focus(&first, cx);
         self.wire_form_sub(form, cx);
+        Some(first)
+    }
+
+    pub fn open_new_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(fh) = self.create_new_form(cx) {
+            window.focus(&fh, cx);
+        }
     }
 
     fn open_edit_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -74,6 +80,10 @@ impl Render for SupplierPanel {
         let has_query = !self.search_input.read(cx).text().is_empty();
 
         let mut root = div()
+            .key_context("SupplierPanel")
+            .on_action(cx.listener(|this, _: &NewRecord, window, cx| {
+                this.open_new_form(window, cx);
+            }))
             .relative()
             .flex_1().flex().flex_col().h_full()
             .child(
