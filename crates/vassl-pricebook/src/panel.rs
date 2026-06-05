@@ -49,32 +49,47 @@ impl PriceBookPanel {
         }
     }
 
-    fn open_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn create_form(&mut self, cx: &mut Context<Self>) -> Option<gpui::FocusHandle> {
         let (pid, name) = {
             let store = self.store.read(cx);
-            let Some(pid) = store.selected_product_id else { return; };
-            let name = store.product_prices
-                .iter()
+            let pid   = store.selected_product_id?;
+            let name  = store.product_prices.iter()
                 .find(|p| p.product_id == pid)
                 .map(|p| p.name.clone())
                 .unwrap_or_default();
             (pid, name)
         };
         self.open_form_for(pid, name, cx);
-        if let Some(form) = &self.form {
-            let first = form.read(cx).cost.read(cx).focus_handle.clone();
-            window.focus(&first, cx);
+        self.form.as_ref().map(|f| f.read(cx).cost.read(cx).focus_handle.clone())
+    }
+
+    fn open_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(fh) = self.create_form(cx) {
+            window.focus(&fh, cx);
         }
     }
 
     pub fn open_form_for(&mut self, product_id: i64, name: String, cx: &mut Context<Self>) {
         if self.form.is_some() { return; }
-        let current_stock = cx.global::<InventoryStoreHandle>().0.read(cx)
-            .products.iter()
+        let inv_store = cx.global::<InventoryStoreHandle>().0.read(cx);
+        let current_stock = inv_store.products.iter()
             .find(|p| p.product.id == product_id)
             .map(|p| p.current_stock)
             .unwrap_or(0.0);
-        let form  = cx.new(|cx| PriceEntryForm::new(self.store.clone(), product_id, name, current_stock, cx));
+        let duty_percent = {
+            // Use product's duty from store; fall back to pricebook's own product_prices
+            let from_inv = inv_store.products.iter()
+                .find(|p| p.product.id == product_id)
+                .map(|p| p.product.duty_percent);
+            from_inv.unwrap_or_else(|| {
+                self.store.read(cx).product_prices.iter()
+                    .find(|pp| pp.product_id == product_id)
+                    .map(|pp| pp.duty_percent)
+                    .unwrap_or(0.0)
+            })
+        };
+        let _ = inv_store; // release borrow before cx.new
+        let form  = cx.new(|cx| PriceEntryForm::new(self.store.clone(), product_id, name, duty_percent, current_stock, cx));
         let sub   = cx.subscribe(&form, |this, _form, ev: &PriceFormEvent, cx| {
             match ev {
                 PriceFormEvent::Submitted | PriceFormEvent::Cancelled => {

@@ -5,10 +5,11 @@ use crate::db::PriceBookDb;
 
 #[derive(Debug, Clone)]
 pub struct ProductPrice {
-    pub product_id: i64,
-    pub sku:        String,
-    pub name:       String,
-    pub latest:     Option<PriceEntry>,
+    pub product_id:   i64,
+    pub sku:          String,
+    pub name:         String,
+    pub duty_percent: f64,
+    pub latest:       Option<PriceEntry>,
 }
 
 #[derive(Debug, Clone)]
@@ -69,7 +70,7 @@ impl PriceBookStore {
                     Ok(rows) => {
                         store.product_prices = rows
                             .into_iter()
-                            .map(|(pid, sku, name, latest)| ProductPrice { product_id: pid, sku, name, latest })
+                            .map(|(pid, sku, name, latest)| ProductPrice { product_id: pid, sku, name, duty_percent: 0.0, latest })
                             .collect();
                         cx.emit(PriceBookEvent::ProductsLoaded);
                     }
@@ -152,6 +153,7 @@ mod tests {
             selling_price_usd: vassl_core::selling_price(cost, 0.0, 30.0).unwrap_or(0.0),
             effective_date:    "2026-01-01T00:00:00Z".to_string(),
             notes:             None,
+            currency:          "USD".to_string(),
         }
     }
 
@@ -159,8 +161,8 @@ mod tests {
     fn filtered_product_prices_empty_query_returns_all() {
         let store = PriceBookStore {
             product_prices: vec![
-                ProductPrice { product_id: 1, sku: "CAM-001".into(), name: "IP Camera".into(), latest: None },
-                ProductPrice { product_id: 2, sku: "NVR-001".into(), name: "NVR Unit".into(),  latest: None },
+                ProductPrice { product_id: 1, sku: "CAM-001".into(), name: "IP Camera".into(), duty_percent: 0.0, latest: None },
+                ProductPrice { product_id: 2, sku: "NVR-001".into(), name: "NVR Unit".into(),  duty_percent: 0.0, latest: None },
             ],
             selected_product_id: None,
             history: vec![],
@@ -175,8 +177,8 @@ mod tests {
     fn filtered_product_prices_matches_name_case_insensitive() {
         let store = PriceBookStore {
             product_prices: vec![
-                ProductPrice { product_id: 1, sku: "CAM-001".into(), name: "IP Camera".into(), latest: None },
-                ProductPrice { product_id: 2, sku: "NVR-001".into(), name: "NVR Unit".into(),  latest: None },
+                ProductPrice { product_id: 1, sku: "CAM-001".into(), name: "IP Camera".into(), duty_percent: 0.0, latest: None },
+                ProductPrice { product_id: 2, sku: "NVR-001".into(), name: "NVR Unit".into(),  duty_percent: 0.0, latest: None },
             ],
             selected_product_id: None,
             history: vec![],
@@ -193,7 +195,7 @@ mod tests {
     fn filtered_product_prices_matches_sku() {
         let store = PriceBookStore {
             product_prices: vec![
-                ProductPrice { product_id: 1, sku: "CAM-001".into(), name: "IP Camera".into(), latest: None },
+                ProductPrice { product_id: 1, sku: "CAM-001".into(), name: "IP Camera".into(), duty_percent: 0.0, latest: None },
             ],
             selected_product_id: None,
             history: vec![],
@@ -221,10 +223,11 @@ mod tests {
     #[test]
     fn product_price_with_no_entry_has_no_latest() {
         let pp = ProductPrice {
-            product_id: 1,
-            sku:        "X".to_string(),
-            name:       "Y".to_string(),
-            latest:     None,
+            product_id:   1,
+            sku:          "X".to_string(),
+            name:         "Y".to_string(),
+            duty_percent: 0.0,
+            latest:       None,
         };
         assert!(pp.latest.is_none());
     }
@@ -232,10 +235,11 @@ mod tests {
     #[test]
     fn product_price_with_entry_exposes_selling_price() {
         let pp = ProductPrice {
-            product_id: 1,
-            sku:        "A".to_string(),
-            name:       "B".to_string(),
-            latest:     Some(make_entry(1, 1, 100.0)),
+            product_id:   1,
+            sku:          "A".to_string(),
+            name:         "B".to_string(),
+            duty_percent: 0.0,
+            latest:       Some(make_entry(1, 1, 100.0)),
         };
         assert_eq!(pp.latest.unwrap().selling_price_usd, 130.0);
     }

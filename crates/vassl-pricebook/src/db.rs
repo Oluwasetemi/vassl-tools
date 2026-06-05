@@ -2,6 +2,7 @@ use anyhow::Context as _;
 use sqlez::domain::Domain;
 use vassl_core::PriceEntry;
 use vassl_db::SharedDomain;
+use vassl_db::shared::{current_user, log_audit};
 use vassl_inventory::db::InventoryDb;
 
 pub struct PriceBookDb(pub sqlez::thread_safe_connection::ThreadSafeConnection);
@@ -46,6 +47,8 @@ impl Domain for PriceBookDb {
             invoice_ref      TEXT,
             notes            TEXT
         )",
+        // Add currency to price book entries; 'USD' default preserves existing rows
+        "ALTER TABLE price_book_entries ADD COLUMN currency TEXT NOT NULL DEFAULT 'USD'",
     ];
     fn should_allow_migration_change(_: usize, _: &str, _: &str) -> bool { false }
 }
@@ -54,9 +57,9 @@ vassl_db::static_connection!(PriceBookDb, [SharedDomain, InventoryDb]);
 
 impl PriceBookDb {
     pub fn list_entries_for_product(&self, product_id: i64) -> anyhow::Result<Vec<PriceEntry>> {
-        self.select_bound::<i64, (i64, i64, f64, f64, f64, f64, f64, String, Option<String>)>(
+        self.select_bound::<i64, (i64, i64, f64, f64, f64, f64, f64, String, Option<String>, String)>(
             "SELECT id, product_id, quantity, cost_price_usd, duty_cost_usd, markup_percent,
-                    selling_price_usd, effective_date, notes
+                    selling_price_usd, effective_date, notes, currency
              FROM price_book_entries WHERE product_id = ?1
              ORDER BY effective_date DESC",
         )
@@ -64,12 +67,12 @@ impl PriceBookDb {
         (product_id)
         .context("execute list_entries_for_product")
         .map(|rows| {
-            rows.into_iter().map(|(id, pid, quantity, cost, duty, markup, selling, date, notes)| {
+            rows.into_iter().map(|(id, pid, quantity, cost, duty, markup, selling, date, notes, currency)| {
                 PriceEntry {
                     id, product_id: pid, quantity,
                     cost_price_usd: cost, duty_cost_usd: duty,
                     markup_percent: markup, selling_price_usd: selling,
-                    effective_date: date, notes,
+                    effective_date: date, notes, currency,
                 }
             }).collect()
         })
@@ -81,12 +84,12 @@ impl PriceBookDb {
         type Row = (
             i64, String, String,
             Option<i64>, Option<f64>, Option<f64>, Option<f64>, Option<f64>, Option<f64>,
-            Option<String>, Option<String>,
+            Option<String>, Option<String>, Option<String>,
         );
         self.select::<Row>(
             "SELECT p.id, p.sku, p.name,
                     e.id, e.quantity, e.cost_price_usd, e.duty_cost_usd, e.markup_percent,
-                    e.selling_price_usd, e.effective_date, e.notes
+                    e.selling_price_usd, e.effective_date, e.notes, e.currency
              FROM products p
              LEFT JOIN price_book_entries e ON e.id = (
                  SELECT id FROM price_book_entries
@@ -98,7 +101,7 @@ impl PriceBookDb {
         .context("prepare list_products_with_latest_price")?()
         .context("execute list_products_with_latest_price")
         .map(|rows| {
-            rows.into_iter().map(|(pid, sku, name, eid, qty, cost, duty, markup, selling, date, notes)| {
+            rows.into_iter().map(|(pid, sku, name, eid, qty, cost, duty, markup, selling, date, notes, currency)| {
                 let latest = eid.map(|id| PriceEntry {
                     id, product_id: pid,
                     quantity:          qty.unwrap_or(1.0),
@@ -108,6 +111,7 @@ impl PriceBookDb {
                     selling_price_usd: selling.unwrap_or(0.0),
                     effective_date:    date.unwrap_or_default(),
                     notes,
+                    currency:          currency.unwrap_or_else(|| "USD".to_string()),
                 });
                 (pid, sku, name, latest)
             }).collect()
@@ -123,11 +127,12 @@ impl PriceBookDb {
         markup_percent:    f64,
         selling_price_usd: f64,
         notes:             Option<&str>,
+        currency:          &str,
     ) -> anyhow::Result<i64> {
         let now = chrono::Utc::now().to_rfc3339();
         self.insert_entry_with_date(
             product_id, quantity, cost_price_usd, duty_cost_usd, markup_percent,
-            selling_price_usd, notes, &now,
+            selling_price_usd, notes, &now, currency,
         ).await
     }
 
@@ -141,19 +146,21 @@ impl PriceBookDb {
         selling_price_usd: f64,
         notes:             Option<&str>,
         effective_date:    &str,
+        currency:          &str,
     ) -> anyhow::Result<i64> {
-        let notes = notes.map(String::from);
-        let date  = effective_date.to_string();
+        let notes    = notes.map(String::from);
+        let date     = effective_date.to_string();
+        let currency = currency.to_string();
         self.write(move |conn| {
-            conn.exec_bound::<(i64, f64, f64, f64, f64, f64, String, Option<String>)>(
+            conn.exec_bound::<(i64, f64, f64, f64, f64, f64, String, Option<String>, String)>(
                 "INSERT INTO price_book_entries
                  (product_id, quantity, cost_price_usd, duty_cost_usd, markup_percent,
-                  selling_price_usd, effective_date, notes)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                  selling_price_usd, effective_date, notes, currency)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             )
             .context("prepare insert_entry_with_date")?
             ((product_id, quantity, cost_price_usd, duty_cost_usd, markup_percent,
-              selling_price_usd, date.clone(), notes))
+              selling_price_usd, date.clone(), notes, currency))
             .context("execute insert_entry_with_date")?;
 
             // Capture price_book_entries rowid before the stock insert changes last_insert_rowid
@@ -171,6 +178,11 @@ impl PriceBookDb {
             .context("prepare stock restock")?
             ((product_id, quantity, cost_price_usd, date))
             .context("execute stock restock")?;
+
+            let changed_by = current_user(conn).ok().flatten().unwrap_or_else(|| "system".into());
+            if let Err(e) = log_audit(conn, "price_book_entries", entry_id, "CREATE", &changed_by, None, None) {
+                tracing::warn!("audit log failed for insert_entry_with_date: {e:?}");
+            }
 
             Ok(entry_id)
         })
@@ -214,7 +226,7 @@ mod tests {
     async fn insert_and_retrieve_entry() {
         let db = PriceBookDb::open_test_db("pb_insert_retrieve").await;
         let pid = setup_product(&db, "CAM-001", "IP Camera").await;
-        let id = db.insert_entry(pid, 1.0, 100.0, 10.0, 30.0, 143.0, None).await.unwrap();
+        let id = db.insert_entry(pid, 1.0, 100.0, 10.0, 30.0, 143.0, None, "USD").await.unwrap();
         assert!(id > 0);
         let entries = db.list_entries_for_product(pid).unwrap();
         assert_eq!(entries.len(), 1);
@@ -226,11 +238,11 @@ mod tests {
     async fn entries_returned_newest_first() {
         let db = PriceBookDb::open_test_db("pb_entries_order").await;
         let pid = setup_product(&db, "CAM-002", "PTZ Camera").await;
-        db.insert_entry_with_date(pid, 1.0, 100.0, 0.0, 30.0, 130.0, None, "2025-01-01T00:00:00Z")
+        db.insert_entry_with_date(pid, 1.0, 100.0, 0.0, 30.0, 130.0, None, "2025-01-01T00:00:00Z", "USD")
             .await.unwrap();
-        db.insert_entry_with_date(pid, 1.0, 200.0, 0.0, 30.0, 260.0, None, "2026-06-01T00:00:00Z")
+        db.insert_entry_with_date(pid, 1.0, 200.0, 0.0, 30.0, 260.0, None, "2026-06-01T00:00:00Z", "USD")
             .await.unwrap();
-        db.insert_entry_with_date(pid, 1.0, 150.0, 0.0, 30.0, 195.0, None, "2026-01-01T00:00:00Z")
+        db.insert_entry_with_date(pid, 1.0, 150.0, 0.0, 30.0, 195.0, None, "2026-01-01T00:00:00Z", "USD")
             .await.unwrap();
         let entries = db.list_entries_for_product(pid).unwrap();
         assert_eq!(entries.len(), 3);
@@ -252,9 +264,9 @@ mod tests {
     async fn list_products_with_latest_price_shows_most_recent_entry() {
         let db = PriceBookDb::open_test_db("pb_latest_price_entry").await;
         let pid = setup_product(&db, "NVR-001", "NVR").await;
-        db.insert_entry_with_date(pid, 1.0, 300.0, 0.0, 30.0, 390.0, None, "2025-01-01T00:00:00Z")
+        db.insert_entry_with_date(pid, 1.0, 300.0, 0.0, 30.0, 390.0, None, "2025-01-01T00:00:00Z", "USD")
             .await.unwrap();
-        db.insert_entry_with_date(pid, 1.0, 400.0, 0.0, 30.0, 520.0, None, "2026-01-01T00:00:00Z")
+        db.insert_entry_with_date(pid, 1.0, 400.0, 0.0, 30.0, 520.0, None, "2026-01-01T00:00:00Z", "USD")
             .await.unwrap();
         let rows = db.list_products_with_latest_price().unwrap();
         assert_eq!(rows.len(), 1);

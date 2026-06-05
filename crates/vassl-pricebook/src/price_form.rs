@@ -18,37 +18,36 @@ pub struct PriceEntryForm {
     store:        Entity<PriceBookStore>,
     product_id:   i64,
     product_name: String,
+    duty_percent: f64,
+    currency:     String,
     pub cost:     Entity<TextInput>,
     quantity:     Entity<TextInput>,
-    duty:         Entity<TextInput>,
     markup:       Entity<TextInput>,
+    cancel_focus: FocusHandle,
+    save_focus:   FocusHandle,
     error:        Option<String>,
     focus_handle: FocusHandle,
 }
 
-/// Returns (qty, cost_usd, duty_pct, markup_pct).
-fn validate_price_entry(qty: &str, cost: &str, duty_pct: &str, markup: &str) -> Result<(f64, f64, f64, f64), String> {
+/// Returns (qty, cost, markup_pct).
+fn validate_price_entry(qty: &str, cost: &str, markup: &str) -> Result<(f64, f64, f64), String> {
     let q: f64 = qty.trim().parse().map_err(|_| "Quantity must be a number > 0".to_string())?;
     if q <= 0.0 { return Err("Quantity must be > 0".to_string()); }
     let c: f64 = cost.trim().parse().map_err(|_| "Cost must be a number ≥ 0".to_string())?;
     if c < 0.0 { return Err("Cost must be ≥ 0".to_string()); }
-    let d: f64 = duty_pct.trim().parse().map_err(|_| "Duty % must be a number ≥ 0".to_string())?;
-    if d < 0.0 { return Err("Duty % must be ≥ 0".to_string()); }
     let m: f64 = markup.trim().parse().map_err(|_| "Markup % must be > 0".to_string())?;
     if m <= 0.0 { return Err("Markup % must be > 0".to_string()); }
-    Ok((q, c, d, m))
+    Ok((q, c, m))
 }
 
 impl PriceEntryForm {
-    pub fn new(store: Entity<PriceBookStore>, product_id: i64, product_name: String, current_stock: f64, cx: &mut Context<Self>) -> Self {
+    pub fn new(store: Entity<PriceBookStore>, product_id: i64, product_name: String, duty_percent: f64, current_stock: f64, cx: &mut Context<Self>) -> Self {
         let markup_field = cx.new(|cx| {
+            let db = vassl_db::AppDatabase::global(&**cx);
+            let default = vassl_db::shared::get_setting(db, "pricebook.default_margin")
+                .ok().flatten().unwrap_or_else(|| "30".into());
             let mut f = TextInput::with_placeholder("e.g. 30", cx);
-            f.set_text("30", cx);
-            f
-        });
-        let duty_field = cx.new(|cx| {
-            let mut f = TextInput::with_placeholder("e.g. 40", cx);
-            f.set_text("40", cx);
+            f.set_text(default, cx);
             f
         });
         let quantity_field = cx.new(|cx| {
@@ -58,14 +57,20 @@ impl PriceEntryForm {
             }
             f
         });
+        let db       = vassl_db::AppDatabase::global(&**cx);
+        let currency = vassl_db::shared::get_setting(db, "pricebook.currency")
+            .ok().flatten().unwrap_or_else(|| "USD".into());
         Self {
             store,
             product_id,
             product_name,
+            duty_percent,
+            currency,
             cost:         cx.new(|cx| TextInput::with_placeholder("e.g. 120.00", cx)),
             quantity:     quantity_field,
-            duty:         duty_field,
             markup:       markup_field,
+            cancel_focus: cx.focus_handle(),
+            save_focus:   cx.focus_handle(),
             error:        None,
             focus_handle: cx.focus_handle(),
         }
@@ -74,11 +79,10 @@ impl PriceEntryForm {
     fn computed_selling_price(&self, cx: &Context<Self>) -> String {
         let q = self.quantity.read(cx).text().to_string();
         let c = self.cost.read(cx).text().to_string();
-        let d = self.duty.read(cx).text().to_string();
         let m = self.markup.read(cx).text().to_string();
-        match validate_price_entry(&q, &c, &d, &m) {
-            Ok((_qv, cv, dpct, mv)) => {
-                let duty_usd = cv * dpct / 100.0;
+        match validate_price_entry(&q, &c, &m) {
+            Ok((_qv, cv, mv)) => {
+                let duty_usd = cv * self.duty_percent / 100.0;
                 match selling_price(cv, duty_usd, mv) {
                     Ok(s)  => format!("${s:.2}"),
                     Err(_) => "—".to_string(),
@@ -91,19 +95,19 @@ impl PriceEntryForm {
     fn submit(&mut self, cx: &mut Context<Self>) {
         let q = self.quantity.read(cx).text().to_string();
         let c = self.cost.read(cx).text().to_string();
-        let d = self.duty.read(cx).text().to_string();
         let m = self.markup.read(cx).text().to_string();
-        match validate_price_entry(&q, &c, &d, &m) {
+        match validate_price_entry(&q, &c, &m) {
             Err(msg) => { self.error = Some(msg); cx.notify(); }
-            Ok((qv, cv, dpct, mv)) => {
-                let duty_usd = cv * dpct / 100.0;
-                let sell  = selling_price(cv, duty_usd, mv).unwrap_or(0.0);
+            Ok((qv, cv, mv)) => {
+                let duty_usd = cv * self.duty_percent / 100.0;
+                let sell     = selling_price(cv, duty_usd, mv).unwrap_or(0.0);
                 let db        = PriceBookDb::global(&**cx);
                 let pid       = self.product_id;
                 let store     = self.store.clone();
                 let inv_store = cx.global::<InventoryStoreHandle>().0.clone();
+                let currency  = self.currency.clone();
                 cx.spawn(async move |this, cx| {
-                    let result = db.insert_entry(pid, qv, cv, duty_usd, mv, sell, None).await;
+                    let result = db.insert_entry(pid, qv, cv, duty_usd, mv, sell, None, &currency).await;
                     let _ = this.update(cx, |form, cx| {
                         match result {
                             Err(e) => {
@@ -135,8 +139,11 @@ impl Render for PriceEntryForm {
         let selling      = self.computed_selling_price(cx);
         let qty_focused  = self.quantity.read(cx).focus_handle.is_focused(window);
         let cost_focused = self.cost.read(cx).focus_handle.is_focused(window);
-        let duty_focused = self.duty.read(cx).focus_handle.is_focused(window);
         let mrkp_focused = self.markup.read(cx).focus_handle.is_focused(window);
+        let cancel_f     = self.cancel_focus.is_focused(window);
+        let save_f       = self.save_focus.is_focused(window);
+        let is_jmd       = self.currency == "JMD";
+        let duty_pct     = self.duty_percent;
 
         div()
             .absolute().top_0().left_0().right_0().bottom_0()
@@ -150,8 +157,9 @@ impl Render for PriceEntryForm {
                 let handles = [
                     this.quantity.read(cx).focus_handle.clone(),
                     this.cost.read(cx).focus_handle.clone(),
-                    this.duty.read(cx).focus_handle.clone(),
                     this.markup.read(cx).focus_handle.clone(),
+                    this.cancel_focus.clone(),
+                    this.save_focus.clone(),
                 ];
                 let current = handles.iter().position(|h| h.is_focused(window));
                 let next = handles[(current.map(|i| i + 1).unwrap_or(0)) % handles.len()].clone();
@@ -161,8 +169,9 @@ impl Render for PriceEntryForm {
                 let handles = [
                     this.quantity.read(cx).focus_handle.clone(),
                     this.cost.read(cx).focus_handle.clone(),
-                    this.duty.read(cx).focus_handle.clone(),
                     this.markup.read(cx).focus_handle.clone(),
+                    this.cancel_focus.clone(),
+                    this.save_focus.clone(),
                 ];
                 let current = handles.iter().position(|h| h.is_focused(window));
                 let prev = handles[(current.unwrap_or(0) + handles.len() - 1) % handles.len()].clone();
@@ -175,12 +184,12 @@ impl Render for PriceEntryForm {
                     .rounded(px(10.))
                     .border_1()
                     .border_color(rgb(c.surface_default))
-                    .overflow_hidden()
                     .flex().flex_col()
                     // ── header ──────────────────────────────────────────
                     .child(
                         div()
                             .px(px(20.)).py(px(14.))
+                            .rounded_t(px(10.))
                             .bg(rgb(c.sidebar_bg))
                             .flex().flex_row().items_center()
                             .child(div().flex_1()
@@ -199,14 +208,49 @@ impl Render for PriceEntryForm {
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
-                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Cost Price (USD)"))
-                                    .child(div().flex_1().child(text_field("", self.cost.clone(), cost_focused, cx)))
+                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default))
+                                        .child(if is_jmd { "Cost Price (JMD)" } else { "Cost Price (USD)" }))
+                                    .child(div().flex().flex_row().items_center().gap(px(8.)).flex_1()
+                                        .child(div().flex_1().child(text_field("", self.cost.clone(), cost_focused, cx)))
+                                        // Currency toggle — USD / JMD
+                                        .child({
+                                            let usd_bg = if !is_jmd { c.surface_active } else { c.surface_default };
+                                            let jmd_bg = if is_jmd  { c.surface_active } else { c.surface_default };
+                                            div().flex().flex_row().items_center().gap(px(2.))
+                                                .child(
+                                                    div().id("pb-cur-usd")
+                                                        .px(px(8.)).py(px(4.)).rounded(px(4.))
+                                                        .bg(rgb(usd_bg)).cursor_pointer()
+                                                        .text_size(rems(0.846)).text_color(rgb(c.text_default))
+                                                        .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
+                                                            this.currency = "USD".into();
+                                                            cx.notify();
+                                                        }))
+                                                        .child("USD")
+                                                )
+                                                .child(
+                                                    div().id("pb-cur-jmd")
+                                                        .px(px(8.)).py(px(4.)).rounded(px(4.))
+                                                        .bg(rgb(jmd_bg)).cursor_pointer()
+                                                        .text_size(rems(0.846)).text_color(rgb(c.text_default))
+                                                        .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
+                                                            this.currency = "JMD".into();
+                                                            cx.notify();
+                                                        }))
+                                                        .child("JMD")
+                                                )
+                                        })
+                                    )
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
+                            // Duty % — read-only from product
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
-                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Duty %"))
-                                    .child(div().flex_1().child(text_field("", self.duty.clone(), duty_focused, cx)))
+                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child("Duty %"))
+                                    .child(div().flex_1()
+                                        .px(px(8.)).py(px(4.)).bg(rgb(c.surface_default)).rounded(px(4.))
+                                        .text_size(rems(0.923)).text_color(rgb(c.text_muted))
+                                        .child(format!("{duty_pct:.1}% (from product)")))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
@@ -235,16 +279,28 @@ impl Render for PriceEntryForm {
                             .border_t_1()
                             .border_color(rgb(c.surface_default))
                             .flex().flex_row().justify_end().gap(px(8.))
-                            .child(div().id("pb-btn-cancel").px(px(18.)).py(px(7.)).rounded(px(5.))
-                                .bg(rgb(c.surface_default)).text_size(rems(0.923)).text_color(rgb(c.text_default))
-                                .cursor_pointer()
-                                .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| { cx.emit(PriceFormEvent::Cancelled); }))
-                                .child("Cancel"))
-                            .child(div().id("pb-btn-save").px(px(18.)).py(px(7.)).rounded(px(5.))
-                                .bg(rgb(c.surface_active)).text_size(rems(0.923)).text_color(rgb(c.text_default))
-                                .cursor_pointer()
-                                .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| { this.submit(cx); }))
-                                .child("Save Entry"))
+                            .child(
+                                div().id("pb-btn-cancel")
+                                    .track_focus(&self.cancel_focus)
+                                    .px(px(18.)).py(px(7.)).rounded(px(5.))
+                                    .bg(rgb(c.surface_default)).text_size(rems(0.923)).text_color(rgb(c.text_default))
+                                    .cursor_pointer()
+                                    .when(cancel_f, |d| d.border_2().border_color(rgb(c.surface_active)))
+                                    .when(!cancel_f, |d| d.border_1().border_color(rgb(c.surface_default)))
+                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| { cx.emit(PriceFormEvent::Cancelled); }))
+                                    .child("Cancel")
+                            )
+                            .child(
+                                div().id("pb-btn-save")
+                                    .track_focus(&self.save_focus)
+                                    .px(px(18.)).py(px(7.)).rounded(px(5.))
+                                    .bg(rgb(c.surface_active)).text_size(rems(0.923)).text_color(rgb(c.text_default))
+                                    .cursor_pointer()
+                                    .when(save_f, |d| d.border_2().border_color(rgb(c.text_default)))
+                                    .when(!save_f, |d| d.border_1().border_color(rgb(c.surface_active)))
+                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| { this.submit(cx); }))
+                                    .child("Save Entry")
+                            )
                     )
             )
     }
@@ -253,18 +309,17 @@ impl Render for PriceEntryForm {
 #[cfg(test)]
 mod tests {
     use super::validate_price_entry;
-    #[test] fn rejects_zero_quantity()      { assert!(validate_price_entry("0", "100", "40", "30").is_err()); }
-    #[test] fn rejects_empty_cost()         { assert!(validate_price_entry("1", "", "40", "30").is_err()); }
-    #[test] fn rejects_negative_cost()      { assert!(validate_price_entry("1", "-1", "40", "30").is_err()); }
-    #[test] fn rejects_zero_markup()        { assert!(validate_price_entry("1", "100", "40", "0").is_err()); }
-    #[test] fn rejects_negative_markup()    { assert!(validate_price_entry("1", "100", "40", "-5").is_err()); }
-    #[test] fn rejects_negative_duty_pct()  { assert!(validate_price_entry("1", "100", "-1", "30").is_err()); }
-    #[test] fn accepts_valid()              { assert!(validate_price_entry("10", "100.0", "40.0", "30.0").is_ok()); }
-    #[test] fn accepts_zero_duty()          { assert!(validate_price_entry("5", "200.0", "0.0", "25.0").is_ok()); }
+    #[test] fn rejects_zero_quantity()      { assert!(validate_price_entry("0", "100", "30").is_err()); }
+    #[test] fn rejects_empty_cost()         { assert!(validate_price_entry("1", "", "30").is_err()); }
+    #[test] fn rejects_negative_cost()      { assert!(validate_price_entry("1", "-1", "30").is_err()); }
+    #[test] fn rejects_zero_markup()        { assert!(validate_price_entry("1", "100", "0").is_err()); }
+    #[test] fn rejects_negative_markup()    { assert!(validate_price_entry("1", "100", "-5").is_err()); }
+    #[test] fn accepts_valid()              { assert!(validate_price_entry("10", "100.0", "30.0").is_ok()); }
     #[test] fn forty_pct_duty_calculation() {
-        // cost=100, duty=40% → duty_usd=40, selling = (100+40) * 1.30 = 182
-        let (_qv, cv, dpct, mv) = validate_price_entry("10", "100.0", "40.0", "30.0").unwrap();
-        let duty_usd = cv * dpct / 100.0;
+        // product duty_percent=40, cost=100 → duty_usd=40, selling = (100+40) * 1.30 = 182
+        let (_qv, cv, mv) = validate_price_entry("10", "100.0", "30.0").unwrap();
+        let duty_pct = 40.0_f64;
+        let duty_usd = cv * duty_pct / 100.0;
         let sell = vassl_core::selling_price(cv, duty_usd, mv).unwrap();
         assert!((sell - 182.0).abs() < 1e-9);
     }

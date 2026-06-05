@@ -147,8 +147,9 @@ mod tests {
             selling_price_usd: vassl_core::selling_price(c, 0.0, 30.0).unwrap_or(0.0),
             effective_date:    "2026-01-01T00:00:00Z".to_string(),
             notes:             None,
+            currency:          "USD".to_owned(),
         });
-        ProductPrice { product_id: id, sku: format!("SKU-{id}"), name: name.to_string(), latest }
+        ProductPrice { product_id: id, sku: format!("SKU-{id}"), name: name.to_string(), latest, duty_percent: 42.5 }
     }
 
     #[test]

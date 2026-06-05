@@ -133,6 +133,7 @@ mod tests {
             selling_price_usd: 143.0,
             effective_date:    "2026-01-01T00:00:00Z".to_string(),
             notes:             None,
+            currency:          "USD".to_owned(),
         }
     }
 
