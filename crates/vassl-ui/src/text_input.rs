@@ -18,15 +18,17 @@ actions!(
 );
 
 pub struct TextInput {
-    pub focus_handle:   FocusHandle,
-    pub content:        SharedString,
-    pub placeholder:    SharedString,
-    selected_range:     Range<usize>,
-    selection_reversed: bool,
-    marked_range:       Option<Range<usize>>,
-    last_layout:        Option<ShapedLine>,
-    last_bounds:        Option<Bounds<Pixels>>,
-    is_selecting:       bool,
+    pub focus_handle:        FocusHandle,
+    pub content:             SharedString,
+    pub placeholder:         SharedString,
+    pub suppress_placeholder: bool,
+    pub scroll_x:            Pixels,
+    selected_range:          Range<usize>,
+    selection_reversed:      bool,
+    marked_range:            Option<Range<usize>>,
+    last_layout:             Option<ShapedLine>,
+    last_bounds:             Option<Bounds<Pixels>>,
+    is_selecting:            bool,
 }
 
 impl TextInput {
@@ -36,16 +38,33 @@ impl TextInput {
 
     pub fn with_placeholder(placeholder: impl Into<SharedString>, cx: &mut Context<Self>) -> Self {
         Self {
-            focus_handle:     cx.focus_handle(),
-            content:          "".into(),
-            placeholder:      placeholder.into(),
-            selected_range:   0..0,
-            selection_reversed: false,
-            marked_range:     None,
-            last_layout:      None,
-            last_bounds:      None,
-            is_selecting:     false,
+            focus_handle:         cx.focus_handle(),
+            content:              "".into(),
+            placeholder:          placeholder.into(),
+            suppress_placeholder: false,
+            scroll_x:             px(0.),
+            selected_range:       0..0,
+            selection_reversed:   false,
+            marked_range:         None,
+            last_layout:          None,
+            last_bounds:          None,
+            is_selecting:         false,
         }
+    }
+
+    /// Keep cursor visible as text overflows the input bounds.
+    /// `cursor_x` — cursor position in text space (pixels from text start).
+    /// `line_width` — total text width in pixels.
+    /// `bounds_width` — visible viewport width in pixels.
+    pub fn scroll_to_cursor(&mut self, cursor_x: Pixels, line_width: Pixels, bounds_width: Pixels) {
+        if cursor_x < self.scroll_x {
+          self.scroll_x = cursor_x
+        } else if cursor_x > self.scroll_x + bounds_width {
+          self.scroll_x = cursor_x - bounds_width
+        }
+        // Clamp scroll_x to [px(0.), (line_width - bounds_width).max(px(0.))].
+        let max_scroll = (line_width - bounds_width).max(px(0.));
+        self.scroll_x = self.scroll_x.clamp(px(0.), max_scroll);
     }
 
     pub fn text(&self) -> &str {
@@ -60,13 +79,14 @@ impl TextInput {
     }
 
     pub fn reset(&mut self, cx: &mut Context<Self>) {
-        self.content        = "".into();
-        self.selected_range = 0..0;
+        self.content            = "".into();
+        self.scroll_x           = px(0.);
+        self.selected_range     = 0..0;
         self.selection_reversed = false;
-        self.marked_range   = None;
-        self.last_layout    = None;
-        self.last_bounds    = None;
-        self.is_selecting   = false;
+        self.marked_range       = None;
+        self.last_layout        = None;
+        self.last_bounds        = None;
+        self.is_selecting       = false;
         cx.notify();
     }
 
@@ -139,7 +159,8 @@ impl TextInput {
         let (Some(bounds), Some(line)) = (self.last_bounds.as_ref(), self.last_layout.as_ref()) else { return 0; };
         if position.y < bounds.top()    { return 0; }
         if position.y > bounds.bottom() { return self.content.len(); }
-        line.closest_index_for_x(position.x - bounds.left())
+        // Viewport x → text-space x by adding back the scroll offset
+        line.closest_index_for_x(position.x - bounds.left() + self.scroll_x)
     }
 
     fn left(&mut self, _: &Left, _: &mut Window, cx: &mut Context<Self>) {
@@ -268,9 +289,10 @@ impl EntityInputHandler for TextInput {
     fn bounds_for_range(&mut self, range_utf16: Range<usize>, bounds: Bounds<Pixels>, _: &mut Window, _: &mut Context<Self>) -> Option<Bounds<Pixels>> {
         let last = self.last_layout.as_ref()?;
         let range = self.range_from_utf16(&range_utf16);
+        let sx = self.scroll_x;
         Some(Bounds::from_corners(
-            point(bounds.left() + last.x_for_index(range.start), bounds.top()),
-            point(bounds.left() + last.x_for_index(range.end),   bounds.bottom()),
+            point(bounds.left() + last.x_for_index(range.start) - sx, bounds.top()),
+            point(bounds.left() + last.x_for_index(range.end)   - sx, bounds.bottom()),
         ))
     }
     fn character_index_for_point(&mut self, pt: Point<Pixels>, _: &mut Window, _: &mut Context<Self>) -> Option<usize> {
@@ -320,9 +342,12 @@ pub struct TextElement {
 }
 
 pub struct PrepaintState {
-    line:      Option<ShapedLine>,
-    cursor:    Option<PaintQuad>,
-    selection: Option<PaintQuad>,
+    line:       Option<ShapedLine>,
+    cursor:     Option<PaintQuad>,
+    selection:  Option<PaintQuad>,
+    scroll_x:   Pixels,
+    cursor_pos: Pixels,
+    line_width: Pixels,
 }
 
 impl IntoElement for TextElement {
@@ -345,50 +370,59 @@ impl gpui::Element for TextElement {
     }
 
     fn prepaint(&mut self, _: Option<&GlobalElementId>, _: Option<&gpui::InspectorElementId>, bounds: Bounds<Pixels>, _: &mut (), window: &mut Window, cx: &mut App) -> PrepaintState {
-        let input        = self.input.read(cx);
-        let content      = input.content.clone();
-        let sel          = input.selected_range.clone();
-        let cursor       = input.cursor_offset();
-        let style        = window.text_style();
+        let input          = self.input.read(cx);
+        let content        = input.content.clone();
+        let sel            = input.selected_range.clone();
+        let cursor         = input.cursor_offset();
+        let scroll_x       = input.scroll_x;
+        let suppress_ph    = input.suppress_placeholder;
+        let style          = window.text_style();
         let c: ThemeColors = cx.global::<ThemeHandle>().0.clone();
 
         let (display, color) = if content.is_empty() {
-            (input.placeholder.clone(), rgba(((c.text_muted << 8) | 0x99) as u32).into())
+            if suppress_ph {
+                (SharedString::from(""), style.color)
+            } else {
+                (input.placeholder.clone(), rgba(((c.text_muted << 8) | 0x99) as u32).into())
+            }
         } else {
-            (content, style.color)
+            (content.clone(), style.color)
         };
 
         let run = TextRun { len: display.len(), font: style.font(), color, background_color: None, underline: None, strikethrough: None };
-        let runs = vec![run];
         let font_size = style.font_size.to_pixels(window.rem_size());
-        let line = window.text_system().shape_line(display, font_size, &runs, None);
+        let line = window.text_system().shape_line(display, font_size, &[run], None);
 
-        let cursor_pos  = line.x_for_index(cursor);
-        let cursor_fill = rgb(c.surface_active);
-        let sel_fill    = rgba(((c.surface_active << 8) | 0x66) as u32);
+        let cursor_pos_raw: Pixels = line.x_for_index(cursor);
+        let line_width: Pixels     = if content.is_empty() { px(0.) } else { line.x_for_index(content.len()) };
+        let cursor_fill         = rgb(c.surface_active);
+        let sel_fill            = rgba(((c.surface_active << 8) | 0x66) as u32);
 
+        // All positions are in viewport space: text_space_x - scroll_x
         let (selection, cursor_quad) = if sel.is_empty() {
+            let vx = bounds.left() + cursor_pos_raw - scroll_x;
             (None, Some(fill(
-                Bounds::new(point(bounds.left() + cursor_pos, bounds.top()), size(px(2.), bounds.bottom() - bounds.top())),
+                Bounds::new(point(vx, bounds.top()), size(px(2.), bounds.bottom() - bounds.top())),
                 cursor_fill,
             )))
         } else {
-            let start_x = line.x_for_index(sel.start);
-            let end_x   = line.x_for_index(sel.end);
+            let start_vx = bounds.left() + line.x_for_index(sel.start) - scroll_x;
+            let end_vx   = bounds.left() + line.x_for_index(sel.end)   - scroll_x;
             (Some(fill(
                 Bounds::from_corners(
-                    point(bounds.left() + start_x, bounds.top()),
-                    point(bounds.left() + end_x,   bounds.bottom()),
+                    point(start_vx, bounds.top()),
+                    point(end_vx,   bounds.bottom()),
                 ),
                 sel_fill,
             )), None)
         };
 
-        PrepaintState { line: Some(line), cursor: cursor_quad, selection }
+        PrepaintState { line: Some(line), cursor: cursor_quad, selection, scroll_x, cursor_pos: cursor_pos_raw, line_width }
     }
 
     fn paint(&mut self, _: Option<&GlobalElementId>, _: Option<&gpui::InspectorElementId>, bounds: Bounds<Pixels>, _: &mut (), prepaint: &mut PrepaintState, window: &mut Window, cx: &mut App) {
         let focus_handle = self.input.read(cx).focus_handle.clone();
+        let scroll_x     = prepaint.scroll_x;
 
         window.handle_input(
             &focus_handle,
@@ -401,11 +435,17 @@ impl gpui::Element for TextElement {
         }
 
         if let Some(line) = prepaint.line.take() {
-            let _ = line.paint(bounds.origin, window.line_height(), TextAlign::Left, None, window, cx);
-            // Store layout for hit-testing
+            // Shift text left by scroll_x so the visible window shows the right portion
+            let text_origin = point(bounds.origin.x - scroll_x, bounds.origin.y);
+            let _ = line.paint(text_origin, window.line_height(), TextAlign::Left, None, window, cx);
+
+            let cursor_pos = prepaint.cursor_pos;
+            let line_width = prepaint.line_width;
+            let bw         = bounds.size.width;
             self.input.update(cx, |input, _| {
                 input.last_layout = Some(line);
                 input.last_bounds = Some(bounds);
+                input.scroll_to_cursor(cursor_pos, line_width, bw);
             });
         }
 
@@ -447,6 +487,7 @@ pub fn text_field(
                 .border_color(gpui::rgb(border_color))
                 .text_size(rems(1.))
                 .text_color(gpui::rgb(c.text_default))
+                .overflow_hidden()
                 .child(input)
         )
 }
