@@ -2,12 +2,17 @@
   {
     "context": "VasslRoot",
     "bindings": {
-      "ctrl-1":       "vassl::OpenInventory",
-      "ctrl-2":       "vassl::OpenQuotations",
-      "ctrl-3":       "vassl::OpenPriceBook",
-      "ctrl-shift-a": "vassl::OpenAuditLog",
-      "ctrl-n":       "vassl::NewRecord",
-      "ctrl-f":       "vassl::FocusSearch"
+      "secondary-1":       "vassl::OpenInventory",
+      "secondary-2":       "vassl::OpenQuotations",
+      "secondary-3":       "vassl::OpenPriceBook",
+      "secondary-4":       "vassl::OpenSuppliers",
+      "secondary-shift-a": "vassl::OpenAuditLog",
+      "secondary-,":       "vassl::OpenSettings",
+      "secondary-shift-f": "vassl::OpenGlobalSearch",
+      "secondary-f":       "vassl::FocusSearch",
+      "secondary-n":       "vassl::NewRecord",
+      "secondary-=":       "vassl::IncreaseFontSize",
+      "secondary--":       "vassl::DecreaseFontSize"
     }
   }
 ]
