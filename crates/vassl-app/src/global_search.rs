@@ -241,6 +241,7 @@ mod tests {
                 min_stock_level: 0.0, description: None, notes: None,
                 preferred_supplier_id: None,
                 created_at: "2026-01-01T00:00:00Z".into(),
+                model_number: None, part_number: None, duty_percent: 0.0,
             },
             current_stock: 5.0,
             status: StockStatus::Healthy,

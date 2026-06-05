@@ -1,9 +1,11 @@
-use gpui::{Context, Entity, FocusHandle, Focusable, IntoElement, Render, Subscription, Window, div, prelude::*, px, rgb};
+use gpui::{Context, Entity, FocusHandle, Focusable, IntoElement, PathPromptOptions, Render, Subscription, Window, div, prelude::*, px, rgb};
 use vassl_ui::{ThemeColors, ThemeHandle};
 
-use crate::actions::{DecreaseFontSize, EscapeModal, FocusSearch, IncreaseFontSize, Minimize, OpenAuditLog, OpenGlobalSearch, OpenInventory, OpenPriceBook, OpenQuotations, OpenSettings, Zoom};
+use crate::about_dialog::{AboutDialog, AboutEvent};
+use crate::actions::{About, DecreaseFontSize, EscapeModal, FocusSearch, IncreaseFontSize, Minimize, OpenAuditLog, OpenGlobalSearch, OpenInventory, OpenPriceBook, OpenQuotations, OpenSuppliers, OpenSettings, Zoom};
+use vassl_ui::NewRecord;
 use crate::global_search::{GlobalSearch, GlobalSearchEvent, SearchResultKind};
-use crate::settings_panel::SettingsPanel;
+use crate::settings_panel::{SettingsPanel, SettingsPanelEvent};
 use crate::audit_log::AuditLogPanel;
 use crate::command_palette::{CommandPalette, PaletteEvent, PaletteCommand};
 use crate::first_run::{FirstRunEvent, FirstRunPrompt};
@@ -33,8 +35,11 @@ pub struct VasslRoot {
     _price_history_sub:    Option<Subscription>,
     global_search:         Option<Entity<GlobalSearch>>,
     _global_search_sub:    Option<Subscription>,
+    about_dialog:          Option<Entity<AboutDialog>>,
+    _about_sub:            Option<Subscription>,
     _inventory_panel_sub:  Subscription,
     _pricebook_panel_sub:  Subscription,
+    _settings_panel_sub:   Subscription,
     focus_handle:          FocusHandle,
 }
 
@@ -98,6 +103,17 @@ impl VasslRoot {
 
         let settings_panel   = cx.new(SettingsPanel::new);
         settings_panel.update(cx, |panel, cx| panel.wire_observers(cx));
+        let _settings_panel_sub = cx.subscribe(
+            &settings_panel,
+            |_this, panel, ev: &SettingsPanelEvent, cx| {
+                match ev {
+                    SettingsPanelEvent::KeymapChanged => {
+                        let overrides = panel.read(cx).keymap_overrides.clone();
+                        crate::apply_keybindings(&mut **cx, &overrides);
+                    }
+                }
+            },
+        );
 
         let inventory_panel  = cx.new(InventoryPanel::new);
         let pricebook_panel  = cx.new(PriceBookPanel::new);
@@ -129,6 +145,34 @@ impl VasslRoot {
                             panel.store.update(cx, |s, cx| s.select_product(pid, cx));
                             panel.open_form_for(pid, pname, cx);
                         });
+                    }
+                    InventoryPanelEvent::ImportXlsxRequested => {
+                        let rx        = cx.prompt_for_paths(PathPromptOptions {
+                            files: true, directories: false, multiple: false,
+                            prompt: Some("Select XLSX file to import".into()),
+                        });
+                        // Capture DB handles before entering the async spawn
+                        let inv_db    = vassl_inventory::db::InventoryDb::global(&**cx);
+                        let sup_db    = vassl_suppliers::db::SupplierDb::global(&**cx);
+                        let pb_db     = vassl_pricebook::db::PriceBookDb::global(&**cx);
+                        let inv_store = cx.global::<InventoryStoreHandle>().0.clone();
+                        cx.spawn(async move |_this, cx| {
+                            let Ok(Ok(Some(paths))) = rx.await else { return; };
+                            let Some(path) = paths.into_iter().next() else { return; };
+                            match crate::importer::run_import(path, inv_db, sup_db, pb_db).await {
+                                Ok(summary) => {
+                                    tracing::info!(
+                                        "Import complete: {} created, {} updated, {} suppliers, {} price entries, {} errors",
+                                        summary.products_created, summary.products_updated,
+                                        summary.suppliers_created, summary.price_entries,
+                                        summary.errors.len()
+                                    );
+                                    for e in &summary.errors { tracing::warn!("import error: {e}"); }
+                                    let _ = inv_store.update(cx, |s, cx| s.load_products(cx));
+                                }
+                                Err(e) => tracing::error!("XLSX import failed: {e:?}"),
+                            }
+                        }).detach();
                     }
                 }
             },
@@ -177,8 +221,11 @@ impl VasslRoot {
             _price_history_sub:   None,
             global_search:        None,
             _global_search_sub:   None,
+            about_dialog:         None,
+            _about_sub:           None,
             _inventory_panel_sub,
             _pricebook_panel_sub,
+            _settings_panel_sub,
             focus_handle,
         }
     }
@@ -218,6 +265,24 @@ impl VasslRoot {
         });
         self.global_search      = Some(gs);
         self._global_search_sub = Some(sub);
+        cx.notify();
+    }
+
+    fn open_about(&mut self, cx: &mut Context<Self>) {
+        if self.about_dialog.is_some() { return; }
+        let dialog = cx.new(AboutDialog::new);
+        let sub = cx.subscribe(&dialog, |this, _, ev: &AboutEvent, cx| {
+            if matches!(ev, AboutEvent::Copied) {
+                cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                    AboutDialog::full_version_static()
+                ));
+            }
+            this._about_sub   = None;
+            this.about_dialog = None;
+            cx.notify();
+        });
+        self.about_dialog = Some(dialog);
+        self._about_sub   = Some(sub);
         cx.notify();
     }
 
@@ -286,6 +351,20 @@ impl Render for VasslRoot {
             .on_action(cx.listener(|this, _: &OpenPriceBook, _w, cx| {
                 this.sidebar.update(cx, |s, cx| { s.active = ActiveModule::PriceBook; cx.notify(); });
             }))
+            .on_action(cx.listener(|this, _: &OpenSuppliers, _w, cx| {
+                this.sidebar.update(cx, |s, cx| { s.active = ActiveModule::Suppliers; cx.notify(); });
+            }))
+            .on_action(cx.listener(|this, _: &NewRecord, window, cx| {
+                let active = this.sidebar.read(cx).active;
+                let fh = match active {
+                    ActiveModule::Inventory  => this.inventory_panel.update(cx, |p, cx| p.create_product_form(cx)),
+                    ActiveModule::Suppliers  => this.suppliers_panel.update(cx, |p, cx| p.create_new_form(cx)),
+                    ActiveModule::Quotations => this.quotation_panel.update(cx, |p, cx| p.create_form(cx)),
+                    ActiveModule::PriceBook  => this.pricebook_panel.update(cx, |p, cx| p.create_form(cx)),
+                    ActiveModule::Settings   => None,
+                };
+                if let Some(fh) = fh { window.focus(&fh, cx); }
+            }))
             .on_action(cx.listener(|this, _: &OpenAuditLog, _w, cx| {
                 if this.audit_log.is_some() {
                     this.audit_log = None;
@@ -327,8 +406,16 @@ impl Render for VasslRoot {
             .on_action(cx.listener(|_this, _: &Zoom, window, _cx| {
                 window.zoom_window();
             }))
+            .on_action(cx.listener(|this, _: &About, _w, cx| {
+                this.open_about(cx);
+            }))
             .on_action(cx.listener(|this, _: &EscapeModal, w, cx| {
-                if this.palette.is_some() {
+                if this.about_dialog.is_some() {
+                    this._about_sub   = None;
+                    this.about_dialog = None;
+                    w.focus(&this.focus_handle, cx);
+                    cx.notify();
+                } else if this.palette.is_some() {
                     this._palette_sub = None;
                     this.palette = None;
                     w.focus(&this.focus_handle, cx);
@@ -349,12 +436,33 @@ impl Render for VasslRoot {
                     cx.notify();
                 }
             }))
+            // When the keyboard settings panel is in listening mode, capture the
+            // next keypress here (root always holds focus) and forward it as the
+            // new binding.  Escape cancels without capturing.
+            .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, _w, cx| {
+                if this.settings_panel.read(cx).listening_for.is_none() { return; }
+                // Ignore bare modifier keys — wait for the actual key
+                match event.keystroke.key.as_str() {
+                    "shift" | "alt" | "control" | "platform" | "function" | "cmd" | "win" | "super" => return,
+                    _ => {}
+                }
+                if event.keystroke.key == "escape" {
+                    this.settings_panel.update(cx, |sp, cx| {
+                        sp.listening_for = None;
+                        cx.emit(crate::settings_panel::SettingsPanelEvent::KeymapChanged);
+                        cx.notify();
+                    });
+                    return;
+                }
+                let keystroke = crate::keybindings::normalize_for_keybinding(&event.keystroke);
+                this.settings_panel.update(cx, |sp, cx| sp.capture_key_for_listening(keystroke, cx));
+            }))
             .relative()
             .flex().flex_col().w_full().h_full()
             .font_family(gpui::SharedString::from(c.font_family.clone()))
             .bg(rgb(c.canvas_bg))
             .child(
-                div().flex().flex_row().flex_1()
+                div().flex().flex_row().flex_1().min_h(px(0.)).overflow_hidden()
                     .child(self.sidebar.clone())
                     .child(content),
             )
@@ -374,6 +482,9 @@ impl Render for VasslRoot {
         }
         if let Some(gs) = &self.global_search {
             root = root.child(gs.clone());
+        }
+        if let Some(about) = &self.about_dialog {
+            root = root.child(about.clone());
         }
 
         root

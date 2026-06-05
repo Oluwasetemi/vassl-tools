@@ -26,7 +26,7 @@ fn validate_name(name: &str) -> Result<String, String> {
 impl FirstRunPrompt {
     pub fn new(cx: &mut Context<Self>) -> Self {
         Self {
-            name_input:   cx.new(|cx| TextInput::with_placeholder("e.g. Alice Kamalu", cx)),
+            name_input:   cx.new(|cx| TextInput::with_placeholder("e.g. John Doe", cx)),
             error:        None,
             focus_handle: cx.focus_handle(),
         }

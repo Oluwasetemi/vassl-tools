@@ -2,9 +2,10 @@ use gpui::{Menu, MenuItem, OsAction, SystemMenuType};
 
 use crate::actions::{
     About, DecreaseFontSize, FocusSearch, Hide, HideOthers, IncreaseFontSize, Minimize,
-    NewRecord, OpenAuditLog, OpenGlobalSearch, OpenInventory, OpenPriceBook, OpenQuotations,
+    OpenAuditLog, OpenGlobalSearch, OpenInventory, OpenPriceBook, OpenQuotations,
     OpenSettings, Quit, ShowAll, Zoom,
 };
+use vassl_ui::NewRecord;
 
 pub fn app_menus() -> Vec<Menu> {
     vec![
