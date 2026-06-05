@@ -72,7 +72,26 @@ pub fn init(cx: &mut App) -> anyhow::Result<()> {
         .to_path_buf();
     // db_dir is now data_local_dir()/VASSL
     std::fs::create_dir_all(&db_dir).context("failed to create VASSL data directory")?;
+
+    // If the DB file (or its WAL/SHM siblings) is corrupted — indicated by
+    // ALL_FILE_DB_FAILED being set after open_db — delete the files and retry
+    // once so the app gets a fresh database rather than falling back to an
+    // in-memory session.
     let conn = gpui::block_on(open_db::<AppMigrator>(&db_dir, GlobalDbScope));
+    let conn = if db::ALL_FILE_DB_FAILED.load(std::sync::atomic::Ordering::Acquire) {
+        tracing::warn!("DB open failed; purging corrupted files and retrying");
+        let db_file = db_dir.join("0-global").join("db.sqlite");
+        for suffix in &["", "-shm", "-wal"] {
+            let mut p = db_file.clone();
+            p.set_extension(format!("sqlite{suffix}"));
+            let _ = std::fs::remove_file(&p);
+        }
+        db::ALL_FILE_DB_FAILED.store(false, std::sync::atomic::Ordering::Release);
+        gpui::block_on(open_db::<AppMigrator>(&db_dir, GlobalDbScope))
+    } else {
+        conn
+    };
+
     // static_connection! (re-exported from vendored `db`) expands $crate::AppDatabase
     // to db::AppDatabase, so we must register both globals.
     cx.set_global(VendoredAppDatabase(conn.clone()));
