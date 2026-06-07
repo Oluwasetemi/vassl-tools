@@ -284,13 +284,20 @@ fn apply_macos(extract_dir: &Path) -> Result<PathBuf> {
         (new_bin, inner)
     };
 
-    // Replace the destination atomically while the app is still running.
-    // Using a staging temp path avoids a partially-written bundle if we're interrupted.
-    let staging = copy_dst.with_extension("app.update");
-    if staging.exists() { std::fs::remove_dir_all(&staging)?; }
-    std::fs::rename(&copy_src, &staging)?;
-    if copy_dst.exists() { std::fs::remove_dir_all(&copy_dst)?; }
-    std::fs::rename(&staging, &copy_dst)?;
+    // Copy to destination — we can't use rename() because the cache dir and
+    // /Applications may be on different filesystems (cross-device link error).
+    if copy_dst.exists() {
+        if copy_dst.is_dir() {
+            std::fs::remove_dir_all(&copy_dst)?;
+        } else {
+            std::fs::remove_file(&copy_dst)?;
+        }
+    }
+    if copy_src.is_dir() {
+        copy_dir_all(&copy_src, &copy_dst)?;
+    } else {
+        std::fs::copy(&copy_src, &copy_dst)?;
+    }
 
     // Mark the binary executable (zip may strip the bit).
     let bin_path = app_bundle.join("Contents/MacOS/vassl");
@@ -318,5 +325,21 @@ fn apply_windows(extract_dir: &Path) -> Result<PathBuf> {
     std::fs::copy(&new_exe, &current_exe)?;
 
     Ok(current_exe)
+}
+
+/// Recursively copies a directory tree from `src` to `dst`.
+/// `std::fs` has no built-in for this.
+fn copy_dir_all(src: &Path, dst: &Path) -> Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let ty    = entry.file_type()?;
+        if ty.is_dir() {
+            copy_dir_all(&entry.path(), &dst.join(entry.file_name()))?;
+        } else {
+            std::fs::copy(entry.path(), dst.join(entry.file_name()))?;
+        }
+    }
+    Ok(())
 }
 
