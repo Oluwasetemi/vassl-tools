@@ -51,6 +51,26 @@ impl SupplierStore {
         cx.notify();
     }
 
+    pub fn select_next(&mut self, cx: &mut Context<Self>) -> Option<usize> {
+        let filtered = self.filtered_suppliers();
+        if filtered.is_empty() { return None; }
+        let cur = self.selected_supplier_id
+            .and_then(|id| filtered.iter().position(|s| s.id == id));
+        let next = match cur { None => 0, Some(i) => (i + 1).min(filtered.len() - 1) };
+        self.select_supplier(filtered[next].id, cx);
+        Some(next)
+    }
+
+    pub fn select_prev(&mut self, cx: &mut Context<Self>) -> Option<usize> {
+        let filtered = self.filtered_suppliers();
+        if filtered.is_empty() { return None; }
+        let cur = self.selected_supplier_id
+            .and_then(|id| filtered.iter().position(|s| s.id == id));
+        let next = match cur { None => 0, Some(0) => 0, Some(i) => i - 1 };
+        self.select_supplier(filtered[next].id, cx);
+        Some(next)
+    }
+
     pub fn set_search_query(&mut self, query: String, cx: &mut Context<Self>) {
         if self.search_query == query { return; }
         self.search_query = query;

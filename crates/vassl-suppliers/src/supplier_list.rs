@@ -1,18 +1,22 @@
-use gpui::{App, Context, Entity, IntoElement, MouseButton, MouseDownEvent, Render, Window,
+use gpui::{App, Context, Entity, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent,
+           MouseUpEvent, Render, Window,
            div, prelude::*, px, rems, rgb, uniform_list, UniformListScrollHandle};
 use vassl_core::Supplier;
-use vassl_ui::{ThemeColors, ThemeHandle};
+use vassl_ui::{ScrollDragState, ThemeColors, ThemeHandle, scrollbar_geometry};
 
 use crate::store::SupplierStore;
 
+const TRACK_W: f32 = 14.0;
+
 pub struct SupplierList {
     store: Entity<SupplierStore>,
-    scroll_handle: UniformListScrollHandle,
+    pub scroll_handle: UniformListScrollHandle,
+    drag: Option<ScrollDragState>,
 }
 
 impl SupplierList {
     pub fn new(store: Entity<SupplierStore>, _cx: &mut Context<Self>) -> Self {
-        Self { store, scroll_handle: UniformListScrollHandle::default() }
+        Self { store, scroll_handle: UniformListScrollHandle::default(), drag: None }
     }
 }
 
@@ -58,23 +62,89 @@ impl Render for SupplierList {
         let count = filtered.len();
         let store_entity = self.store.clone();
 
-        uniform_list(
-            "supplier-list",
-            count,
-            cx.processor(move |this, range: std::ops::Range<usize>, _window, cx| {
-                let store = this.store.read(cx);
-                let filtered = store.filtered_suppliers();
-                let c = cx.global::<ThemeHandle>().0.clone();
-                let selected = store.selected_supplier_id;
-                range.map(|ix| {
-                    let s = &filtered[ix];
-                    supplier_row(s, selected == Some(s.id), store_entity.clone(), &c)
-                }).collect()
-            }),
-        )
-        .track_scroll(&self.scroll_handle)
-        .flex_1()
-        .into_any_element()
+        let geom = scrollbar_geometry(&self.scroll_handle);
+        let is_dragging = self.drag.is_some();
+
+        let mut track = div()
+            .id("supplier-sb-track")
+            .flex_shrink_0()
+            .w(px(TRACK_W))
+            .h_full()
+            .relative()
+            .bg(rgb(c.surface_default));
+
+        if let Some(g) = &geom {
+            let thumb_color = if is_dragging { rgb(c.text_default) } else { rgb(c.text_muted) };
+            let (viewport_h, thumb_h, max_scroll) = (g.viewport_h, g.thumb_h, g.max_scroll);
+            track = track.child(
+                div()
+                    .id("supplier-sb-thumb")
+                    .absolute()
+                    .top(px(g.thumb_top))
+                    .left(px(2.))
+                    .w(px(TRACK_W - 4.))
+                    .h(px(thumb_h))
+                    .rounded(px(6.))
+                    .bg(thumb_color)
+                    .cursor_pointer()
+                    .on_mouse_down(MouseButton::Left, cx.listener(move |this, ev: &MouseDownEvent, _, cx| {
+                        this.drag = Some(ScrollDragState {
+                            drag_offset: ev.position.y.as_f32(),
+                            thumb_h,
+                            viewport_h,
+                            max_scroll,
+                        });
+                        cx.notify();
+                    }))
+            );
+        }
+
+        let mut root = div()
+            .relative()
+            .flex_1().flex().flex_row().min_h(px(0.))
+            .child(
+                uniform_list(
+                    "supplier-list",
+                    count,
+                    cx.processor(move |this, range: std::ops::Range<usize>, _window, cx| {
+                        let store = this.store.read(cx);
+                        let filtered = store.filtered_suppliers();
+                        let c = cx.global::<ThemeHandle>().0.clone();
+                        let selected = store.selected_supplier_id;
+                        range.map(|ix| {
+                            let s = &filtered[ix];
+                            supplier_row(s, selected == Some(s.id), store_entity.clone(), &c)
+                        }).collect()
+                    }),
+                )
+                .track_scroll(&self.scroll_handle)
+                .flex_1()
+            )
+            .child(track);
+
+        if is_dragging {
+            root = root.child(
+                div()
+                    .id("supplier-sb-overlay")
+                    .absolute().inset_0()
+                    .cursor_pointer()
+                    .on_mouse_move(cx.listener(|this, ev: &MouseMoveEvent, _, cx| {
+                        if let Some(drag) = &this.drag {
+                            let new_offset = drag.compute_offset(ev.position.y.as_f32());
+                            this.scroll_handle.0.borrow().base_handle.set_offset(
+                                gpui::point(gpui::px(0.), gpui::px(new_offset))
+                            );
+                            cx.notify();
+                        }
+                    }))
+                    .on_mouse_up(MouseButton::Left, cx.listener(|this, _: &MouseUpEvent, _, cx| {
+                        this.drag = None;
+                        cx.notify();
+                    }))
+            );
+        }
+
+        root.into_any_element()
     }
 }
 

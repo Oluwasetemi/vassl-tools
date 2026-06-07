@@ -28,6 +28,18 @@ impl SupplierPanel {
         Self { store, list, form: None, _form_sub: None, search_input }
     }
 
+    pub fn select_next(&mut self, cx: &mut Context<Self>) {
+        if let Some(idx) = self.store.update(cx, |s, cx| s.select_next(cx)) {
+            self.list.update(cx, |l, _| l.scroll_handle.scroll_to_item(idx, gpui::ScrollStrategy::Top));
+        }
+    }
+
+    pub fn select_prev(&mut self, cx: &mut Context<Self>) {
+        if let Some(idx) = self.store.update(cx, |s, cx| s.select_prev(cx)) {
+            self.list.update(cx, |l, _| l.scroll_handle.scroll_to_item(idx, gpui::ScrollStrategy::Top));
+        }
+    }
+
     pub fn create_new_form(&mut self, cx: &mut Context<Self>) -> Option<gpui::FocusHandle> {
         if self.form.is_some() { return None; }
         let form  = cx.new(|cx| SupplierForm::new(self.store.clone(), cx));
