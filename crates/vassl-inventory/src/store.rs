@@ -146,6 +146,35 @@ impl InventoryStore {
         cx.notify();
     }
 
+    /// Move selection to the next item in the filtered list. Returns the new index.
+    pub fn select_next(&mut self, cx: &mut Context<Self>) -> Option<usize> {
+        let filtered = self.filtered_products();
+        if filtered.is_empty() { return None; }
+        let cur = self.selected_product_id
+            .and_then(|id| filtered.iter().position(|p| p.product.id == id));
+        let next = match cur {
+            None    => 0,
+            Some(i) => (i + 1).min(filtered.len() - 1),
+        };
+        self.select_product(filtered[next].product.id, cx);
+        Some(next)
+    }
+
+    /// Move selection to the previous item in the filtered list. Returns the new index.
+    pub fn select_prev(&mut self, cx: &mut Context<Self>) -> Option<usize> {
+        let filtered = self.filtered_products();
+        if filtered.is_empty() { return None; }
+        let cur = self.selected_product_id
+            .and_then(|id| filtered.iter().position(|p| p.product.id == id));
+        let next = match cur {
+            None    => 0,
+            Some(0) => 0,
+            Some(i) => i - 1,
+        };
+        self.select_product(filtered[next].product.id, cx);
+        Some(next)
+    }
+
     pub fn filtered_products(&self) -> Vec<&ProductWithStock> {
         let q = self.search_query.trim().to_lowercase();
         if q.is_empty() {

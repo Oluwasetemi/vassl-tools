@@ -62,6 +62,22 @@ impl InventoryPanel {
         }
     }
 
+    pub fn select_next(&mut self, cx: &mut Context<Self>) {
+        if let Some(idx) = self.store.update(cx, |s, cx| s.select_next(cx)) {
+            self.product_list.update(cx, |list, _| {
+                list.scroll_handle.scroll_to_item(idx, gpui::ScrollStrategy::Top);
+            });
+        }
+    }
+
+    pub fn select_prev(&mut self, cx: &mut Context<Self>) {
+        if let Some(idx) = self.store.update(cx, |s, cx| s.select_prev(cx)) {
+            self.product_list.update(cx, |list, _| {
+                list.scroll_handle.scroll_to_item(idx, gpui::ScrollStrategy::Top);
+            });
+        }
+    }
+
     fn open_stock_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.stock_form.is_some() { return; }
         let (product_id, product_name) = {
@@ -303,9 +319,9 @@ impl Render for InventoryPanel {
             let name = target.product_name.clone();
 
             // Clamp so the menu stays fully within the window viewport.
-            // Menu is 220px wide; height estimate covers all items (~200px).
+            // Menu is 220px wide; height covers header + info + separator + 3 items.
             const MENU_W: f32 = 220.0;
-            const MENU_H: f32 = 200.0;
+            const MENU_H: f32 = 260.0;
             let menu_x = target.x.min((viewport.width.as_f32()  - MENU_W).max(0.0));
             let menu_y = target.y.min((viewport.height.as_f32() - MENU_H).max(0.0));
 
