@@ -43,30 +43,25 @@ jobs:
       - name: Cache build artifacts
         uses: actions/cache@v4
         with:
-          path: tools/target
+          path: target
           key: ${{ runner.os }}-${{ matrix.target }}-build-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-${{ matrix.target }}-build-
 
       - name: Build release binary
-        working-directory: tools
         run: cargo build --release --target ${{ matrix.target }} -p vassl-app
 
       - name: Package .app bundle (arm64 only)
         if: matrix.arch == 'arm64'
-        working-directory: tools
         run: |
-          # Install cargo-bundle
           cargo install cargo-bundle --locked
           cargo bundle --release --target ${{ matrix.target }} -p vassl-app
 
-          # Create a distributable zip
           cd target/${{ matrix.target }}/release/bundle/osx
           zip -r VASSL-macos-${{ matrix.arch }}.zip VASSL.app
           mv VASSL-macos-${{ matrix.arch }}.zip $GITHUB_WORKSPACE/
 
       - name: Package bare binary (x86_64)
         if: matrix.arch == 'x86_64'
-        working-directory: tools
         run: |
           zip -j VASSL-macos-${{ matrix.arch }}.zip \
               target/${{ matrix.target }}/release/vassl
@@ -142,16 +137,14 @@ jobs:
       - name: Cache build artifacts
         uses: actions/cache@v4
         with:
-          path: tools/target
+          path: target
           key: ${{ runner.os }}-x86_64-build-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-x86_64-build-
 
       - name: Build release binary
-        working-directory: tools
         run: cargo build --release --target x86_64-pc-windows-msvc -p vassl-app
 
       - name: Package
-        working-directory: tools
         shell: pwsh
         run: |
           Compress-Archive `
