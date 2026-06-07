@@ -126,6 +126,26 @@ impl PriceBookStore {
         cx.notify();
     }
 
+    pub fn select_next(&mut self, cx: &mut Context<Self>) -> Option<usize> {
+        let filtered = self.filtered_product_prices();
+        if filtered.is_empty() { return None; }
+        let cur = self.selected_product_id
+            .and_then(|id| filtered.iter().position(|pp| pp.product_id == id));
+        let next = match cur { None => 0, Some(i) => (i + 1).min(filtered.len() - 1) };
+        self.select_product(filtered[next].product_id, cx);
+        Some(next)
+    }
+
+    pub fn select_prev(&mut self, cx: &mut Context<Self>) -> Option<usize> {
+        let filtered = self.filtered_product_prices();
+        if filtered.is_empty() { return None; }
+        let cur = self.selected_product_id
+            .and_then(|id| filtered.iter().position(|pp| pp.product_id == id));
+        let next = match cur { None => 0, Some(0) => 0, Some(i) => i - 1 };
+        self.select_product(filtered[next].product_id, cx);
+        Some(next)
+    }
+
     pub fn filtered_product_prices(&self) -> Vec<&ProductPrice> {
         let q = self.search_query.trim().to_lowercase();
         if q.is_empty() {

@@ -49,6 +49,18 @@ impl PriceBookPanel {
         }
     }
 
+    pub fn select_next(&mut self, cx: &mut Context<Self>) {
+        if let Some(idx) = self.store.update(cx, |s, cx| s.select_next(cx)) {
+            self.price_table.update(cx, |t, _| t.scroll_handle.scroll_to_item(idx, gpui::ScrollStrategy::Top));
+        }
+    }
+
+    pub fn select_prev(&mut self, cx: &mut Context<Self>) {
+        if let Some(idx) = self.store.update(cx, |s, cx| s.select_prev(cx)) {
+            self.price_table.update(cx, |t, _| t.scroll_handle.scroll_to_item(idx, gpui::ScrollStrategy::Top));
+        }
+    }
+
     pub fn create_form(&mut self, cx: &mut Context<Self>) -> Option<gpui::FocusHandle> {
         let (pid, name) = {
             let store = self.store.read(cx);
