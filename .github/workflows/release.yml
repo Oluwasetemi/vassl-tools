@@ -176,7 +176,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: VASSL ${{ github.ref_name }}
-          draft: true          # review before publishing
+          draft: false
           generate_release_notes: true
           files: |
             artifacts/VASSL-macos-arm64/VASSL-macos-arm64.zip
