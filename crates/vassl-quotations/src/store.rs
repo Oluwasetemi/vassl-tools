@@ -94,6 +94,24 @@ impl QuotationStore {
         }).detach();
     }
 
+    pub fn select_next(&mut self, cx: &mut Context<Self>) -> Option<usize> {
+        if self.quotations.is_empty() { return None; }
+        let cur = self.selected_id
+            .and_then(|id| self.quotations.iter().position(|q| q.id == id));
+        let next = match cur { None => 0, Some(i) => (i + 1).min(self.quotations.len() - 1) };
+        self.select_quotation(self.quotations[next].id, cx);
+        Some(next)
+    }
+
+    pub fn select_prev(&mut self, cx: &mut Context<Self>) -> Option<usize> {
+        if self.quotations.is_empty() { return None; }
+        let cur = self.selected_id
+            .and_then(|id| self.quotations.iter().position(|q| q.id == id));
+        let next = match cur { None => 0, Some(0) => 0, Some(i) => i - 1 };
+        self.select_quotation(self.quotations[next].id, cx);
+        Some(next)
+    }
+
     pub fn load_line_items(&mut self, quotation_id: i64, cx: &mut Context<Self>) {
         let db = QuotationDb::global(&**cx);
         cx.spawn(async move |this, cx| {
