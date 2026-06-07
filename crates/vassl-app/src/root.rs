@@ -432,7 +432,7 @@ impl Render for VasslRoot {
             }))
             .on_action(cx.listener(|this, _: &InstallUpdate, _, cx| {
                 let status = this.updater.read(cx).status.clone();
-                if let UpdateStatus::ReadyToInstall { zip, .. } = status {
+                if let UpdateStatus::ReadyToInstall(zip) = status {
                     this.updater.update(cx, |u, cx| u.install_and_restart(zip, cx));
                 } else if let UpdateStatus::Available(info) = status {
                     this.updater.update(cx, |u, cx| u.download(info, cx));

@@ -11,8 +11,6 @@ pub struct AuditRow {
     pub action:     String,
     pub changed_by: String,
     pub changed_at: String,
-    #[allow(dead_code)] pub old_value: Option<String>,
-    #[allow(dead_code)] pub new_value: Option<String>,
 }
 
 pub struct AuditLogPanel {
@@ -34,13 +32,13 @@ impl AuditLogPanel {
             // Use background_executor for this SELECT to avoid blocking the write queue.
             let rows = cx.background_executor()
                 .spawn(async move {
-                    let mut query = db.select_bound::<(), (i64, String, i64, String, String, String, Option<String>, Option<String>)>(
-                        "SELECT id, table_name, record_id, action, changed_by, changed_at, old_value, new_value \
+                    let mut query = db.select_bound::<(), (i64, String, i64, String, String, String)>(
+                        "SELECT id, table_name, record_id, action, changed_by, changed_at \
                          FROM audit_log ORDER BY id DESC LIMIT 200",
                     ).map_err(|e| anyhow::anyhow!("{e}"))?;
                     let results = query(()).map_err(|e| anyhow::anyhow!("{e}"))?;
-                    Ok::<Vec<AuditRow>, anyhow::Error>(results.into_iter().map(|(id, table_name, record_id, action, changed_by, changed_at, old_value, new_value)| {
-                        AuditRow { id, table_name, record_id, action, changed_by, changed_at, old_value, new_value }
+                    Ok::<Vec<AuditRow>, anyhow::Error>(results.into_iter().map(|(id, table_name, record_id, action, changed_by, changed_at)| {
+                        AuditRow { id, table_name, record_id, action, changed_by, changed_at }
                     }).collect())
                 })
                 .await;

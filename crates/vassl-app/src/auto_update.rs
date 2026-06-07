@@ -1,6 +1,8 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result};
+#[cfg(target_os = "windows")]
+use anyhow::bail;
 use gpui::{Context, EventEmitter, Task};
 use release_channel::{RELEASE_CHANNEL, ReleaseChannel};
 use semver::Version;
@@ -28,7 +30,6 @@ const PLATFORM_ASSET: &str = "unsupported";
 #[derive(Debug, Clone)]
 pub struct ReleaseInfo {
     pub version:      String,
-    pub tag:          String,
     pub asset_name:   String,
     pub download_url: String,
 }
@@ -40,8 +41,8 @@ pub enum UpdateStatus {
     Checking,
     UpToDate,
     Available(ReleaseInfo),
-    Downloading { pct: u8, info: ReleaseInfo },
-    ReadyToInstall { zip: PathBuf, info: ReleaseInfo },
+    Downloading { pct: u8 },
+    ReadyToInstall(PathBuf),
     Installing,
     Error(String),
 }
@@ -94,7 +95,7 @@ impl AutoUpdater {
 
     /// Start downloading the release asset.
     pub fn download(&mut self, info: ReleaseInfo, cx: &mut Context<Self>) {
-        self.status = UpdateStatus::Downloading { pct: 0, info: info.clone() };
+        self.status = UpdateStatus::Downloading { pct: 0 };
         cx.notify();
 
         let task = cx.spawn(async move |this: gpui::WeakEntity<AutoUpdater>, cx| {
@@ -104,8 +105,8 @@ impl AutoUpdater {
 
             this.update(cx, |me, cx| {
                 me.status = match result {
-                    Ok((zip, info)) => UpdateStatus::ReadyToInstall { zip, info },
-                    Err(e)          => UpdateStatus::Error(e.to_string()),
+                    Ok((zip, _info)) => UpdateStatus::ReadyToInstall(zip),
+                    Err(e)           => UpdateStatus::Error(e.to_string()),
                 };
                 cx.emit(AutoUpdateEvent::StatusChanged);
                 cx.notify();
@@ -124,21 +125,27 @@ impl AutoUpdater {
                 .spawn(async move { apply_update(&zip) })
                 .await;
 
-            if let Err(e) = result {
-                this.update(cx, |me, cx| {
-                    me.status = UpdateStatus::Error(e.to_string());
-                    cx.emit(AutoUpdateEvent::StatusChanged);
-                    cx.notify();
-                }).ok();
+            match result {
+                Ok(restart_path) => {
+                    // Set the restart path so GPUI relaunches the updated binary, then quit
+                    // gracefully — flushing writes and closing windows before exit.
+                    cx.update(|cx| {
+                        cx.set_restart_path(restart_path);
+                        cx.quit();
+                    });
+                }
+                Err(e) => {
+                    this.update(cx, |me, cx| {
+                        me.status = UpdateStatus::Error(e.to_string());
+                        cx.emit(AutoUpdateEvent::StatusChanged);
+                        cx.notify();
+                    }).ok();
+                }
             }
-            // On success apply_update calls std::process::exit — we never reach here.
         });
         self._task = Some(task);
     }
 
-    pub fn is_update_available(&self) -> bool {
-        matches!(self.status, UpdateStatus::Available(_) | UpdateStatus::ReadyToInstall { .. })
-    }
 }
 
 // ── GitHub API types ───────────────────────────────────────────────────────
@@ -197,7 +204,6 @@ fn query_latest_release() -> Result<Option<ReleaseInfo>> {
 
     Ok(Some(ReleaseInfo {
         version:      latest_ver.to_string(),
-        tag:          release.tag_name.clone(),
         asset_name:   PLATFORM_ASSET.to_string(),
         download_url: asset.browser_download_url.clone(),
     }))
@@ -235,7 +241,9 @@ fn download_release(info: &ReleaseInfo) -> Result<(PathBuf, ReleaseInfo)> {
     Ok((dest, info.clone()))
 }
 
-fn apply_update(zip_path: &Path) -> Result<()> {
+/// Extracts `zip_path`, applies the update in-place, and returns the path GPUI
+/// should restart with (the updated .app bundle or executable).
+fn apply_update(zip_path: &Path) -> Result<PathBuf> {
     let extract_dir = zip_path.parent()
         .context("zip has no parent dir")?
         .join("extracted");
@@ -246,16 +254,15 @@ fn apply_update(zip_path: &Path) -> Result<()> {
     arc.extract(&extract_dir)?;
 
     #[cfg(target_os = "macos")]
-    apply_macos(&extract_dir)?;
-
+    { return apply_macos(&extract_dir); }
     #[cfg(target_os = "windows")]
-    apply_windows(&extract_dir)?;
-
-    Ok(())
+    { return apply_windows(&extract_dir); }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    { bail!("auto-update is not supported on this platform") }
 }
 
 #[cfg(target_os = "macos")]
-fn apply_macos(extract_dir: &Path) -> Result<()> {
+fn apply_macos(extract_dir: &Path) -> Result<PathBuf> {
     use std::os::unix::fs::PermissionsExt as _;
 
     let current_exe = std::env::current_exe()?;
@@ -267,43 +274,35 @@ fn apply_macos(extract_dir: &Path) -> Result<()> {
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| current_exe.clone());
 
-    // Prefer the .app bundle in the zip; fall back to bare binary replacement.
+    // Prefer the .app bundle from the zip; fall back to bare binary (x86_64 asset).
     let new_app = extract_dir.join("VASSL.app");
     let (copy_src, copy_dst) = if new_app.exists() {
         (new_app, app_bundle.clone())
     } else {
-        // x86_64: bare binary — replace only the Mach-O inside the bundle
         let new_bin = extract_dir.join("vassl");
         let inner   = app_bundle.join("Contents/MacOS/vassl");
         (new_bin, inner)
     };
 
-    let script = format!(
-        r#"#!/bin/bash
-sleep 1
-rm -rf {dst}
-cp -R {src} {dst}
-open -a {app}
-"#,
-        dst = shell_escape(&copy_dst.to_string_lossy()),
-        src = shell_escape(&copy_src.to_string_lossy()),
-        app = shell_escape(&app_bundle.to_string_lossy()),
-    );
+    // Replace the destination atomically while the app is still running.
+    // Using a staging temp path avoids a partially-written bundle if we're interrupted.
+    let staging = copy_dst.with_extension("app.update");
+    if staging.exists() { std::fs::remove_dir_all(&staging)?; }
+    std::fs::rename(&copy_src, &staging)?;
+    if copy_dst.exists() { std::fs::remove_dir_all(&copy_dst)?; }
+    std::fs::rename(&staging, &copy_dst)?;
 
-    let script_path = extract_dir.join("apply_update.sh");
-    std::fs::write(&script_path, &script)?;
-    std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755))?;
+    // Mark the binary executable (zip may strip the bit).
+    let bin_path = app_bundle.join("Contents/MacOS/vassl");
+    if bin_path.exists() {
+        std::fs::set_permissions(&bin_path, std::fs::Permissions::from_mode(0o755))?;
+    }
 
-    std::process::Command::new("bash")
-        .arg(&script_path)
-        .spawn()
-        .context("failed to launch update script")?;
-
-    std::process::exit(0);
+    Ok(app_bundle)
 }
 
 #[cfg(target_os = "windows")]
-fn apply_windows(extract_dir: &Path) -> Result<()> {
+fn apply_windows(extract_dir: &Path) -> Result<PathBuf> {
     let current_exe = std::env::current_exe()?;
     let new_exe     = extract_dir.join("vassl.exe");
 
@@ -311,28 +310,13 @@ fn apply_windows(extract_dir: &Path) -> Result<()> {
         bail!("vassl.exe not found in extracted update");
     }
 
-    let script = format!(
-        r#"Start-Sleep -Seconds 1
-Remove-Item -Force "{old}"
-Copy-Item "{new}" "{old}"
-Start-Process "{old}"
-"#,
-        old = current_exe.display(),
-        new = new_exe.display(),
-    );
+    // On Windows the running exe is locked, so we rename it out of the way and
+    // copy the new one in. A cleanup of the old .bak happens on next launch.
+    let backup = current_exe.with_extension("exe.bak");
+    if backup.exists() { std::fs::remove_file(&backup)?; }
+    std::fs::rename(&current_exe, &backup)?;
+    std::fs::copy(&new_exe, &current_exe)?;
 
-    let script_path = extract_dir.join("apply_update.ps1");
-    std::fs::write(&script_path, &script)?;
-
-    std::process::Command::new("powershell")
-        .args(["-ExecutionPolicy", "Bypass", "-NonInteractive", "-File",
-               &script_path.to_string_lossy()])
-        .spawn()
-        .context("failed to launch PowerShell update script")?;
-
-    std::process::exit(0);
+    Ok(current_exe)
 }
 
-fn shell_escape(s: &str) -> String {
-    format!("\"{}\"", s.replace('"', "\\\""))
-}

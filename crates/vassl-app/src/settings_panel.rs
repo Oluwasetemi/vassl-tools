@@ -33,10 +33,8 @@ pub enum BackupStatus {
 }
 
 /// Identifies which inline select/picker is currently open.
-/// `Theme` is not used — theme is a toggle pill, not a select. Kept for exhaustive matching.
 #[derive(Clone, Copy, PartialEq, Debug)]
-#[allow(dead_code)]
-pub enum SettingSelect { Theme, Currency, FontPicker }
+pub enum SettingSelect { Currency, FontPicker }
 
 pub struct SettingsPanel {
     pub active_category: SettingsCategory,

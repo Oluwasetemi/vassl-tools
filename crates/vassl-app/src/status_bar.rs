@@ -39,11 +39,11 @@ impl Render for StatusBar {
                     let msg = format!("Update available — v{}", info.version);
                     Some((msg.leak() as &'static str, true, false))
                 }
-                UpdateStatus::Downloading { pct, .. } => {
+                UpdateStatus::Downloading { pct } => {
                     let msg = format!("Downloading update… {}%", pct);
                     Some((msg.leak() as &'static str, false, false))
                 }
-                UpdateStatus::ReadyToInstall { .. } => {
+                UpdateStatus::ReadyToInstall(_) => {
                     Some(("Restart to install update", true, true))
                 }
                 UpdateStatus::Installing => Some(("Installing update…", false, false)),
