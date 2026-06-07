@@ -106,6 +106,8 @@ pub fn apply_keybindings(cx: &mut App, overrides: &HashMap<String, String>) {
         // Escape closes overlays
         KeyBinding::new("escape",            EscapeModal,      Some("VasslRoot")),
         // CommandPalette keyboard navigation
+        KeyBinding::new("down",              SelectNext,       Some("VasslRoot")),
+        KeyBinding::new("up",                SelectPrev,       Some("VasslRoot")),
         KeyBinding::new("down",              SelectNext,       Some("CommandPalette")),
         KeyBinding::new("up",                SelectPrev,       Some("CommandPalette")),
         KeyBinding::new("enter",             ConfirmSelection, Some("CommandPalette")),

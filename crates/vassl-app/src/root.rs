@@ -2,7 +2,7 @@ use gpui::{Context, Entity, FocusHandle, Focusable, IntoElement, PathPromptOptio
 use vassl_ui::{ThemeColors, ThemeHandle};
 
 use crate::about_dialog::{AboutDialog, AboutEvent};
-use crate::actions::{About, DecreaseFontSize, EscapeModal, FocusSearch, IncreaseFontSize, Minimize, OpenAuditLog, OpenGlobalSearch, OpenInventory, OpenPriceBook, OpenQuotations, OpenSuppliers, OpenSettings, Zoom};
+use crate::actions::{About, DecreaseFontSize, EscapeModal, FocusSearch, IncreaseFontSize, Minimize, OpenAuditLog, OpenGlobalSearch, OpenInventory, OpenPriceBook, OpenQuotations, OpenSuppliers, OpenSettings, SelectNext, SelectPrev, Zoom};
 use vassl_ui::NewRecord;
 use crate::global_search::{GlobalSearch, GlobalSearchEvent, SearchResultKind};
 use crate::settings_panel::{SettingsPanel, SettingsPanelEvent};
@@ -408,6 +408,26 @@ impl Render for VasslRoot {
             }))
             .on_action(cx.listener(|this, _: &About, _w, cx| {
                 this.open_about(cx);
+            }))
+            .on_action(cx.listener(|this, _: &SelectNext, _, cx| {
+                let active = this.sidebar.read(cx).active;
+                match active {
+                    ActiveModule::Inventory  => { this.inventory_panel.update(cx, |p, cx| p.select_next(cx)); }
+                    ActiveModule::PriceBook  => { this.pricebook_panel.update(cx, |p, cx| p.select_next(cx)); }
+                    ActiveModule::Suppliers  => { this.suppliers_panel.update(cx, |p, cx| p.select_next(cx)); }
+                    ActiveModule::Quotations => { this.quotation_panel.update(cx, |p, cx| p.select_next(cx)); }
+                    ActiveModule::Settings   => {}
+                }
+            }))
+            .on_action(cx.listener(|this, _: &SelectPrev, _, cx| {
+                let active = this.sidebar.read(cx).active;
+                match active {
+                    ActiveModule::Inventory  => { this.inventory_panel.update(cx, |p, cx| p.select_prev(cx)); }
+                    ActiveModule::PriceBook  => { this.pricebook_panel.update(cx, |p, cx| p.select_prev(cx)); }
+                    ActiveModule::Suppliers  => { this.suppliers_panel.update(cx, |p, cx| p.select_prev(cx)); }
+                    ActiveModule::Quotations => { this.quotation_panel.update(cx, |p, cx| p.select_prev(cx)); }
+                    ActiveModule::Settings   => {}
+                }
             }))
             .on_action(cx.listener(|this, _: &EscapeModal, w, cx| {
                 if this.about_dialog.is_some() {
