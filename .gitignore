@@ -1,2 +1,13 @@
 /target
 /.worktrees
+
+# macOS metadata
+.DS_Store
+
+# Local database and SQL dumps
+assets/*.db
+assets/*.sql
+
+# Source spreadsheets (binary data assets)
+assets/*.xls
+assets/*.xlsx
