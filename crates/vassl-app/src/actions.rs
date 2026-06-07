@@ -23,4 +23,7 @@ actions!(vassl, [
     ShowAll,
     Minimize,
     Zoom,
+    // Auto-update
+    CheckForUpdates,
+    InstallUpdate,
 ]);

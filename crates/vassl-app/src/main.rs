@@ -1,5 +1,6 @@
 mod about_dialog;
 mod actions;
+mod auto_update;
 mod app;
 mod app_menus;
 mod audit_log;
@@ -14,7 +15,7 @@ mod settings_panel;
 mod sidebar;
 mod status_bar;
 
-use actions::{ConfirmSelection, DecreaseFontSize, EscapeModal, FocusSearch, Hide, HideOthers, IncreaseFontSize, Minimize, OpenAuditLog, OpenGlobalSearch, OpenInventory, OpenPriceBook, OpenQuotations, OpenSuppliers, OpenSettings, Quit, SelectNext, SelectPrev, ShowAll};
+use actions::{CheckForUpdates, ConfirmSelection, DecreaseFontSize, EscapeModal, FocusSearch, Hide, HideOthers, IncreaseFontSize, InstallUpdate, Minimize, OpenAuditLog, OpenGlobalSearch, OpenInventory, OpenPriceBook, OpenQuotations, OpenSuppliers, OpenSettings, Quit, SelectNext, SelectPrev, ShowAll};
 use vassl_ui::NewRecord;
 use vassl_ui::text_input::{BackTab, Backspace, Copy, Cut, Delete, End, Home, Left, Paste, Right, SelectAll, SelectLeft, SelectRight, ShowCharacterPalette, Tab as TextTab};
 use vassl_inventory::product_form::{EscapeForm as ProductEscapeForm, TabField as ProductTab, BackTabField as ProductBackTab};
@@ -87,6 +88,8 @@ pub fn apply_keybindings(cx: &mut App, overrides: &HashMap<String, String>) {
             overrides.get("vassl::DecreaseFontSize").map(|s| s.as_str()).unwrap_or("secondary--"),
             DecreaseFontSize, Some("VasslRoot"),
         ),
+        KeyBinding::new("secondary-shift-u", CheckForUpdates, Some("VasslRoot")),
+        KeyBinding::new("secondary-shift-i", InstallUpdate,   Some("VasslRoot")),
         // TextInput editing keys (non-remappable)
         KeyBinding::new("backspace",        Backspace,   Some("TextInput")),
         KeyBinding::new("delete",           Delete,      Some("TextInput")),

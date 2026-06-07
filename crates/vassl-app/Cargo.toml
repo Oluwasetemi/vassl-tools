@@ -45,3 +45,8 @@ vassl-suppliers              = { path = "../vassl-suppliers" }
 release_channel.workspace    = true
 sqlez.workspace              = true
 chrono.workspace             = true
+serde.workspace              = true
+serde_json.workspace         = true
+semver                       = { version = "1", features = ["serde"] }
+ureq                         = { version = "2", features = ["json", "native-tls"] }
+zip                          = { version = "2", default-features = false, features = ["deflate"] }

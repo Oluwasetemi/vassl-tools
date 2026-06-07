@@ -2,7 +2,11 @@ use gpui::{Context, Entity, FocusHandle, Focusable, IntoElement, PathPromptOptio
 use vassl_ui::{ThemeColors, ThemeHandle};
 
 use crate::about_dialog::{AboutDialog, AboutEvent};
-use crate::actions::{About, DecreaseFontSize, EscapeModal, FocusSearch, IncreaseFontSize, Minimize, OpenAuditLog, OpenGlobalSearch, OpenInventory, OpenPriceBook, OpenQuotations, OpenSuppliers, OpenSettings, SelectNext, SelectPrev, Zoom};
+use crate::actions::{About, CheckForUpdates, DecreaseFontSize, EscapeModal, FocusSearch,
+                     IncreaseFontSize, InstallUpdate, Minimize, OpenAuditLog, OpenGlobalSearch,
+                     OpenInventory, OpenPriceBook, OpenQuotations, OpenSuppliers, OpenSettings,
+                     SelectNext, SelectPrev, Zoom};
+use crate::auto_update::{AutoUpdateEvent, AutoUpdater, UpdateStatus};
 use vassl_ui::NewRecord;
 use crate::global_search::{GlobalSearch, GlobalSearchEvent, SearchResultKind};
 use crate::settings_panel::{SettingsPanel, SettingsPanelEvent};
@@ -37,6 +41,8 @@ pub struct VasslRoot {
     _global_search_sub:    Option<Subscription>,
     about_dialog:          Option<Entity<AboutDialog>>,
     _about_sub:            Option<Subscription>,
+    updater:               Entity<AutoUpdater>,
+    _updater_sub:          Subscription,
     _inventory_panel_sub:  Subscription,
     _pricebook_panel_sub:  Subscription,
     _settings_panel_sub:   Subscription,
@@ -204,9 +210,19 @@ impl VasslRoot {
         let supplier_store  = cx.global::<SupplierStoreHandle>().0.clone();
         let suppliers_panel = cx.new(|cx| SupplierPanel::new(supplier_store, cx));
 
+        // Auto-updater — kick off a background check on startup.
+        let updater = cx.new(|_| AutoUpdater::new());
+        updater.update(cx, |u, cx| u.check(cx));
+        let _updater_sub = cx.subscribe(&updater, |_this, _updater, _ev: &AutoUpdateEvent, cx| {
+            cx.notify();
+        });
+
+        let status_bar = cx.new(StatusBar::new);
+        status_bar.update(cx, |bar, _| bar.set_updater(updater.clone()));
+
         Self {
             sidebar:          cx.new(Sidebar::new),
-            status_bar:       cx.new(StatusBar::new),
+            status_bar,
             inventory_panel,
             pricebook_panel,
             quotation_panel:  cx.new(QuotationPanel::new),
@@ -223,6 +239,8 @@ impl VasslRoot {
             _global_search_sub:   None,
             about_dialog:         None,
             _about_sub:           None,
+            updater,
+            _updater_sub,
             _inventory_panel_sub,
             _pricebook_panel_sub,
             _settings_panel_sub,
@@ -408,6 +426,17 @@ impl Render for VasslRoot {
             }))
             .on_action(cx.listener(|this, _: &About, _w, cx| {
                 this.open_about(cx);
+            }))
+            .on_action(cx.listener(|this, _: &CheckForUpdates, _, cx| {
+                this.updater.update(cx, |u, cx| u.check(cx));
+            }))
+            .on_action(cx.listener(|this, _: &InstallUpdate, _, cx| {
+                let status = this.updater.read(cx).status.clone();
+                if let UpdateStatus::ReadyToInstall { zip, .. } = status {
+                    this.updater.update(cx, |u, cx| u.install_and_restart(zip, cx));
+                } else if let UpdateStatus::Available(info) = status {
+                    this.updater.update(cx, |u, cx| u.download(info, cx));
+                }
             }))
             .on_action(cx.listener(|this, _: &SelectNext, _, cx| {
                 let active = this.sidebar.read(cx).active;
