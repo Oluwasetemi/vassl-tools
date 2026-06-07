@@ -65,7 +65,6 @@ jobs:
         run: |
           zip -j VASSL-macos-${{ matrix.arch }}.zip \
               target/${{ matrix.target }}/release/vassl
-          mv VASSL-macos-${{ matrix.arch }}.zip $GITHUB_WORKSPACE/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
