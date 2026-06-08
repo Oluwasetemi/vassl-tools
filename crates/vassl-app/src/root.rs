@@ -1,7 +1,7 @@
 use gpui::{Context, Entity, FocusHandle, Focusable, IntoElement, PathPromptOptions, Render,
            Subscription, Window, div, prelude::*, px, rgb};
 #[cfg(not(target_os = "macos"))]
-use gpui::{MouseButton, MouseDownEvent, OwnedMenuItem, rems};
+use gpui::{MouseButton, MouseDownEvent, OwnedMenuItem, deferred, rems};
 #[cfg(not(target_os = "macos"))]
 use vassl_ui::tooltip;
 use vassl_ui::{ThemeColors, ThemeHandle};
@@ -414,17 +414,18 @@ impl VasslRoot {
                     }
                 }
                 Some(
-                    div()
-                        .id(format!("mdrop-{menu_ix}"))
-                        .absolute()
-                        .top(px(32.))
-                        .left(px(0.))
-                        .min_w(px(200.))
-                        .bg(rgb(c.surface_default))
-                        .py(px(4.))
-                        .z_index(200)
-                        .children(rows)
-                        .into_any_element(),
+                    deferred(
+                        div()
+                            .id(format!("mdrop-{menu_ix}"))
+                            .absolute()
+                            .top(px(32.))
+                            .left(px(0.))
+                            .min_w(px(200.))
+                            .bg(rgb(c.surface_default))
+                            .py(px(4.))
+                            .children(rows),
+                    )
+                    .into_any_element(),
                 )
             } else {
                 None
@@ -513,7 +514,6 @@ impl VasslRoot {
             .h(px(32.))
             .flex_shrink_0()
             .bg(rgb(c.surface_default))
-            .z_index(100)
             // Menu buttons on the left
             .children(menu_buttons)
             // Drag region fills remaining space
@@ -721,14 +721,15 @@ impl Render for VasslRoot {
         #[cfg(not(target_os = "macos"))]
         if self.open_menu_index.is_some() {
             root = root.child(
-                div()
-                    .id("menu-clickaway")
-                    .absolute().inset_0()
-                    .z_index(50)
-                    .on_mouse_down(MouseButton::Left, cx.listener(|this, _: &MouseDownEvent, _, cx| {
-                        this.open_menu_index = None;
-                        cx.notify();
-                    }))
+                deferred(
+                    div()
+                        .id("menu-clickaway")
+                        .absolute().inset_0()
+                        .on_mouse_down(MouseButton::Left, cx.listener(|this, _: &MouseDownEvent, _, cx| {
+                            this.open_menu_index = None;
+                            cx.notify();
+                        }))
+                )
             );
         }
 
