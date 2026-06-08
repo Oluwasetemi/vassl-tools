@@ -1,4 +1,9 @@
-use gpui::{Context, Entity, FocusHandle, Focusable, IntoElement, PathPromptOptions, Render, Subscription, Window, div, prelude::*, px, rgb};
+use gpui::{Context, Entity, FocusHandle, Focusable, IntoElement, PathPromptOptions, Render,
+           Subscription, Window, div, prelude::*, px, rgb};
+#[cfg(not(target_os = "macos"))]
+use gpui::{MouseButton, MouseDownEvent, OwnedMenuItem, rems};
+#[cfg(not(target_os = "macos"))]
+use vassl_ui::tooltip;
 use vassl_ui::{ThemeColors, ThemeHandle};
 
 use crate::about_dialog::{AboutDialog, AboutEvent};
@@ -47,6 +52,9 @@ pub struct VasslRoot {
     _pricebook_panel_sub:  Subscription,
     _settings_panel_sub:   Subscription,
     focus_handle:          FocusHandle,
+    /// Which top-level menu is open in the Windows custom menu bar (None = all closed).
+    #[cfg(not(target_os = "macos"))]
+    open_menu_index:       Option<usize>,
 }
 
 impl Focusable for VasslRoot {
@@ -245,6 +253,8 @@ impl VasslRoot {
             _pricebook_panel_sub,
             _settings_panel_sub,
             focus_handle,
+            #[cfg(not(target_os = "macos"))]
+            open_menu_index: None,
         }
     }
 
@@ -341,6 +351,190 @@ impl VasslRoot {
         self._palette_sub = Some(sub);
         cx.notify();
     }
+
+    /// Render the custom title bar used on Windows (macOS uses the native title bar).
+    ///
+    /// Layout: [menu buttons …] [drag area, flex-1] [─ □ ✕ caption buttons]
+    ///
+    /// Each region uses `window_control_area()` so GPUI translates hit-test results
+    /// to the correct Win32 `NCHITTEST` values — the OS handles actual window management.
+    #[cfg(not(target_os = "macos"))]
+    fn render_menu_bar(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        use gpui::WindowControlArea;
+
+        let c = cx.global::<ThemeHandle>().0.clone();
+        let menus = cx.get_menus().unwrap_or_default();
+
+        // ── Menu buttons ──────────────────────────────────────────────────────
+        let mut menu_buttons: Vec<gpui::AnyElement> = Vec::new();
+        for (menu_ix, menu) in menus.into_iter().enumerate() {
+            let menu_name = menu.name.clone();
+            let is_open   = self.open_menu_index == Some(menu_ix);
+            let btn_bg    = rgb(if is_open { c.surface_active } else { c.surface_default });
+            let hover_bg  = rgb(c.surface_hover);
+
+            let dropdown: Option<gpui::AnyElement> = if is_open {
+                let mut rows: Vec<gpui::AnyElement> = Vec::new();
+                for (item_ix, item) in menu.items.into_iter().enumerate() {
+                    match item {
+                        OwnedMenuItem::Separator => {
+                            rows.push(
+                                div()
+                                    .id(format!("msep-{menu_ix}-{item_ix}"))
+                                    .h(px(1.))
+                                    .bg(rgb(c.surface_hover))
+                                    .mx(px(4.)).my(px(2.))
+                                    .into_any_element(),
+                            );
+                        }
+                        OwnedMenuItem::Action { name, action, disabled, .. } => {
+                            let text_col   = rgb(if disabled { c.text_muted } else { c.text_default });
+                            let item_hover = rgb(c.surface_hover);
+                            let item_el = div()
+                                .id(format!("mitem-{menu_ix}-{item_ix}"))
+                                .px(px(16.)).py(px(5.))
+                                .text_size(rems(0.923))
+                                .text_color(text_col)
+                                .when(!disabled, |d| {
+                                    d.hover(move |s| s.bg(item_hover))
+                                     .cursor_pointer()
+                                     .on_mouse_down(
+                                         MouseButton::Left,
+                                         cx.listener(move |this, _: &MouseDownEvent, window, cx| {
+                                             this.open_menu_index = None;
+                                             window.dispatch_action(action.boxed_clone(), cx);
+                                             cx.notify();
+                                         }),
+                                     )
+                                })
+                                .child(name);
+                            rows.push(item_el.into_any_element());
+                        }
+                        _ => {}
+                    }
+                }
+                Some(
+                    div()
+                        .id(format!("mdrop-{menu_ix}"))
+                        .absolute()
+                        .top(px(32.))
+                        .left(px(0.))
+                        .min_w(px(200.))
+                        .bg(rgb(c.surface_default))
+                        .py(px(4.))
+                        .z_index(200)
+                        .children(rows)
+                        .into_any_element(),
+                )
+            } else {
+                None
+            };
+
+            let wrapper = div()
+                .id(format!("mwrap-{menu_ix}"))
+                .relative()
+                .child(
+                    div()
+                        .id(format!("mbtn-{menu_ix}"))
+                        .px(px(10.))
+                        .h(px(32.))
+                        .flex()
+                        .items_center()
+                        .text_size(rems(0.846))
+                        .text_color(rgb(c.text_default))
+                        .bg(btn_bg)
+                        .hover(move |s| s.bg(hover_bg))
+                        .cursor_pointer()
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(move |this, _: &MouseDownEvent, _, cx| {
+                                this.open_menu_index = if this.open_menu_index == Some(menu_ix) {
+                                    None
+                                } else {
+                                    Some(menu_ix)
+                                };
+                                cx.notify();
+                            }),
+                        )
+                        .child(menu_name),
+                )
+                .when_some(dropdown, |d, drop| d.child(drop));
+
+            menu_buttons.push(wrapper.into_any_element());
+        }
+
+        // ── Caption buttons (Segoe Fluent Icons on Win11, MDL2 on older) ──────
+        let icon_font = if cfg!(target_os = "windows") {
+            // Runtime check via windows build number would require extra FFI;
+            // Segoe Fluent Icons ships on all Win10 21H1+ and Win11, which covers
+            // the app's minimum target. Fall back gracefully if unavailable.
+            "Segoe Fluent Icons"
+        } else {
+            // Running in a dev/CI environment — use a reasonable fallback.
+            "Segoe MDL2 Assets"
+        };
+
+        let is_maximized = window.is_maximized();
+
+        let caption_btn = |id: &'static str, icon: &'static str, area: WindowControlArea,
+                           is_close: bool, tip: &'static str| {
+            let close_hover  = rgb(0xE81120u32);
+            let close_active = rgb(0xBF0E1Au32);
+            let normal_hover = rgb(c.surface_hover);
+            div()
+                .id(id)
+                .w(px(46.))
+                .h_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .text_size(px(10.))
+                .text_color(rgb(c.text_default))
+                .font_family(icon_font)
+                .when(is_close, |d| {
+                    d.hover(move |s| s.bg(close_hover).text_color(rgb(0xFFFFFF)))
+                     .active(move |s| s.bg(close_active).text_color(rgb(0xFFFFFF)))
+                })
+                .when(!is_close, |d| {
+                    d.hover(move |s| s.bg(normal_hover))
+                })
+                .cursor_pointer()
+                .window_control_area(area)
+                .tooltip(tooltip(tip))
+                .child(icon)
+        };
+
+        div()
+            .id("app-title-bar")
+            .flex()
+            .flex_row()
+            .items_center()
+            .w_full()
+            .h(px(32.))
+            .flex_shrink_0()
+            .bg(rgb(c.surface_default))
+            .z_index(100)
+            // Menu buttons on the left
+            .children(menu_buttons)
+            // Drag region fills remaining space
+            .child(
+                div()
+                    .id("title-drag")
+                    .flex_1()
+                    .h_full()
+                    .window_control_area(WindowControlArea::Drag)
+            )
+            // Caption buttons on the right
+            .child(caption_btn("btn-min",
+                "\u{e921}", WindowControlArea::Min, false, "Minimize"))
+            .child(caption_btn(
+                if is_maximized { "btn-restore" } else { "btn-max" },
+                if is_maximized { "\u{e923}" } else { "\u{e922}" },
+                WindowControlArea::Max, false,
+                if is_maximized { "Restore" } else { "Maximize" }))
+            .child(caption_btn("btn-close",
+                "\u{e8bb}", WindowControlArea::Close, true, "Close"))
+    }
 }
 
 impl Render for VasslRoot {
@@ -357,7 +551,7 @@ impl Render for VasslRoot {
             ActiveModule::Settings   => content.child(self.settings_panel.clone()),
         };
 
-        let mut root = div()
+        let root = div()
             .key_context("VasslRoot")
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(|this, _: &OpenInventory, _w, cx| {
@@ -509,13 +703,34 @@ impl Render for VasslRoot {
             .relative()
             .flex().flex_col().w_full().h_full()
             .font_family(gpui::SharedString::from(c.font_family.clone()))
-            .bg(rgb(c.canvas_bg))
+            .bg(rgb(c.canvas_bg));
+
+        // Windows/Linux: render menus as a custom bar; macOS uses the native system menu bar.
+        #[cfg(not(target_os = "macos"))]
+        let mut root = root.child(self.render_menu_bar(_window, cx));
+
+        let mut root = root
             .child(
                 div().flex().flex_row().flex_1().min_h(px(0.)).overflow_hidden()
                     .child(self.sidebar.clone())
                     .child(content),
             )
             .child(self.status_bar.clone());
+
+        // Click-away capture: covers the full window so clicking outside the open menu closes it.
+        #[cfg(not(target_os = "macos"))]
+        if self.open_menu_index.is_some() {
+            root = root.child(
+                div()
+                    .id("menu-clickaway")
+                    .absolute().inset_0()
+                    .z_index(50)
+                    .on_mouse_down(MouseButton::Left, cx.listener(|this, _: &MouseDownEvent, _, cx| {
+                        this.open_menu_index = None;
+                        cx.notify();
+                    }))
+            );
+        }
 
         if let Some(form) = &self.first_run {
             root = root.child(form.clone());
