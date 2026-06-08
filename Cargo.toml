@@ -57,6 +57,9 @@ arc-swap = "1"
 calamine  = "0.26"
 rusqlite  = { version = "0.32", features = ["bundled"] }
 
+# Asset embedding
+rust-embed = { version = "8", features = ["interpolate-folder-path"] }
+
 vassl-ui = { path = "crates/vassl-ui" }
 
 # Vendored Zed crates
