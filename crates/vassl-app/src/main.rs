@@ -1,5 +1,10 @@
+// Suppress the console window on Windows in release builds.
+// Debug builds keep it so that tracing output is visible during development.
+#![cfg_attr(all(target_os = "windows", not(debug_assertions)), windows_subsystem = "windows")]
+
 mod about_dialog;
 mod actions;
+mod assets;
 mod auto_update;
 mod app;
 mod app_menus;
@@ -183,7 +188,9 @@ fn main() {
     tracing_log::LogTracer::init().ok();
     tracing::info!("VASSL starting");
 
-    gpui_platform::application().run(|cx: &mut App| {
+    gpui_platform::application()
+        .with_assets(assets::VasslAssets)
+        .run(|cx: &mut App| {
         if let Err(e) = vassl_db::init(cx) {
             tracing::error!("DB init failed: {e:?}");
             cx.quit();
@@ -241,6 +248,14 @@ fn main() {
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 app_id: Some(platform::app_name().to_string()),
+                // Hide the native Win32 title bar on Windows so GPUI draws custom caption
+                // buttons that match the app theme without the DWM compositing delay.
+                // macOS uses the system titlebar by default (appears_transparent=false).
+                #[cfg(target_os = "windows")]
+                titlebar: Some(gpui::TitlebarOptions {
+                    appears_transparent: true,
+                    ..Default::default()
+                }),
                 ..Default::default()
             },
             |window, cx| {
