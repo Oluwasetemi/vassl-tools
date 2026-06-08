@@ -1,7 +1,7 @@
 use gpui::{Context, Entity, EventEmitter, IntoElement, MouseButton, MouseDownEvent,
            Render, Subscription, Window, div, prelude::*, px, rems, rgb};
 use vassl_ui::NewRecord;
-use vassl_ui::{TextInput, ThemeHandle, text_field};
+use vassl_ui::{TextInput, ThemeHandle, text_field, tooltip, tooltip_keyed};
 
 use vassl_core::Product;
 use crate::product_form::{ProductForm, ProductFormEvent};
@@ -164,6 +164,11 @@ impl Render for InventoryPanel {
         let has_selection = self.store.read(cx).selected_product_id.is_some();
         let viewport      = window.viewport_size();
 
+        #[cfg(target_os = "macos")]
+        let mod_key = "⌘";
+        #[cfg(not(target_os = "macos"))]
+        let mod_key = "Ctrl+";
+
         let has_query = !self.search_input.read(cx).text().is_empty();
 
         let content = div().flex_1().h_full().flex().flex_col();
@@ -257,6 +262,7 @@ impl Render for InventoryPanel {
                             .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| {
                                 this.open_product_form(window, cx);
                             }))
+                            .tooltip(tooltip_keyed("New Product", format!("{mod_key}N")))
                             .child("+ New Product")
                     })
                     .child({
@@ -265,6 +271,7 @@ impl Render for InventoryPanel {
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
                             .bg(rgb(if has_selection { c.surface_active } else { c.surface_default }))
                             .text_size(rems(0.923)).text_color(rgb(c.text_default))
+                            .tooltip(tooltip("New Stock Entry"))
                             .child("+ New Entry");
 
                         if has_selection {

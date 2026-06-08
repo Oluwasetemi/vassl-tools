@@ -1,7 +1,7 @@
 use gpui::{Context, Entity, EventEmitter, IntoElement, MouseButton, MouseDownEvent,
            Render, Subscription, Window, div, prelude::*, px, rems, rgb};
 use vassl_inventory::InventoryStoreHandle;
-use vassl_ui::{TextInput, ThemeHandle, text_field};
+use vassl_ui::{TextInput, ThemeHandle, text_field, tooltip};
 
 use crate::price_form::{PriceEntryForm, PriceFormEvent};
 use crate::price_table::PriceTable;
@@ -255,6 +255,7 @@ impl Render for PriceBookPanel {
                             .px(px(12.)).py(px(4.)).rounded(px(4.))
                             .bg(rgb(if has_selection { c.surface_active } else { c.surface_default }))
                             .text_size(rems(0.923)).text_color(rgb(c.text_default))
+                            .tooltip(tooltip("New Price Entry"))
                             .child("+ New Entry");
                         if has_selection {
                             btn = btn

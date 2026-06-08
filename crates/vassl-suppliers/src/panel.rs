@@ -1,6 +1,6 @@
 use gpui::{Context, Entity, IntoElement, Render, Subscription, Window,
            div, prelude::*, px, rems, rgb};
-use vassl_ui::{NewRecord, TextInput, ThemeHandle, text_field};
+use vassl_ui::{NewRecord, TextInput, ThemeHandle, text_field, tooltip_keyed};
 
 use crate::store::SupplierStore;
 use crate::supplier_form::{SupplierForm, SupplierFormEvent};
@@ -89,6 +89,11 @@ impl Render for SupplierPanel {
         let c             = cx.global::<ThemeHandle>().0.clone();
         let has_selection = self.store.read(cx).selected_supplier_id.is_some();
 
+        #[cfg(target_os = "macos")]
+        let mod_key = "⌘";
+        #[cfg(not(target_os = "macos"))]
+        let mod_key = "Ctrl+";
+
         let has_query = !self.search_input.read(cx).text().is_empty();
 
         let mut root = div()
@@ -144,6 +149,7 @@ impl Render for SupplierPanel {
                             .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, cx| {
                                 this.open_new_form(window, cx);
                             }))
+                            .tooltip(tooltip_keyed("New Supplier", format!("{mod_key}N")))
                             .child("+ New Supplier")
                     })
                     .child({

@@ -1,7 +1,7 @@
 use gpui::{Context, Entity, IntoElement, Render, Subscription, Window,
            div, prelude::*, px, rems, rgb};
 use vassl_pricebook::store::PriceBookStoreHandle;
-use vassl_ui::{NewRecord, ThemeHandle};
+use vassl_ui::{NewRecord, ThemeHandle, tooltip, tooltip_keyed};
 
 use crate::line_item_form::{LineItemForm, LineItemFormEvent};
 use crate::quotation_detail::QuotationDetail;
@@ -151,6 +151,11 @@ impl Render for QuotationPanel {
         let active_tab    = self.active_tab;
         let has_selection = self.store.read(cx).selected_id.is_some();
 
+        #[cfg(target_os = "macos")]
+        let mod_key = "⌘";
+        #[cfg(not(target_os = "macos"))]
+        let mod_key = "Ctrl+";
+
         let content = div().flex_1().h_full().flex().flex_col();
         let content = match active_tab {
             Tab::Quotations => content.child(self.quot_list.clone()),
@@ -214,6 +219,7 @@ impl Render for QuotationPanel {
                             .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, cx| {
                                 this.open_project_form(window, cx);
                             }))
+                            .tooltip(tooltip("New Project"))
                             .child("+ New Project")
                     })
                     .child(
@@ -226,6 +232,7 @@ impl Render for QuotationPanel {
                             .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, cx| {
                                 this.open_form(window, cx);
                             }))
+                            .tooltip(tooltip_keyed("New Quotation", format!("{mod_key}N")))
                             .child("+ New Quotation")
                     )
                     // Add Item — only visible on Items tab when a quotation is selected

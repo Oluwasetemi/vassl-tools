@@ -1,7 +1,7 @@
 use gpui::{
     Context, IntoElement, MouseButton, Render, Window, div, prelude::*, px, rgb,
 };
-use vassl_ui::ThemeHandle;
+use vassl_ui::{ThemeHandle, tooltip_keyed, tooltip};
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum ActiveModule {
@@ -27,12 +27,24 @@ impl Render for Sidebar {
         let c = cx.global::<ThemeHandle>().0.clone();
         let active = self.active;
 
-        let make_btn = |module: ActiveModule, label: &'static str, id: &'static str| {
-            let is_active   = active == module;
-            let bg          = if is_active { rgb(c.surface_active) } else { rgb(c.surface_default) };
-            let fg          = if is_active { rgb(c.text_default)   } else { rgb(c.text_muted) };
-            let hover_bg    = rgb(c.surface_hover);
-            div()
+        // Platform modifier prefix shown in keybinding badges.
+        #[cfg(target_os = "macos")]
+        let mod_key = "⌘";
+        #[cfg(not(target_os = "macos"))]
+        let mod_key = "Ctrl+";
+
+        // Returns a sidebar icon button, optionally carrying a tooltip with a keybinding badge.
+        let make_btn = |module: ActiveModule,
+                        label:   &'static str,
+                        id:      &'static str,
+                        tip:     &'static str,
+                        key:     Option<&'static str>| {
+            let is_active = active == module;
+            let bg        = if is_active { rgb(c.surface_active) } else { rgb(c.surface_default) };
+            let fg        = if is_active { rgb(c.text_default)   } else { rgb(c.text_muted) };
+            let hover_bg  = rgb(c.surface_hover);
+
+            let btn = div()
                 .id(id)
                 .w(px(36.)).h(px(36.)).m(px(6.))
                 .rounded(px(6.))
@@ -44,7 +56,12 @@ impl Render for Sidebar {
                 .on_mouse_down(MouseButton::Left, cx.listener(move |this, _event, _window, cx| {
                     this.active = module;
                     cx.notify();
-                }))
+                }));
+
+            match key {
+                Some(k) => btn.tooltip(tooltip_keyed(tip, format!("{mod_key}{k}"))),
+                None    => btn.tooltip(tooltip(tip)),
+            }
         };
 
         div()
@@ -53,12 +70,12 @@ impl Render for Sidebar {
             .flex().flex_col().justify_between()
             .child(
                 div().flex().flex_col()
-                    .child(make_btn(ActiveModule::Inventory,  "I",  "btn-inventory"))
-                    .child(make_btn(ActiveModule::Quotations, "Q",  "btn-quotations"))
-                    .child(make_btn(ActiveModule::PriceBook,  "P",  "btn-pricebook"))
-                    .child(make_btn(ActiveModule::Suppliers,  "S",  "btn-suppliers")),
+                    .child(make_btn(ActiveModule::Inventory,  "I", "btn-inventory",  "Inventory",  Some("1")))
+                    .child(make_btn(ActiveModule::Quotations, "Q", "btn-quotations", "Quotations", Some("2")))
+                    .child(make_btn(ActiveModule::PriceBook,  "P", "btn-pricebook",  "Price Book", Some("3")))
+                    .child(make_btn(ActiveModule::Suppliers,  "S", "btn-suppliers",  "Suppliers",  Some("4"))),
             )
-            .child(make_btn(ActiveModule::Settings, "⚙", "btn-settings"))
+            .child(make_btn(ActiveModule::Settings, "⚙", "btn-settings", "Settings", Some(",")))
     }
 }
 
