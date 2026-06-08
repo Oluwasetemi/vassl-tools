@@ -1,6 +1,6 @@
 use gpui::{
     Context, EventEmitter, IntoElement, Render, Window,
-    div, prelude::*, px, rgb, rgba, rems,
+    div, img, prelude::*, px, rgb, rgba, rems,
 };
 use release_channel::RELEASE_CHANNEL;
 use vassl_ui::ThemeHandle;
@@ -54,6 +54,12 @@ impl Render for AboutDialog {
             .flex().flex_col().items_center()
             .px(px(32.)).py(px(28.))
             .gap(px(4.))
+            // Logo — full-width in the 420px card
+            .child(
+                img("logo-about.png")
+                    .w(px(356.)).h(px(118.))
+                    .mb(px(4.))
+            )
             // App name + version
             .child(
                 div()
