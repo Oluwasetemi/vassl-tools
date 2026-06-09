@@ -29,13 +29,13 @@
     </radialGradient>
   </defs>
 
-  <!-- ── Navy: base across the TOP, tip at BOTTOM-LEFT ─────────────────
-       Fills the left/upper half of the rectangle.                    -->
-  <polygon points="0,0 200,0 0,200" fill="#1a2b6d"/>
+  <!-- ── Navy: base across the TOP (0→195), tip at BOTTOM-LEFT ──────────
+       5 px inset on the top-right corner leaves a diagonal gap.      -->
+  <polygon points="0,0 195,0 0,200" fill="#1a2b6d"/>
 
-  <!-- ── Crimson: base across the BOTTOM, tip at TOP-RIGHT ─────────────
-       Fills the right/lower half — together both cover the full rect. -->
-  <polygon points="200,0 200,200 0,200" fill="#c4122a"/>
+  <!-- ── Crimson: base across the BOTTOM (5→200), tip at TOP-RIGHT ───────
+       5 px inset on the bottom-left corner mirrors the gap.          -->
+  <polygon points="200,0 200,200 5,200" fill="#c4122a"/>
 
   <!-- ── Emerald security eye — dead centre where the diagonal crosses ─ -->
 
