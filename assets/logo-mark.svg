@@ -1,68 +1,69 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
   <defs>
-    <!-- Emerald iris: bright teal highlight → deep forest -->
-    <radialGradient id="iris" cx="38%" cy="33%" r="65%">
+    <!-- Emerald iris -->
+    <radialGradient id="iris" cx="38%" cy="32%" r="65%">
       <stop offset="0%"   stop-color="#52f0c0"/>
-      <stop offset="30%"  stop-color="#00c48a"/>
-      <stop offset="70%"  stop-color="#007a56"/>
+      <stop offset="28%"  stop-color="#00c48a"/>
+      <stop offset="68%"  stop-color="#007a56"/>
       <stop offset="100%" stop-color="#003d28"/>
     </radialGradient>
 
-    <!-- Pupil: near-black -->
+    <!-- Pupil -->
     <radialGradient id="pupil" cx="30%" cy="28%" r="70%">
       <stop offset="0%"   stop-color="#14281e"/>
       <stop offset="100%" stop-color="#000805"/>
     </radialGradient>
 
     <!-- Sclera -->
-    <radialGradient id="sclera" cx="40%" cy="35%" r="62%">
+    <radialGradient id="sclera" cx="38%" cy="32%" r="62%">
       <stop offset="0%"   stop-color="#ffffff"/>
-      <stop offset="75%"  stop-color="#f2f8f5"/>
-      <stop offset="100%" stop-color="#c8ddd6"/>
+      <stop offset="80%"  stop-color="#eef6f2"/>
+      <stop offset="100%" stop-color="#c0d8d0"/>
     </radialGradient>
 
-    <!-- Specular sheen on iris -->
-    <radialGradient id="sheen" cx="32%" cy="22%" r="52%">
-      <stop offset="0%"   stop-color="#ffffff" stop-opacity="0.50"/>
-      <stop offset="60%"  stop-color="#ffffff" stop-opacity="0.10"/>
+    <!-- Iris sheen -->
+    <radialGradient id="sheen" cx="30%" cy="20%" r="55%">
+      <stop offset="0%"   stop-color="#ffffff" stop-opacity="0.60"/>
+      <stop offset="55%"  stop-color="#ffffff" stop-opacity="0.12"/>
       <stop offset="100%" stop-color="#ffffff" stop-opacity="0.00"/>
     </radialGradient>
   </defs>
 
-  <!-- ── Step 1: full arrowhead in crimson (the base layer) ─────────── -->
-  <polygon points="5,5 5,195 190,100" fill="#c4122a"/>
+  <!-- ── Navy: base across the TOP, tip at BOTTOM-LEFT ─────────────────
+       Fills the left/upper half of the rectangle.                    -->
+  <polygon points="0,0 200,0 0,200" fill="#1a2b6d"/>
 
-  <!-- ── Step 2: navy upper portion painted on top ──────────────────── -->
-  <!-- Covers the top ~65 % of the arrowhead height, same right apex.  -->
-  <polygon points="5,5 5,128 190,100" fill="#1a2b6d"/>
+  <!-- ── Crimson: base across the BOTTOM, tip at TOP-RIGHT ─────────────
+       Fills the right/lower half — together both cover the full rect. -->
+  <polygon points="200,0 200,200 0,200" fill="#c4122a"/>
 
-  <!-- ── Eye / security globe ────────────────────────────────────────── -->
+  <!-- ── Emerald security eye — dead centre where the diagonal crosses ─ -->
 
-  <!-- Sclera (white) -->
-  <circle cx="88" cy="82" r="44" fill="url(#sclera)"/>
+  <!-- Sclera -->
+  <circle cx="100" cy="100" r="42" fill="url(#sclera)"/>
 
   <!-- Emerald iris (globe) -->
-  <circle cx="88" cy="82" r="34" fill="url(#iris)"/>
+  <circle cx="100" cy="100" r="32" fill="url(#iris)"/>
 
   <!-- Globe latitude lines -->
-  <ellipse cx="88" cy="82" rx="34" ry="13"
-           fill="none" stroke="#003d28" stroke-width="1.4" opacity="0.50"/>
-  <ellipse cx="88" cy="82" rx="34" ry="26"
-           fill="none" stroke="#003d28" stroke-width="0.9" opacity="0.35"/>
+  <ellipse cx="100" cy="100" rx="32" ry="12"
+           fill="none" stroke="#003d28" stroke-width="1.3" opacity="0.48"/>
+  <ellipse cx="100" cy="100" rx="32" ry="24"
+           fill="none" stroke="#003d28" stroke-width="0.8" opacity="0.30"/>
 
-  <!-- Globe meridian (vertical) -->
-  <ellipse cx="88" cy="82" rx="14" ry="34"
-           fill="none" stroke="#003d28" stroke-width="1.2" opacity="0.45"/>
+  <!-- Globe meridian -->
+  <ellipse cx="100" cy="100" rx="13" ry="32"
+           fill="none" stroke="#003d28" stroke-width="1.0" opacity="0.40"/>
 
   <!-- Specular sheen -->
-  <circle cx="88" cy="82" r="34" fill="url(#sheen)"/>
+  <circle cx="100" cy="100" r="32" fill="url(#sheen)"/>
 
   <!-- Pupil -->
-  <circle cx="88" cy="82" r="13" fill="url(#pupil)"/>
+  <circle cx="100" cy="100" r="12" fill="url(#pupil)"/>
 
   <!-- Primary catchlight -->
-  <circle cx="78" cy="71" r="6.5" fill="white" opacity="0.95"/>
+  <circle cx="91"  cy="90"  r="5.5" fill="white" opacity="0.95"/>
 
   <!-- Secondary catchlight -->
-  <circle cx="96" cy="90" r="2.5" fill="white" opacity="0.45"/>
+  <circle cx="109" cy="109" r="2.2" fill="white" opacity="0.40"/>
 </svg>
