@@ -1,6 +1,6 @@
 use gpui::{Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Window,
            actions, div, prelude::*, px, rems, rgb, rgba, SharedString};
-use vassl_ui::{TextInput, ThemeHandle, text_field};
+use vassl_ui::{TextInput, ThemeHandle};
 
 use crate::db::QuotationDb;
 use crate::store::QuotationStore;
@@ -13,13 +13,16 @@ pub enum ProjectFormEvent { Submitted, Cancelled }
 impl EventEmitter<ProjectFormEvent> for ProjectForm {}
 
 pub struct ProjectForm {
-    store:        Entity<QuotationStore>,
-    pub name:     Entity<TextInput>,
-    client_name:  Entity<TextInput>,
-    cancel_focus: FocusHandle,
-    save_focus:   FocusHandle,
-    error:        Option<String>,
-    focus_handle: FocusHandle,
+    store:          Entity<QuotationStore>,
+    pub name:       Entity<TextInput>,
+    client_name:    Entity<TextInput>,
+    client_address: Entity<TextInput>,
+    client_attn:    Entity<TextInput>,
+    client_tel:     Entity<TextInput>,
+    cancel_focus:   FocusHandle,
+    save_focus:     FocusHandle,
+    error:          Option<String>,
+    focus_handle:   FocusHandle,
 }
 
 pub fn validate_project(name: &str, client_name: &str) -> Result<(String, String), String> {
@@ -30,29 +33,40 @@ pub fn validate_project(name: &str, client_name: &str) -> Result<(String, String
     Ok((name, client))
 }
 
+fn opt(s: &str) -> Option<String> {
+    let t = s.trim();
+    if t.is_empty() { None } else { Some(t.to_string()) }
+}
+
 impl ProjectForm {
     pub fn new(store: Entity<QuotationStore>, cx: &mut Context<Self>) -> Self {
         Self {
             store,
-            name:         cx.new(|cx| TextInput::with_placeholder("e.g. Office Renovation", cx)),
-            client_name:  cx.new(|cx| TextInput::with_placeholder("e.g. Acme Corp", cx)),
-            cancel_focus: cx.focus_handle(),
-            save_focus:   cx.focus_handle(),
-            error:        None,
-            focus_handle: cx.focus_handle(),
+            name:           cx.new(|cx| TextInput::with_placeholder("e.g. Office Renovation", cx)),
+            client_name:    cx.new(|cx| TextInput::with_placeholder("e.g. Acme Corp", cx)),
+            client_address: cx.new(|cx| TextInput::with_placeholder("e.g. 12 Main St, Kingston (optional)", cx)),
+            client_attn:    cx.new(|cx| TextInput::with_placeholder("e.g. Jane Smith (optional)", cx)),
+            client_tel:     cx.new(|cx| TextInput::with_placeholder("e.g. 876-555-0100 (optional)", cx)),
+            cancel_focus:   cx.focus_handle(),
+            save_focus:     cx.focus_handle(),
+            error:          None,
+            focus_handle:   cx.focus_handle(),
         }
     }
 
     fn submit(&mut self, cx: &mut Context<Self>) {
-        let n  = self.name.read(cx).text().to_string();
-        let cl = self.client_name.read(cx).text().to_string();
+        let n   = self.name.read(cx).text().to_string();
+        let cl  = self.client_name.read(cx).text().to_string();
+        let adr = self.client_address.read(cx).text().to_string();
+        let att = self.client_attn.read(cx).text().to_string();
+        let tel = self.client_tel.read(cx).text().to_string();
         match validate_project(&n, &cl) {
             Err(msg) => { self.error = Some(msg); cx.notify(); }
             Ok((name, client)) => {
                 let db    = QuotationDb::global(&**cx);
                 let store = self.store.clone();
                 cx.spawn(async move |this, cx| {
-                    let result = db.insert_project(name, client).await;
+                    let result = db.insert_project(name, client, opt(&adr), opt(&att), opt(&tel)).await;
                     if let Err(e) = result { tracing::error!("insert_project failed: {e:?}"); return Ok(()); }
                     let _ = store.update(cx, |s, cx| s.load_quotations(cx));
                     this.update(cx, |_, cx| cx.emit(ProjectFormEvent::Submitted))
@@ -68,11 +82,14 @@ impl Focusable for ProjectForm {
 
 impl Render for ProjectForm {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let c            = cx.global::<ThemeHandle>().0.clone();
-        let name_focused = self.name.read(cx).focus_handle.is_focused(window);
-        let cli_focused  = self.client_name.read(cx).focus_handle.is_focused(window);
-        let cancel_f     = self.cancel_focus.is_focused(window);
-        let save_f       = self.save_focus.is_focused(window);
+        let c       = cx.global::<ThemeHandle>().0.clone();
+        let name_f  = self.name.read(cx).focus_handle.is_focused(window);
+        let cli_f   = self.client_name.read(cx).focus_handle.is_focused(window);
+        let adr_f   = self.client_address.read(cx).focus_handle.is_focused(window);
+        let att_f   = self.client_attn.read(cx).focus_handle.is_focused(window);
+        let tel_f   = self.client_tel.read(cx).focus_handle.is_focused(window);
+        let cancel_f = self.cancel_focus.is_focused(window);
+        let save_f   = self.save_focus.is_focused(window);
 
         div()
             .absolute().top_0().left_0().right_0().bottom_0()
@@ -86,6 +103,9 @@ impl Render for ProjectForm {
                 let handles = [
                     this.name.read(cx).focus_handle.clone(),
                     this.client_name.read(cx).focus_handle.clone(),
+                    this.client_address.read(cx).focus_handle.clone(),
+                    this.client_attn.read(cx).focus_handle.clone(),
+                    this.client_tel.read(cx).focus_handle.clone(),
                     this.cancel_focus.clone(),
                     this.save_focus.clone(),
                 ];
@@ -97,6 +117,9 @@ impl Render for ProjectForm {
                 let handles = [
                     this.name.read(cx).focus_handle.clone(),
                     this.client_name.read(cx).focus_handle.clone(),
+                    this.client_address.read(cx).focus_handle.clone(),
+                    this.client_attn.read(cx).focus_handle.clone(),
+                    this.client_tel.read(cx).focus_handle.clone(),
                     this.cancel_focus.clone(),
                     this.save_focus.clone(),
                 ];
@@ -106,7 +129,7 @@ impl Render for ProjectForm {
             }))
             .child(
                 div()
-                    .w(px(520.))
+                    .w(px(560.))
                     .bg(rgb(c.canvas_bg))
                     .rounded(px(10.))
                     .border_1()
@@ -127,17 +150,15 @@ impl Render for ProjectForm {
                     // ── fields ──────────────────────────────────────────
                     .child(
                         div().flex().flex_col().px(px(20.)).pt(px(8.)).pb(px(4.))
-                            .child(
-                                div().flex().flex_row().items_center().py(px(10.))
-                                    .child(div().w(px(140.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Project Name"))
-                                    .child(div().flex_1().child(text_field("", self.name.clone(), name_focused, cx)))
-                            )
-                            .child(div().h(px(1.)).bg(rgb(c.surface_default)))
-                            .child(
-                                div().flex().flex_row().items_center().py(px(10.))
-                                    .child(div().w(px(140.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Client Name"))
-                                    .child(div().flex_1().child(text_field("", self.client_name.clone(), cli_focused, cx)))
-                            )
+                            .child(field_row("Project Name", self.name.clone(), name_f, cx, &c))
+                            .child(divider(&c))
+                            .child(field_row("Client Name", self.client_name.clone(), cli_f, cx, &c))
+                            .child(divider(&c))
+                            .child(field_row("Address", self.client_address.clone(), adr_f, cx, &c))
+                            .child(divider(&c))
+                            .child(field_row("Attn", self.client_attn.clone(), att_f, cx, &c))
+                            .child(divider(&c))
+                            .child(field_row("Tel", self.client_tel.clone(), tel_f, cx, &c))
                             .child(
                                 div().h(px(18.)).flex().items_center()
                                     .child(div().text_size(rems(0.846)).text_color(rgb(c.status_red))
@@ -176,6 +197,23 @@ impl Render for ProjectForm {
                     )
             )
     }
+}
+
+fn field_row(
+    label: &str,
+    input: Entity<TextInput>,
+    focused: bool,
+    cx: &gpui::App,
+    c: &vassl_ui::ThemeColors,
+) -> impl gpui::IntoElement {
+    use vassl_ui::text_field;
+    div().flex().flex_row().items_center().py(px(10.))
+        .child(div().w(px(140.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child(label.to_string()))
+        .child(div().flex_1().child(text_field("", input, focused, cx)))
+}
+
+fn divider(c: &vassl_ui::ThemeColors) -> impl gpui::IntoElement {
+    div().h(px(1.)).bg(rgb(c.surface_default))
 }
 
 #[cfg(test)]

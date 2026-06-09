@@ -1,15 +1,16 @@
 use gpui::{Context, Entity, EventEmitter, Global};
-use vassl_core::{Project, QuotationItem, QuotationStatus};
+use vassl_core::{Project, QuotationExtras, QuotationItem, QuotationStatus};
 use vassl_inventory::InventoryStoreHandle;
 
 use crate::db::{QuotationDb, QuotationRow};
 
 pub struct QuotationStore {
-    pub quotations: Vec<QuotationRow>,
-    pub selected_id: Option<i64>,
-    pub line_items:  Vec<QuotationItem>,
-    pub projects:    Vec<Project>,
-    pub loading:     bool,
+    pub quotations:        Vec<QuotationRow>,
+    pub selected_id:       Option<i64>,
+    pub line_items:        Vec<QuotationItem>,
+    pub selected_extras:   Option<QuotationExtras>,
+    pub projects:          Vec<Project>,
+    pub loading:           bool,
 }
 
 pub struct QuotationStoreHandle(pub Entity<QuotationStore>);
@@ -35,11 +36,12 @@ impl EventEmitter<QuotationEvent> for QuotationStore {}
 impl QuotationStore {
     pub fn new(_cx: &mut Context<Self>) -> Self {
         Self {
-            quotations:  Vec::new(),
-            selected_id: None,
-            line_items:  Vec::new(),
-            projects:    Vec::new(),
-            loading:     false,
+            quotations:      Vec::new(),
+            selected_id:     None,
+            line_items:      Vec::new(),
+            selected_extras: None,
+            projects:        Vec::new(),
+            loading:         false,
         }
     }
 
@@ -75,19 +77,24 @@ impl QuotationStore {
 
     pub fn select_quotation(&mut self, id: i64, cx: &mut Context<Self>) {
         if self.selected_id == Some(id) { return; }
-        self.selected_id = Some(id);
-        self.line_items.clear();
+        self.selected_id     = Some(id);
+        self.line_items      = Vec::new();
+        self.selected_extras = None;
         cx.notify();
 
         let db = QuotationDb::global(&**cx);
         cx.spawn(async move |this, cx| {
-            let result = cx.background_executor()
-                .spawn(async move { db.list_items_for_quotation(id) })
-                .await;
+            let db2    = db.clone();
+            let items  = cx.background_executor().spawn(async move { db.list_items_for_quotation(id) }).await;
+            let extras = cx.background_executor().spawn(async move { db2.get_quotation_extras(id) }).await;
             let _ = this.update(cx, |store, cx| {
-                match result {
-                    Ok(items) => { store.line_items = items; cx.emit(QuotationEvent::ItemsLoaded); }
-                    Err(e)    => tracing::error!("list_items_for_quotation failed: {e:?}"),
+                match items {
+                    Ok(i)  => { store.line_items = i; cx.emit(QuotationEvent::ItemsLoaded); }
+                    Err(e) => tracing::error!("list_items_for_quotation failed: {e:?}"),
+                }
+                match extras {
+                    Ok(e)  => { store.selected_extras = Some(e); }
+                    Err(e) => tracing::error!("get_quotation_extras failed: {e:?}"),
                 }
                 cx.notify();
             });
@@ -197,11 +204,12 @@ mod tests {
     #[test]
     fn quotation_store_starts_empty() {
         let store = QuotationStore {
-            quotations: vec![],
-            selected_id: None,
-            line_items: vec![],
-            projects: vec![],
-            loading: false,
+            quotations:      vec![],
+            selected_id:     None,
+            line_items:      vec![],
+            selected_extras: None,
+            projects:        vec![],
+            loading:         false,
         };
         assert!(store.quotations.is_empty());
         assert!(store.selected_id.is_none());

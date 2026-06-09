@@ -3,7 +3,6 @@ use gpui::{Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
 use vassl_core::Project;
 use vassl_ui::{Dropdown, DropdownItem, TextInput, ThemeHandle, text_field};
 
-
 actions!(quotation_form, [EscapeForm, TabField, BackTabField]);
 use crate::db::QuotationDb;
 use crate::store::QuotationStore;
@@ -14,15 +13,19 @@ pub enum QuotationFormEvent { Submitted, Cancelled }
 impl EventEmitter<QuotationFormEvent> for QuotationForm {}
 
 pub struct QuotationForm {
-    store:              Entity<QuotationStore>,
-    reference_number:   String,
-    project_dropdown:   Entity<Dropdown>,
-    pub notes:          Entity<TextInput>,
-    cancel_focus:       FocusHandle,
-    save_focus:         FocusHandle,
-    error:              Option<String>,
-    focus_handle:       FocusHandle,
-    _store_sub:         Subscription,
+    store:             Entity<QuotationStore>,
+    reference_number:  String,
+    project_dropdown:  Entity<Dropdown>,
+    pub notes:         Entity<TextInput>,
+    exchange_rate:     Entity<TextInput>,
+    discount_percent:  Entity<TextInput>,
+    gct_percent:       Entity<TextInput>,
+    validity_days:     Entity<TextInput>,
+    cancel_focus:      FocusHandle,
+    save_focus:        FocusHandle,
+    error:             Option<String>,
+    focus_handle:      FocusHandle,
+    _store_sub:        Subscription,
 }
 
 pub fn validate_form(selected_project: Option<i64>) -> Option<String> {
@@ -43,7 +46,6 @@ impl QuotationForm {
             Dropdown::new("Select a project…", "No projects yet — create one first.", cx)
         });
 
-        // Populate dropdown from current store state immediately
         {
             let (items, loading) = {
                 let s = store.read(cx);
@@ -52,7 +54,6 @@ impl QuotationForm {
             project_dropdown.update(cx, |d, _| { d.items = items; d.loading = loading; });
         }
 
-        // Keep dropdown fresh as the store changes (projects may load after form opens)
         let _store_sub = cx.observe(&store, |this, store_entity, cx| {
             let (items, loading) = {
                 let s = store_entity.read(cx);
@@ -65,11 +66,15 @@ impl QuotationForm {
             store,
             reference_number,
             project_dropdown,
-            notes:        cx.new(|cx| TextInput::with_placeholder("optional", cx)),
-            cancel_focus: cx.focus_handle(),
-            save_focus:   cx.focus_handle(),
-            error:        None,
-            focus_handle: cx.focus_handle(),
+            notes:            cx.new(|cx| TextInput::with_placeholder("optional", cx)),
+            exchange_rate:    cx.new(|cx| TextInput::with_text("156.00", cx)),
+            discount_percent: cx.new(|cx| TextInput::with_text("0.0", cx)),
+            gct_percent:      cx.new(|cx| TextInput::with_text("15.0", cx)),
+            validity_days:    cx.new(|cx| TextInput::with_text("30", cx)),
+            cancel_focus:     cx.focus_handle(),
+            save_focus:       cx.focus_handle(),
+            error:            None,
+            focus_handle:     cx.focus_handle(),
             _store_sub,
         }
     }
@@ -79,20 +84,28 @@ impl QuotationForm {
         match validate_form(selected) {
             Some(msg) => { self.error = Some(msg); cx.notify(); }
             None => {
-                let pid        = selected.unwrap();
-                let ref_num    = self.reference_number.clone();
-                let notes_s    = self.notes.read(cx).text().trim().to_string();
-                let notes      = if notes_s.is_empty() { None } else { Some(notes_s) };
-                let store      = self.store.clone();
-                let db         = QuotationDb::global(&**cx);
-                let app_db     = vassl_db::AppDatabase::global(&**cx).clone();
+                let pid    = selected.unwrap();
+                let ref_num = self.reference_number.clone();
+                let notes_s = self.notes.read(cx).text().trim().to_string();
+                let notes   = if notes_s.is_empty() { None } else { Some(notes_s) };
+
+                let rate: f64  = self.exchange_rate.read(cx).text().trim().parse().unwrap_or(156.0);
+                let disc: f64  = self.discount_percent.read(cx).text().trim().parse().unwrap_or(0.0);
+                let gct: f64   = self.gct_percent.read(cx).text().trim().parse().unwrap_or(15.0);
+                let days: i64  = self.validity_days.read(cx).text().trim().parse().unwrap_or(30);
+
+                let store  = self.store.clone();
+                let db     = QuotationDb::global(&**cx);
+                let app_db = vassl_db::AppDatabase::global(&**cx).clone();
 
                 cx.spawn(async move |this, cx| {
                     let created_by = vassl_db::shared::current_user(&app_db)
                         .ok().flatten().unwrap_or_else(|| "unknown".into());
-                    // ref_num is held for display only; the DB generates atomically
                     let _ = ref_num;
-                    let result = db.insert_quotation_atomic(pid, &created_by, notes.as_deref()).await;
+                    let result = db.insert_quotation_atomic(
+                        pid, &created_by, notes.as_deref(),
+                        rate, disc, gct, days, None,
+                    ).await;
                     let _ = this.update(cx, |form, cx| {
                         match result {
                             Err(e) => {
@@ -120,9 +133,13 @@ impl Focusable for QuotationForm {
 impl Render for QuotationForm {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = cx.global::<ThemeHandle>().0.clone();
-        let notes_focused  = self.notes.read(cx).focus_handle.is_focused(window);
-        let cancel_f       = self.cancel_focus.is_focused(window);
-        let save_f         = self.save_focus.is_focused(window);
+        let notes_f    = self.notes.read(cx).focus_handle.is_focused(window);
+        let rate_f     = self.exchange_rate.read(cx).focus_handle.is_focused(window);
+        let disc_f     = self.discount_percent.read(cx).focus_handle.is_focused(window);
+        let gct_f      = self.gct_percent.read(cx).focus_handle.is_focused(window);
+        let days_f     = self.validity_days.read(cx).focus_handle.is_focused(window);
+        let cancel_f   = self.cancel_focus.is_focused(window);
+        let save_f     = self.save_focus.is_focused(window);
 
         div()
             .absolute().top_0().left_0().right_0().bottom_0()
@@ -135,6 +152,10 @@ impl Render for QuotationForm {
             .on_action(cx.listener(|this, _: &TabField, window, cx| {
                 let handles = [
                     this.project_dropdown.read(cx).trigger_focus.clone(),
+                    this.exchange_rate.read(cx).focus_handle.clone(),
+                    this.discount_percent.read(cx).focus_handle.clone(),
+                    this.gct_percent.read(cx).focus_handle.clone(),
+                    this.validity_days.read(cx).focus_handle.clone(),
                     this.notes.read(cx).focus_handle.clone(),
                     this.cancel_focus.clone(),
                     this.save_focus.clone(),
@@ -146,6 +167,10 @@ impl Render for QuotationForm {
             .on_action(cx.listener(|this, _: &BackTabField, window, cx| {
                 let handles = [
                     this.project_dropdown.read(cx).trigger_focus.clone(),
+                    this.exchange_rate.read(cx).focus_handle.clone(),
+                    this.discount_percent.read(cx).focus_handle.clone(),
+                    this.gct_percent.read(cx).focus_handle.clone(),
+                    this.validity_days.read(cx).focus_handle.clone(),
                     this.notes.read(cx).focus_handle.clone(),
                     this.cancel_focus.clone(),
                     this.save_focus.clone(),
@@ -156,7 +181,7 @@ impl Render for QuotationForm {
             }))
             .child(
                 div()
-                    .w(px(580.))
+                    .w(px(600.))
                     .bg(rgb(c.canvas_bg))
                     .rounded(px(10.))
                     .border_1()
@@ -177,28 +202,58 @@ impl Render for QuotationForm {
                     // ── fields ──────────────────────────────────────────
                     .child(
                         div().flex().flex_col().px(px(20.)).pt(px(8.)).pb(px(4.))
-                            // Reference number (read-only)
+                            // Reference (read-only)
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
-                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Reference"))
+                                    .child(label_col("Reference", &c))
                                     .child(div().flex_1()
                                         .px(px(8.)).py(px(6.)).bg(rgb(c.surface_default)).rounded(px(4.))
                                         .text_size(rems(0.923)).text_color(rgb(c.text_muted))
                                         .child(self.reference_number.clone()))
                             )
-                            .child(div().h(px(1.)).bg(rgb(c.surface_default)))
-                            // Project dropdown
+                            .child(divider(&c))
+                            // Project
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
-                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Project"))
+                                    .child(label_col("Project", &c))
                                     .child(div().flex_1().child(self.project_dropdown.clone()))
                             )
-                            .child(div().h(px(1.)).bg(rgb(c.surface_default)))
+                            .child(divider(&c))
+                            // Financial row: rate + discount
+                            .child(
+                                div().flex().flex_row().gap(px(12.)).py(px(10.))
+                                    .child(
+                                        div().flex().flex_row().items_center().flex_1()
+                                            .child(label_col("Rate (JMD/USD)", &c))
+                                            .child(div().flex_1().child(text_field("", self.exchange_rate.clone(), rate_f, cx)))
+                                    )
+                                    .child(
+                                        div().flex().flex_row().items_center().flex_1()
+                                            .child(label_col("Discount %", &c))
+                                            .child(div().flex_1().child(text_field("", self.discount_percent.clone(), disc_f, cx)))
+                                    )
+                            )
+                            .child(divider(&c))
+                            // GCT + validity
+                            .child(
+                                div().flex().flex_row().gap(px(12.)).py(px(10.))
+                                    .child(
+                                        div().flex().flex_row().items_center().flex_1()
+                                            .child(label_col("GCT %", &c))
+                                            .child(div().flex_1().child(text_field("", self.gct_percent.clone(), gct_f, cx)))
+                                    )
+                                    .child(
+                                        div().flex().flex_row().items_center().flex_1()
+                                            .child(label_col("Valid (days)", &c))
+                                            .child(div().flex_1().child(text_field("", self.validity_days.clone(), days_f, cx)))
+                                    )
+                            )
+                            .child(divider(&c))
                             // Notes
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
-                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Notes"))
-                                    .child(div().flex_1().child(text_field("", self.notes.clone(), notes_focused, cx)))
+                                    .child(label_col("Notes", &c))
+                                    .child(div().flex_1().child(text_field("", self.notes.clone(), notes_f, cx)))
                             )
                             .child(
                                 div().h(px(18.)).flex().items_center()
@@ -240,16 +295,25 @@ impl Render for QuotationForm {
     }
 }
 
+fn label_col(text: &str, c: &vassl_ui::ThemeColors) -> impl gpui::IntoElement {
+    div().w(px(140.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child(text.to_string())
+}
+
+fn divider(c: &vassl_ui::ThemeColors) -> impl gpui::IntoElement {
+    div().h(px(1.)).bg(rgb(c.surface_default))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test] fn reference_number_format()       { let r = "VASSL-2026-0001"; assert!(r.starts_with("VASSL-")); assert_eq!(r.len(), 15); }
-    #[test] fn form_requires_project()         { assert!(validate_form(None).is_some()); }
-    #[test] fn form_valid_with_project()       { assert!(validate_form(Some(1)).is_none()); }
+    #[test] fn reference_number_format()   { let r = "VASSL-2026-0001"; assert!(r.starts_with("VASSL-")); assert_eq!(r.len(), 15); }
+    #[test] fn form_requires_project()     { assert!(validate_form(None).is_some()); }
+    #[test] fn form_valid_with_project()   { assert!(validate_form(Some(1)).is_none()); }
     #[test] fn projects_to_items_maps_correctly() {
         use vassl_core::{Project, ProjectStatus};
         let projects = vec![Project {
             id: 1, name: "Alpha".into(), client_name: "Acme".into(),
+            client_address: None, client_attn: None, client_tel: None,
             description: None, status: ProjectStatus::Active,
             created_at: "2026-01-01".into(),
         }];

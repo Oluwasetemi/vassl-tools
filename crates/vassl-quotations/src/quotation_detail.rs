@@ -1,6 +1,20 @@
 use gpui::{Context, Entity, IntoElement, Render, Window, div, prelude::*, px, rems, rgb};
-use vassl_core::QuotationStatus;
+use vassl_core::{QuotationExtras, QuotationStatus};
 use vassl_ui::{ThemeColors, ThemeHandle};
+
+fn fmt_jmd(v: f64) -> String {
+    let cents = (v * 100.0).round() as i64;
+    let whole = cents / 100;
+    let frac  = (cents % 100).unsigned_abs();
+    let s = whole.to_string();
+    let mut out = String::with_capacity(s.len() + s.len() / 3 + 4);
+    for (i, ch) in s.chars().rev().enumerate() {
+        if i > 0 && i % 3 == 0 { out.push(','); }
+        out.push(ch);
+    }
+    out = out.chars().rev().collect();
+    format!("{out}.{frac:02}")
+}
 
 use crate::store::QuotationStore;
 
@@ -44,14 +58,14 @@ pub fn transition_label(status: &QuotationStatus) -> &'static str {
 impl Render for QuotationDetail {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = cx.global::<ThemeHandle>().0.clone();
-        let (selected_id, current_status, items, total) = {
-            let store = self.store.read(cx);
-            let sid   = store.selected_id;
+        let (selected_id, current_status, items, extras) = {
+            let store  = self.store.read(cx);
+            let sid    = store.selected_id;
             let status = store.quotations.iter()
                 .find(|q| Some(q.id) == sid)
                 .map(|q| q.status.clone());
-            let total: f64 = store.line_items.iter().map(|i| i.total_usd).sum();
-            (sid, status, store.line_items.clone(), total)
+            let extras = store.selected_extras.clone().unwrap_or_default();
+            (sid, status, store.line_items.clone(), extras)
         };
 
         if selected_id.is_none() {
@@ -101,16 +115,19 @@ impl Render for QuotationDetail {
                 .px(px(12.)).py(px(4.))
                 .bg(rgb(c.surface_default))
                 .child(div().flex_1().text_size(rems(0.846)).text_color(rgb(c.text_muted)).child("Description"))
-                .child(div().w(px(70.)).text_size(rems(0.846)).text_color(rgb(c.text_muted)).child("Qty"))
-                .child(div().w(px(90.)).text_size(rems(0.846)).text_color(rgb(c.text_muted)).child("Unit Price"))
-                .child(div().w(px(90.)).text_size(rems(0.846)).text_color(rgb(c.text_muted)).child("Total"))
-                .child(div().w(px(28.)))  // column for delete button
+                .child(div().w(px(50.)).text_size(rems(0.846)).text_color(rgb(c.text_muted)).child("Qty"))
+                .child(div().w(px(42.)).text_size(rems(0.846)).text_color(rgb(c.text_muted)).child("Unit"))
+                .child(div().w(px(82.)).text_size(rems(0.846)).text_color(rgb(c.text_muted)).child("Unit Price"))
+                .child(div().w(px(46.)).text_size(rems(0.846)).text_color(rgb(c.text_muted)).child("Disc%"))
+                .child(div().w(px(82.)).text_size(rems(0.846)).text_color(rgb(c.text_muted)).child("Total USD"))
+                .child(div().w(px(28.)))
         );
 
         if items.is_empty() {
             root = root.child(
                 div()
-                    .flex_1().flex().items_center().justify_center()
+                    .flex().items_center().justify_center()
+                    .py(px(24.))
                     .text_color(rgb(c.text_muted))
                     .child("No line items yet — use \"Add Item\" above to add one.")
             );
@@ -119,15 +136,18 @@ impl Render for QuotationDetail {
             let item_rows = div()
                 .id("items-scroll").flex_1().flex().flex_col().overflow_y_scroll()
                 .children(items.iter().map(|item| {
-                    let item_id  = item.id;
-                    let store2   = store.clone();
+                    let item_id = item.id;
+                    let store2  = store.clone();
                     div()
                         .flex().flex_row().items_center().w_full()
                         .px(px(12.)).py(px(6.))
                         .child(div().flex_1().text_size(rems(1.)).text_color(rgb(c.text_default)).child(item.description.clone()))
-                        .child(div().w(px(70.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child(format!("{:.2}", item.quantity)))
-                        .child(div().w(px(90.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child(format!("${:.2}", item.unit_price_usd)))
-                        .child(div().w(px(90.)).text_size(rems(0.923)).text_color(rgb(c.status_green)).child(format!("${:.2}", item.total_usd)))
+                        .child(div().w(px(50.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child(format!("{:.2}", item.quantity)))
+                        .child(div().w(px(42.)).text_size(rems(0.846)).text_color(rgb(c.text_muted)).child(item.unit.clone().unwrap_or_default()))
+                        .child(div().w(px(82.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child(format!("${:.2}", item.unit_price_usd)))
+                        .child(div().w(px(46.)).text_size(rems(0.846)).text_color(rgb(c.text_muted))
+                            .child(if item.discount_percent > 0.0 { format!("{:.1}%", item.discount_percent) } else { String::new() }))
+                        .child(div().w(px(82.)).text_size(rems(0.923)).text_color(rgb(c.status_green)).child(format!("${:.2}", item.total_usd)))
                         .child(
                             div()
                                 .id(format!("del-item-{item_id}"))
@@ -148,19 +168,63 @@ impl Render for QuotationDetail {
             root = root.child(item_rows);
         }
 
-        // Total footer
-        root.child(
-            div()
-                .flex().flex_row().justify_end()
-                .px(px(12.)).py(px(8.))
-                .bg(rgb(c.surface_default))
-                .child(
-                    div().text_size(rems(1.)).text_color(rgb(c.status_green))
-                        .child(format!("Total: ${total:.2}"))
-                )
-        )
-        .into_any_element()
+        // ── Footer: full financial breakdown ────────────────────────────────
+        root.child(totals_footer(&extras, &items, &c))
+            .into_any_element()
     }
+}
+
+fn totals_footer(
+    extras: &QuotationExtras,
+    items:  &[vassl_core::QuotationItem],
+    c:      &ThemeColors,
+) -> impl gpui::IntoElement {
+    let subtotal_usd: f64 = items.iter().map(|i| i.total_usd).sum();
+    let rate              = extras.exchange_rate_jmd;
+    let disc_pct          = extras.discount_percent;
+    let gct_pct           = extras.gct_percent;
+
+    let discount_usd  = (subtotal_usd * disc_pct / 100.0 * 100.0).round() / 100.0;
+    let net_usd       = subtotal_usd - discount_usd;
+    let gct_usd       = (net_usd * gct_pct / 100.0 * 100.0).round() / 100.0;
+    let grand_usd     = net_usd + gct_usd;
+    let grand_jmd     = grand_usd * rate;
+    let deposit_jmd   = grand_jmd * 0.5;
+    let balance_jmd   = grand_jmd - deposit_jmd;
+
+    let validity = if extras.validity_days > 0 {
+        format!("Valid {} days from quotation date.", extras.validity_days)
+    } else {
+        String::new()
+    };
+
+    div()
+        .flex().flex_col()
+        .px(px(12.)).py(px(10.))
+        .bg(rgb(c.surface_default))
+        .gap(px(3.))
+        // sub-total
+        .child(total_row("Sub-total",                 &format!("US$ {subtotal_usd:.2}"),    c.text_muted, c))
+        .when(disc_pct > 0.0, |d| d
+            .child(total_row(&format!("Less discount ({disc_pct:.1}%)"), &format!("- US$ {discount_usd:.2}"), c.status_amber, c))
+            .child(total_row("Net",                   &format!("US$ {net_usd:.2}"),         c.text_default, c))
+        )
+        .child(total_row(&format!("GCT ({gct_pct:.1}%)"), &format!("US$ {gct_usd:.2}"),    c.text_muted, c))
+        .child(div().h(px(1.)).bg(rgb(c.surface_active)).my(px(2.)))
+        .child(total_row("Grand Total",               &format!("US$ {grand_usd:.2}"),       c.status_green, c))
+        .child(total_row(&format!("Grand Total (J$ @ {rate:.0})"), &format!("J$ {}", fmt_jmd(grand_jmd)), c.status_green, c))
+        .child(div().h(px(1.)).bg(rgb(c.surface_default)).my(px(2.)))
+        .child(total_row("Deposit on order (50%)",    &format!("J$ {}", fmt_jmd(deposit_jmd)), c.text_muted, c))
+        .child(total_row("Balance on completion",     &format!("J$ {}", fmt_jmd(balance_jmd)), c.text_muted, c))
+        .when(!validity.is_empty(), |d| d
+            .child(div().mt(px(4.)).text_size(rems(0.769)).text_color(rgb(c.text_muted)).child(validity))
+        )
+}
+
+fn total_row(label: &str, value: &str, value_color: u32, c: &ThemeColors) -> impl gpui::IntoElement {
+    div().flex().flex_row().justify_between()
+        .child(div().text_size(rems(0.923)).text_color(rgb(c.text_muted)).child(label.to_string()))
+        .child(div().text_size(rems(0.923)).text_color(rgb(value_color)).child(value.to_string()))
 }
 
 #[cfg(test)]
@@ -181,5 +245,34 @@ mod tests {
         assert_eq!(transition_label(&QuotationStatus::Sent),     "Mark as Sent");
         assert_eq!(transition_label(&QuotationStatus::Accepted), "Mark as Accepted");
         assert_eq!(transition_label(&QuotationStatus::Rejected), "Mark as Rejected");
+    }
+
+    #[test]
+    fn totals_footer_computes_correctly() {
+        use vassl_core::QuotationItem;
+        let extras = QuotationExtras {
+            exchange_rate_jmd: 156.0,
+            discount_percent:  10.0,
+            gct_percent:       15.0,
+            validity_days:     30,
+            quotation_date:    None,
+        };
+        let items = vec![QuotationItem {
+            id: 1, quotation_id: 1, product_id: None,
+            description: "Test".into(), quantity: 2.0, unit: None,
+            unit_price_usd: 100.0, discount_percent: 0.0, total_usd: 200.0,
+        }];
+        // sub=200, disc=20, net=180, gct=27, grand_usd=207, grand_jmd=32292
+        let subtotal: f64  = items.iter().map(|i| i.total_usd).sum();
+        let discount        = (subtotal * extras.discount_percent / 100.0 * 100.0).round() / 100.0;
+        let net             = subtotal - discount;
+        let gct             = (net * extras.gct_percent / 100.0 * 100.0).round() / 100.0;
+        let grand_usd       = net + gct;
+        assert!((subtotal - 200.0).abs() < 1e-9);
+        assert!((discount - 20.0).abs() < 1e-9);
+        assert!((net - 180.0).abs() < 1e-9);
+        assert!((gct - 27.0).abs() < 1e-9);
+        assert!((grand_usd - 207.0).abs() < 1e-9);
+        assert!((grand_usd * extras.exchange_rate_jmd - 32292.0).abs() < 1e-9);
     }
 }

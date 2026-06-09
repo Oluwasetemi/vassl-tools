@@ -36,6 +36,24 @@ impl TextInput {
         Self::with_placeholder("", cx)
     }
 
+    pub fn with_text(text: impl Into<SharedString>, cx: &mut Context<Self>) -> Self {
+        let text: SharedString = text.into();
+        let len = text.len();
+        Self {
+            focus_handle:         cx.focus_handle(),
+            content:              text,
+            placeholder:          "".into(),
+            suppress_placeholder: false,
+            scroll_x:             px(0.),
+            selected_range:       len..len,
+            selection_reversed:   false,
+            marked_range:         None,
+            last_layout:          None,
+            last_bounds:          None,
+            is_selecting:         false,
+        }
+    }
+
     pub fn with_placeholder(placeholder: impl Into<SharedString>, cx: &mut Context<Self>) -> Self {
         Self {
             focus_handle:         cx.focus_handle(),

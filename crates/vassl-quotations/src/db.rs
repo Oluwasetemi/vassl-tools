@@ -1,6 +1,6 @@
 use anyhow::Context as _;
 use sqlez::domain::Domain;
-use vassl_core::{Project, ProjectStatus, QuotationItem, QuotationStatus};
+use vassl_core::{Project, ProjectStatus, QuotationExtras, QuotationItem, QuotationStatus};
 use vassl_db::SharedDomain;
 use vassl_inventory::db::InventoryDb;
 
@@ -9,9 +9,7 @@ pub struct QuotationDb(pub sqlez::thread_safe_connection::ThreadSafeConnection);
 impl Domain for QuotationDb {
     const NAME: &'static str = "quotations";
     const MIGRATIONS: &'static [&'static str] = &[
-        // projects is owned by SharedDomain; we create it here so that the
-        // sqlez FK-cleanup pass can resolve the REFERENCES projects(id)
-        // constraint on quotations.
+        // ── v1 base tables ───────────────────────────────────────────────────
         "CREATE TABLE IF NOT EXISTS projects (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             name        TEXT NOT NULL,
@@ -20,7 +18,6 @@ impl Domain for QuotationDb {
             status      TEXT NOT NULL DEFAULT 'active',
             created_at  TEXT NOT NULL
         )",
-        // products is owned by InventoryDb; stub here for FK-cleanup on quotation_items.
         "CREATE TABLE IF NOT EXISTS products (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
             sku             TEXT UNIQUE NOT NULL,
@@ -50,6 +47,19 @@ impl Domain for QuotationDb {
             unit_price_usd REAL NOT NULL,
             total_usd      REAL NOT NULL
         )",
+        // ── v2 project client details ────────────────────────────────────────
+        "ALTER TABLE projects ADD COLUMN client_address TEXT",
+        "ALTER TABLE projects ADD COLUMN client_attn    TEXT",
+        "ALTER TABLE projects ADD COLUMN client_tel     TEXT",
+        // ── v3 quotation financial fields ────────────────────────────────────
+        "ALTER TABLE quotations ADD COLUMN quotation_date    TEXT",
+        "ALTER TABLE quotations ADD COLUMN exchange_rate_jmd REAL NOT NULL DEFAULT 156.0",
+        "ALTER TABLE quotations ADD COLUMN discount_percent  REAL NOT NULL DEFAULT 0.0",
+        "ALTER TABLE quotations ADD COLUMN gct_percent       REAL NOT NULL DEFAULT 15.0",
+        "ALTER TABLE quotations ADD COLUMN validity_days     INTEGER NOT NULL DEFAULT 30",
+        // ── v4 line item unit and discount ───────────────────────────────────
+        "ALTER TABLE quotation_items ADD COLUMN unit             TEXT",
+        "ALTER TABLE quotation_items ADD COLUMN discount_percent REAL NOT NULL DEFAULT 0.0",
     ];
     fn should_allow_migration_change(_: usize, _: &str, _: &str) -> bool { false }
 }
@@ -104,7 +114,6 @@ impl QuotationDb {
     }
 
     pub fn list_quotations_with_project(&self) -> anyhow::Result<Vec<QuotationRow>> {
-        // sqlez supports up to 10-tuples; select exactly 9 columns
         type Row = (i64, String, String, String, Option<String>, i64, String, String, f64);
         self.select::<Row>(
             "SELECT q.id, q.reference_number, q.status, q.created_at, q.notes,
@@ -137,9 +146,35 @@ impl QuotationDb {
         })
     }
 
+    pub fn get_quotation_extras(&self, quotation_id: i64) -> anyhow::Result<QuotationExtras> {
+        type Row = (f64, f64, f64, i64, Option<String>);
+        let row = self
+            .select_bound::<i64, Row>(
+                "SELECT exchange_rate_jmd, discount_percent, gct_percent, validity_days, quotation_date
+                 FROM quotations WHERE id = ?1",
+            )
+            .context("prepare get_quotation_extras")?
+            (quotation_id)
+            .context("execute get_quotation_extras")?
+            .into_iter().next();
+
+        Ok(match row {
+            Some((rate, disc, gct, days, date)) => QuotationExtras {
+                exchange_rate_jmd: rate,
+                discount_percent:  disc,
+                gct_percent:       gct,
+                validity_days:     days,
+                quotation_date:    date,
+            },
+            None => QuotationExtras::default(),
+        })
+    }
+
     pub fn list_items_for_quotation(&self, quotation_id: i64) -> anyhow::Result<Vec<QuotationItem>> {
-        self.select_bound::<i64, (i64, i64, Option<i64>, String, f64, f64, f64)>(
-            "SELECT id, quotation_id, product_id, description, quantity, unit_price_usd, total_usd
+        type Row = (i64, i64, Option<i64>, String, f64, Option<String>, f64, f64, f64);
+        self.select_bound::<i64, Row>(
+            "SELECT id, quotation_id, product_id, description, quantity,
+                    unit, unit_price_usd, discount_percent, total_usd
              FROM quotation_items WHERE quotation_id = ?1
              ORDER BY id ASC",
         )
@@ -147,27 +182,36 @@ impl QuotationDb {
         (quotation_id)
         .context("execute list_items_for_quotation")
         .map(|rows| {
-            rows.into_iter().map(|(id, qid, product_id, description, quantity, unit_price_usd, total_usd)| {
-                QuotationItem { id, quotation_id: qid, product_id, description, quantity, unit_price_usd, total_usd }
+            rows.into_iter().map(|(id, qid, product_id, description, quantity,
+                                   unit, unit_price_usd, discount_percent, total_usd)| {
+                QuotationItem {
+                    id, quotation_id: qid, product_id,
+                    description, quantity, unit,
+                    unit_price_usd, discount_percent, total_usd,
+                }
             }).collect()
         })
     }
 
     pub fn list_projects(&self) -> anyhow::Result<Vec<Project>> {
-        self.select::<(i64, String, String, Option<String>, String, String)>(
-            "SELECT id, name, client_name, description, status, created_at
+        type Row = (i64, String, String, Option<String>, Option<String>, Option<String>, Option<String>, String, String);
+        self.select::<Row>(
+            "SELECT id, name, client_name, client_address, client_attn, client_tel,
+                    description, status, created_at
              FROM projects ORDER BY name",
         )
         .context("prepare list_projects")?()
         .context("execute list_projects")
         .map(|rows| {
-            rows.into_iter().map(|(id, name, client_name, description, status_str, created_at)| {
+            rows.into_iter().map(|(id, name, client_name, client_address, client_attn,
+                                   client_tel, description, status_str, created_at)| {
                 let status = match status_str.as_str() {
                     "completed" => ProjectStatus::Completed,
                     "archived"  => ProjectStatus::Archived,
                     _           => ProjectStatus::Active,
                 };
-                Project { id, name, client_name, description, status, created_at }
+                Project { id, name, client_name, client_address, client_attn, client_tel,
+                          description, status, created_at }
             }).collect()
         })
     }
@@ -200,48 +244,22 @@ impl QuotationDb {
         .await
     }
 
-    pub async fn insert_quotation_with_notes(
-        &self,
-        project_id:       i64,
-        reference_number: impl Into<String>,
-        created_by:       impl Into<String>,
-        notes:            Option<&str>,
-    ) -> anyhow::Result<i64> {
-        let ref_num    = reference_number.into();
-        let created_by = created_by.into();
-        let notes      = notes.map(String::from);
-        let now        = chrono::Utc::now().to_rfc3339();
-
-        self.write(move |conn| {
-            conn.exec_bound::<(i64, String, Option<String>, String, String, String)>(
-                "INSERT INTO quotations
-                 (project_id, reference_number, notes, created_by, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            )
-            .context("prepare insert_quotation_with_notes")?
-            ((project_id, ref_num, notes, created_by, now.clone(), now))
-            .context("execute insert_quotation_with_notes")?;
-
-            conn.select_row::<i64>("SELECT last_insert_rowid()")
-                .context("prepare rowid")?()
-                .context("execute rowid")?
-                .context("rowid was None")
-        })
-        .await
-    }
-
-    /// Like `insert_quotation_with_notes` but generates the reference number atomically
-    /// inside the write lock, eliminating the TOCTOU race between COUNT and INSERT.
     pub async fn insert_quotation_atomic(
         &self,
-        project_id: i64,
-        created_by: impl Into<String>,
-        notes:      Option<&str>,
+        project_id:        i64,
+        created_by:        impl Into<String>,
+        notes:             Option<&str>,
+        exchange_rate_jmd: f64,
+        discount_percent:  f64,
+        gct_percent:       f64,
+        validity_days:     i64,
+        quotation_date:    Option<&str>,
     ) -> anyhow::Result<i64> {
-        let created_by = created_by.into();
-        let notes      = notes.map(String::from);
-        let now        = chrono::Utc::now().to_rfc3339();
-        let year       = chrono::Utc::now().format("%Y").to_string();
+        let created_by     = created_by.into();
+        let notes          = notes.map(String::from);
+        let quotation_date = quotation_date.map(String::from);
+        let now            = chrono::Utc::now().to_rfc3339();
+        let year           = chrono::Utc::now().format("%Y").to_string();
 
         self.write(move |conn| {
             let pattern = format!("VASSL-{year}-%");
@@ -264,49 +282,74 @@ impl QuotationDb {
             ((project_id, ref_num, notes, created_by, now.clone(), now))
             .context("execute insert_quotation_atomic")?;
 
-            conn.select_row::<i64>("SELECT last_insert_rowid()")
+            let id: i64 = conn.select_row::<i64>("SELECT last_insert_rowid()")
                 .context("prepare rowid")?()
                 .context("execute rowid")?
-                .context("rowid was None")
+                .context("rowid was None")?;
+
+            // Set financial fields separately to stay within sqlez tuple limits.
+            conn.exec_bound::<(f64, f64, f64, i64, Option<String>, i64)>(
+                "UPDATE quotations
+                 SET exchange_rate_jmd = ?1,
+                     discount_percent  = ?2,
+                     gct_percent       = ?3,
+                     validity_days     = ?4,
+                     quotation_date    = ?5
+                 WHERE id = ?6",
+            )
+            .context("prepare update_extras")?
+            ((exchange_rate_jmd, discount_percent, gct_percent, validity_days, quotation_date, id))
+            .context("execute update_extras")?;
+
+            Ok(id)
         })
         .await
     }
 
-    pub async fn insert_project(&self, name: String, client_name: String) -> anyhow::Result<i64> {
+    pub async fn insert_project(
+        &self,
+        name:           String,
+        client_name:    String,
+        client_address: Option<String>,
+        client_attn:    Option<String>,
+        client_tel:     Option<String>,
+    ) -> anyhow::Result<i64> {
         let now = chrono::Utc::now().to_rfc3339();
         self.write(move |conn| {
-            conn.exec_bound::<(String, String, String)>(
-                "INSERT INTO projects (name, client_name, status, created_at) VALUES (?1, ?2, 'active', ?3)",
+            conn.exec_bound::<(String, String, Option<String>, Option<String>, Option<String>, String)>(
+                "INSERT INTO projects (name, client_name, client_address, client_attn, client_tel, status, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, 'active', ?6)",
             )
             .context("prepare insert_project")?
-            ((name, client_name, now))
+            ((name, client_name, client_address, client_attn, client_tel, now))
             .context("execute insert_project")?;
-            conn.select_bound::<(), i64>("SELECT last_insert_rowid()")
-                .context("prepare last_insert_rowid")?
-                (())
+            conn.select_row::<i64>("SELECT last_insert_rowid()")
+                .context("prepare last_insert_rowid")?()
                 .context("execute last_insert_rowid")?
-                .into_iter().next().ok_or_else(|| anyhow::anyhow!("no rowid"))
+                .context("rowid was None")
         })
         .await
     }
 
     pub async fn insert_item(
         &self,
-        quotation_id:   i64,
-        product_id:     Option<i64>,
-        description:    String,
-        quantity:       f64,
-        unit_price_usd: f64,
-        total_usd:      f64,
+        quotation_id:     i64,
+        product_id:       Option<i64>,
+        description:      String,
+        quantity:         f64,
+        unit:             Option<String>,
+        unit_price_usd:   f64,
+        discount_percent: f64,
+        total_usd:        f64,
     ) -> anyhow::Result<i64> {
         self.write(move |conn| {
-            conn.exec_bound::<(i64, Option<i64>, String, f64, f64, f64)>(
+            conn.exec_bound::<(i64, Option<i64>, String, f64, Option<String>, f64, f64, f64)>(
                 "INSERT INTO quotation_items
-                 (quotation_id, product_id, description, quantity, unit_price_usd, total_usd)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                 (quotation_id, product_id, description, quantity, unit, unit_price_usd, discount_percent, total_usd)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             )
             .context("prepare insert_item")?
-            ((quotation_id, product_id, description, quantity, unit_price_usd, total_usd))
+            ((quotation_id, product_id, description, quantity, unit, unit_price_usd, discount_percent, total_usd))
             .context("execute insert_item")?;
             conn.select_row::<i64>("SELECT last_insert_rowid()")
                 .context("prepare rowid")?()
@@ -343,7 +386,6 @@ impl QuotationDb {
             ((now.clone(), id))
             .context("execute accept_quotation update")?;
 
-            // Fetch all line items with products + the quotation's project_id
             type ItemRow = (i64, f64, Option<i64>);
             let items = conn
                 .select_bound::<i64, ItemRow>(
@@ -356,7 +398,6 @@ impl QuotationDb {
                 (id)
                 .context("execute accept items select")?;
 
-            // Deduct stock for each product item
             for (product_id, quantity, project_id) in items {
                 conn.exec_bound::<(i64, f64, String, Option<i64>)>(
                     "INSERT INTO stock_entries
@@ -378,7 +419,6 @@ impl QuotationDb {
     pub async fn delete_item(&self, item_id: i64) -> anyhow::Result<()> {
         let now = chrono::Utc::now().to_rfc3339();
         self.write(move |conn| {
-            // Read the item before deleting
             type ItemInfo = (Option<i64>, f64, i64);
             let item = conn
                 .select_bound::<i64, ItemInfo>(
@@ -393,7 +433,6 @@ impl QuotationDb {
 
             let (product_id, quantity, quotation_id) = item;
 
-            // Check whether the quotation is accepted
             let status_str = conn
                 .select_bound::<i64, String>(
                     "SELECT status FROM quotations WHERE id = ?1",
@@ -409,7 +448,6 @@ impl QuotationDb {
                 (item_id)
                 .context("execute delete_item")?;
 
-            // Reverse the stock deduction only if the quote was accepted and item had a product
             if status_str == "accepted" {
                 if let Some(pid) = product_id {
                     let project_id: Option<i64> = conn
@@ -449,12 +487,15 @@ mod tests {
         db.write(move |conn| {
             conn.exec(
                 "CREATE TABLE IF NOT EXISTS projects (
-                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name        TEXT NOT NULL,
-                    client_name TEXT NOT NULL,
-                    description TEXT,
-                    status      TEXT NOT NULL DEFAULT 'active',
-                    created_at  TEXT NOT NULL
+                    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name           TEXT NOT NULL,
+                    client_name    TEXT NOT NULL,
+                    client_address TEXT,
+                    client_attn    TEXT,
+                    client_tel     TEXT,
+                    description    TEXT,
+                    status         TEXT NOT NULL DEFAULT 'active',
+                    created_at     TEXT NOT NULL
                 )",
             ).context("create projects table")?()?;
             conn.exec_bound::<(String, String)>(

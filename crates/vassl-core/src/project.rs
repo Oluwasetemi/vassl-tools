@@ -2,12 +2,15 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Project {
-    pub id: i64,
-    pub name: String,
-    pub client_name: String,
-    pub description: Option<String>,
-    pub status: ProjectStatus,
-    pub created_at: String,
+    pub id:             i64,
+    pub name:           String,
+    pub client_name:    String,
+    pub client_address: Option<String>,
+    pub client_attn:    Option<String>,
+    pub client_tel:     Option<String>,
+    pub description:    Option<String>,
+    pub status:         ProjectStatus,
+    pub created_at:     String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -20,7 +23,10 @@ pub enum ProjectStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewProject {
-    pub name: String,
-    pub client_name: String,
-    pub description: Option<String>,
+    pub name:           String,
+    pub client_name:    String,
+    pub client_address: Option<String>,
+    pub client_attn:    Option<String>,
+    pub client_tel:     Option<String>,
+    pub description:    Option<String>,
 }

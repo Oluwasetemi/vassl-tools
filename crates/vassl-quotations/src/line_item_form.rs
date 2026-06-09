@@ -20,7 +20,9 @@ pub struct LineItemForm {
     selected_product: Option<i64>,
     pub description:  Entity<TextInput>,
     pub quantity:     Entity<TextInput>,
+    unit:             Entity<TextInput>,
     unit_price:       Entity<TextInput>,
+    discount_percent: Entity<TextInput>,
     cancel_focus:     FocusHandle,
     save_focus:       FocusHandle,
     error:            Option<String>,
@@ -28,7 +30,7 @@ pub struct LineItemForm {
 }
 
 
-pub fn validate_line_item(description: &str, quantity: &str, unit_price: &str) -> Result<(String, f64, f64, f64), String> {
+pub fn validate_line_item(description: &str, quantity: &str, unit_price: &str, discount_pct: &str) -> Result<(String, f64, f64, f64, f64), String> {
     let desc = description.trim();
     if desc.is_empty() {
         return Err("Description cannot be empty".to_string());
@@ -46,9 +48,10 @@ pub fn validate_line_item(description: &str, quantity: &str, unit_price: &str) -
         return Err("Unit price must be ≥ 0".to_string());
     }
 
+    let disc: f64 = discount_pct.trim().parse::<f64>().unwrap_or(0.0).clamp(0.0, 100.0);
     let total = (qty * price * 100.0).round() / 100.0;
 
-    Ok((desc.to_string(), qty, price, total))
+    Ok((desc.to_string(), qty, price, disc, total))
 }
 
 impl LineItemForm {
@@ -63,13 +66,15 @@ impl LineItemForm {
             quotation_id,
             products,
             selected_product: None,
-            description:  cx.new(|cx| TextInput::with_placeholder("e.g. Paint supplies", cx)),
-            quantity:     cx.new(|cx| TextInput::with_placeholder("e.g. 5", cx)),
-            unit_price:   cx.new(|cx| TextInput::with_placeholder("e.g. 120.00", cx)),
-            cancel_focus: cx.focus_handle(),
-            save_focus:   cx.focus_handle(),
-            error:        None,
-            focus_handle: cx.focus_handle(),
+            description:      cx.new(|cx| TextInput::with_placeholder("e.g. Paint supplies", cx)),
+            quantity:         cx.new(|cx| TextInput::with_placeholder("e.g. 5", cx)),
+            unit:             cx.new(|cx| TextInput::with_placeholder("ea / lot / set…", cx)),
+            unit_price:       cx.new(|cx| TextInput::with_placeholder("e.g. 120.00", cx)),
+            discount_percent: cx.new(|cx| TextInput::with_text("0.0", cx)),
+            cancel_focus:     cx.focus_handle(),
+            save_focus:       cx.focus_handle(),
+            error:            None,
+            focus_handle:     cx.focus_handle(),
         }
     }
 
@@ -80,18 +85,21 @@ impl LineItemForm {
     }
 
     fn submit(&mut self, cx: &mut Context<Self>) {
-        let desc = self.description.read(cx).text().to_string();
+        let desc  = self.description.read(cx).text().to_string();
         let qty_s = self.quantity.read(cx).text().to_string();
         let up_s  = self.unit_price.read(cx).text().to_string();
-        match validate_line_item(&desc, &qty_s, &up_s) {
+        let disc_s = self.discount_percent.read(cx).text().to_string();
+        let unit_s = self.unit.read(cx).text().trim().to_string();
+        let unit   = if unit_s.is_empty() { None } else { Some(unit_s) };
+        match validate_line_item(&desc, &qty_s, &up_s, &disc_s) {
             Err(msg) => { self.error = Some(msg); cx.notify(); }
-            Ok((description, quantity, unit_price, total)) => {
+            Ok((description, quantity, unit_price, disc, total)) => {
                 let qid = self.quotation_id;
                 let pid = self.selected_product;
                 let db  = QuotationDb::global(&**cx);
                 let store = self.store.clone();
                 cx.spawn(async move |this, cx| {
-                    let result = db.insert_item(qid, pid, description, quantity, unit_price, total).await;
+                    let result = db.insert_item(qid, pid, description, quantity, unit, unit_price, disc, total).await;
                     let _ = this.update(cx, |form, cx| {
                         match result {
                             Err(e) => {
@@ -121,7 +129,9 @@ impl Render for LineItemForm {
         let c = cx.global::<ThemeHandle>().0.clone();
         let desc_focused = self.description.read(cx).focus_handle.is_focused(window);
         let qty_focused  = self.quantity.read(cx).focus_handle.is_focused(window);
+        let unit_focused = self.unit.read(cx).focus_handle.is_focused(window);
         let up_focused   = self.unit_price.read(cx).focus_handle.is_focused(window);
+        let disc_focused = self.discount_percent.read(cx).focus_handle.is_focused(window);
         let cancel_f     = self.cancel_focus.is_focused(window);
         let save_f       = self.save_focus.is_focused(window);
         let total        = self.computed_total(cx);
@@ -138,7 +148,9 @@ impl Render for LineItemForm {
                 let handles = [
                     this.description.read(cx).focus_handle.clone(),
                     this.quantity.read(cx).focus_handle.clone(),
+                    this.unit.read(cx).focus_handle.clone(),
                     this.unit_price.read(cx).focus_handle.clone(),
+                    this.discount_percent.read(cx).focus_handle.clone(),
                     this.cancel_focus.clone(),
                     this.save_focus.clone(),
                 ];
@@ -150,7 +162,9 @@ impl Render for LineItemForm {
                 let handles = [
                     this.description.read(cx).focus_handle.clone(),
                     this.quantity.read(cx).focus_handle.clone(),
+                    this.unit.read(cx).focus_handle.clone(),
                     this.unit_price.read(cx).focus_handle.clone(),
+                    this.discount_percent.read(cx).focus_handle.clone(),
                     this.cancel_focus.clone(),
                     this.save_focus.clone(),
                 ];
@@ -232,8 +246,20 @@ impl Render for LineItemForm {
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
+                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Unit"))
+                                    .child(div().flex_1().child(text_field("", self.unit.clone(), unit_focused, cx)))
+                            )
+                            .child(div().h(px(1.)).bg(rgb(c.surface_default)))
+                            .child(
+                                div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Unit Price (USD)"))
                                     .child(div().flex_1().child(text_field("", self.unit_price.clone(), up_focused, cx)))
+                            )
+                            .child(div().h(px(1.)).bg(rgb(c.surface_default)))
+                            .child(
+                                div().flex().flex_row().items_center().py(px(10.))
+                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Discount %"))
+                                    .child(div().flex_1().child(text_field("", self.discount_percent.clone(), disc_focused, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
@@ -287,15 +313,16 @@ impl Render for LineItemForm {
 mod tests {
     use super::validate_line_item;
 
-    #[test] fn rejects_empty_description() { assert!(validate_line_item("", "1", "10.0").is_err()); }
-    #[test] fn rejects_zero_quantity()     { assert!(validate_line_item("Desc", "0", "10.0").is_err()); }
-    #[test] fn rejects_negative_quantity() { assert!(validate_line_item("Desc", "-1", "10.0").is_err()); }
-    #[test] fn rejects_negative_price()    { assert!(validate_line_item("Desc", "2", "-5").is_err()); }
-    #[test] fn accepts_zero_price()        { assert!(validate_line_item("Desc", "3", "0").is_ok()); }
+    #[test] fn rejects_empty_description() { assert!(validate_line_item("", "1", "10.0", "0").is_err()); }
+    #[test] fn rejects_zero_quantity()     { assert!(validate_line_item("Desc", "0", "10.0", "0").is_err()); }
+    #[test] fn rejects_negative_quantity() { assert!(validate_line_item("Desc", "-1", "10.0", "0").is_err()); }
+    #[test] fn rejects_negative_price()    { assert!(validate_line_item("Desc", "2", "-5", "0").is_err()); }
+    #[test] fn accepts_zero_price()        { assert!(validate_line_item("Desc", "3", "0", "0").is_ok()); }
     #[test] fn computes_total_correctly()  {
-        let (_, qty, up, total) = validate_line_item("Item", "4", "25.0").unwrap();
+        let (_, qty, up, disc, total) = validate_line_item("Item", "4", "25.0", "10").unwrap();
         assert_eq!(qty, 4.0);
         assert_eq!(up, 25.0);
+        assert_eq!(disc, 10.0);
         assert!((total - 100.0).abs() < 1e-9);
     }
 }
