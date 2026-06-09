@@ -11,10 +11,10 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  # ─── macOS ──────────────────────────────────────────────────────────────────
+  # ─── macOS (arm64 + x86_64) ─────────────────────────────────────────────────
   build-macos:
     name: macOS (${{ matrix.target }})
-    runs-on: macos-14   # Apple Silicon runner
+    runs-on: macos-14   # Apple Silicon runner — can cross-compile for x86_64
     strategy:
       matrix:
         include:
@@ -50,30 +50,41 @@ jobs:
       - name: Build release binary
         run: cargo build --release --target ${{ matrix.target }} -p vassl-app
 
-      - name: Package .app bundle (arm64 only)
-        if: matrix.arch == 'arm64'
+      - name: Bundle .app, create ZIP and DMG
         run: |
           cargo install cargo-bundle --locked
           cargo bundle --release --target ${{ matrix.target }} -p vassl-app
 
-          cd target/${{ matrix.target }}/release/bundle/osx
-          zip -r VASSL-macos-${{ matrix.arch }}.zip VASSL.app
-          mv VASSL-macos-${{ matrix.arch }}.zip $GITHUB_WORKSPACE/
+          BUNDLE="target/${{ matrix.target }}/release/bundle/osx/VASSL.app"
+          ARCH="${{ matrix.arch }}"
 
-      - name: Package bare binary (x86_64)
-        if: matrix.arch == 'x86_64'
-        run: |
-          zip -j VASSL-macos-${{ matrix.arch }}.zip \
-              target/${{ matrix.target }}/release/vassl
+          # ── ZIP (used by the in-app auto-updater) ──────────────────────────
+          cd "target/${{ matrix.target }}/release/bundle/osx"
+          zip -r "$GITHUB_WORKSPACE/VASSL-macos-${ARCH}.zip" VASSL.app
+          cd "$GITHUB_WORKSPACE"
 
-      - name: Upload artifact
+          # ── DMG (for first-time / manual installation) ─────────────────────
+          mkdir -p dmg-staging
+          cp -r "$BUNDLE" dmg-staging/VASSL.app
+          ln -s /Applications dmg-staging/Applications
+          hdiutil create \
+            -volname "VASSL" \
+            -srcfolder dmg-staging \
+            -ov \
+            -format UDZO \
+            "VASSL-macos-${ARCH}.dmg"
+          rm -rf dmg-staging
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: VASSL-macos-${{ matrix.arch }}
-          path: VASSL-macos-${{ matrix.arch }}.zip
+          path: |
+            VASSL-macos-${{ matrix.arch }}.zip
+            VASSL-macos-${{ matrix.arch }}.dmg
           retention-days: 30
 
-  # ─── Universal macOS binary (lipo arm64 + x86_64) ───────────────────────────
+  # ─── Universal macOS .app (lipo arm64 + x86_64) ─────────────────────────────
   macos-universal:
     name: macOS universal binary
     needs: build-macos
@@ -90,25 +101,43 @@ jobs:
           name: VASSL-macos-x86_64
           path: x86_64
 
-      - name: Create universal binary
+      - name: Create universal .app, ZIP and DMG
         run: |
-          unzip arm64/VASSL-macos-arm64.zip -d arm64-out
+          # Extract both .app bundles
+          unzip arm64/VASSL-macos-arm64.zip   -d arm64-out
           unzip x86_64/VASSL-macos-x86_64.zip -d x86_64-out
-          mkdir -p universal
+
+          # Start from the arm64 bundle (has correct Info.plist / resources)
+          cp -r arm64-out/VASSL.app universal-app
+
+          # Merge the two binaries into a universal binary
           lipo -create \
-            arm64-out/vassl \
-            x86_64-out/vassl \
-            -output universal/vassl || \
-          lipo -create \
-            "arm64-out/VASSL.app/Contents/MacOS/vassl" \
-            x86_64-out/vassl \
-            -output universal/vassl
-          zip -j VASSL-macos-universal.zip universal/vassl
+            arm64-out/VASSL.app/Contents/MacOS/vassl \
+            x86_64-out/VASSL.app/Contents/MacOS/vassl \
+            -output universal-app/Contents/MacOS/vassl
+
+          # ── ZIP (auto-updater) — must contain VASSL.app at root ───────────
+          mv universal-app VASSL.app
+          zip -r VASSL-macos-universal.zip VASSL.app
+          mv VASSL.app universal-app
+
+          # ── DMG (manual install) ────────────────────────────────────────────
+          mkdir -p dmg-staging
+          cp -r universal-app dmg-staging/VASSL.app
+          ln -s /Applications dmg-staging/Applications
+          hdiutil create \
+            -volname "VASSL" \
+            -srcfolder dmg-staging \
+            -ov \
+            -format UDZO \
+            VASSL-macos-universal.dmg
 
       - uses: actions/upload-artifact@v4
         with:
           name: VASSL-macos-universal
-          path: VASSL-macos-universal.zip
+          path: |
+            VASSL-macos-universal.zip
+            VASSL-macos-universal.dmg
           retention-days: 30
 
   # ─── Windows ────────────────────────────────────────────────────────────────
@@ -180,6 +209,9 @@ jobs:
           generate_release_notes: true
           files: |
             artifacts/VASSL-macos-arm64/VASSL-macos-arm64.zip
+            artifacts/VASSL-macos-arm64/VASSL-macos-arm64.dmg
             artifacts/VASSL-macos-x86_64/VASSL-macos-x86_64.zip
+            artifacts/VASSL-macos-x86_64/VASSL-macos-x86_64.dmg
             artifacts/VASSL-macos-universal/VASSL-macos-universal.zip
+            artifacts/VASSL-macos-universal/VASSL-macos-universal.dmg
             artifacts/VASSL-windows-x86_64/VASSL-windows-x86_64.zip
