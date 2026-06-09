@@ -26,4 +26,6 @@ actions!(vassl, [
     // Auto-update
     CheckForUpdates,
     InstallUpdate,
+    // Help
+    OpenDocumentation,
 ]);

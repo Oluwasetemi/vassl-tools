@@ -1,6 +1,9 @@
 // Suppress the console window on Windows in release builds.
 // Debug builds keep it so that tracing output is visible during development.
 #![cfg_attr(all(target_os = "windows", not(debug_assertions)), windows_subsystem = "windows")]
+// objc 0.2.x uses `#[cfg(cargo-clippy)]` (old Clippy detection hook); rustc 1.80+
+// warns about unknown cfg names when the macros expand in this crate.
+#![allow(unexpected_cfgs)]
 
 mod about_dialog;
 mod actions;
@@ -8,6 +11,7 @@ mod assets;
 mod auto_update;
 mod app;
 mod app_menus;
+mod docs_server;
 mod audit_log;
 mod command_palette;
 mod first_run;
@@ -20,7 +24,7 @@ mod settings_panel;
 mod sidebar;
 mod status_bar;
 
-use actions::{CheckForUpdates, ConfirmSelection, DecreaseFontSize, EscapeModal, FocusSearch, Hide, HideOthers, IncreaseFontSize, InstallUpdate, Minimize, OpenAuditLog, OpenGlobalSearch, OpenInventory, OpenPriceBook, OpenQuotations, OpenSuppliers, OpenSettings, Quit, SelectNext, SelectPrev, ShowAll};
+use actions::{CheckForUpdates, ConfirmSelection, DecreaseFontSize, EscapeModal, FocusSearch, Hide, HideOthers, IncreaseFontSize, InstallUpdate, Minimize, OpenAuditLog, OpenDocumentation, OpenGlobalSearch, OpenInventory, OpenPriceBook, OpenQuotations, OpenSuppliers, OpenSettings, Quit, SelectNext, SelectPrev, ShowAll};
 use vassl_ui::NewRecord;
 use vassl_ui::text_input::{BackTab, Backspace, Copy, Cut, Delete, End, Home, Left, Paste, Right, SelectAll, SelectLeft, SelectRight, ShowCharacterPalette, Tab as TextTab};
 use vassl_inventory::product_form::{EscapeForm as ProductEscapeForm, TabField as ProductTab, BackTabField as ProductBackTab};
@@ -243,6 +247,10 @@ fn main() {
         cx.activate(true);
 
         // App-level menu actions (no window context needed)
+        cx.on_action(|_: &OpenDocumentation, _cx| {
+            let url = docs_server::docs_url();
+            docs_server::open_in_browser(&url);
+        });
         cx.on_action(|_: &Quit,       cx| cx.quit());
         #[cfg(target_os = "macos")]
         cx.on_action(|_: &Hide,       cx| cx.hide());
