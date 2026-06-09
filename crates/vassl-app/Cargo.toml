@@ -55,3 +55,6 @@ rust-embed.workspace         = true
 [target.'cfg(target_os = "macos")'.dependencies]
 cocoa = "0.25"
 objc  = "0.2"
+
+[target.'cfg(target_os = "windows")'.build-dependencies]
+winres = "0.1"

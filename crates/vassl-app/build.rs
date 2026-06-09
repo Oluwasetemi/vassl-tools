@@ -11,6 +11,17 @@ fn main() {
         .unwrap_or_else(|| "unknown".to_string());
 
     println!("cargo:rustc-env=VASSL_GIT_COMMIT={hash}");
-    // Re-run whenever the HEAD pointer changes (new commit, branch switch).
     println!("cargo:rerun-if-changed=../../.git/HEAD");
+
+    #[cfg(target_os = "windows")]
+    {
+        let mut res = winres::WindowsResource::new();
+        res.set_icon("../../assets/icons/vassl.ico");
+        res.set("ProductName", "VASSL");
+        res.set("FileDescription", "VASSL — Video Access Security Solutions Ltd.");
+        res.set("LegalCopyright", "Copyright \u{00a9} 2026 Video Access Security Solutions Ltd.");
+        res.set("CompanyName", "Video Access Security Solutions Ltd.");
+        res.compile().expect("failed to embed Windows resources");
+        println!("cargo:rerun-if-changed=../../assets/icons/vassl.ico");
+    }
 }

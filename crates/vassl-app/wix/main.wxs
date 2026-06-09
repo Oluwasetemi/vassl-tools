@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  WiX v3 installer for VASSL.
+  UpgradeCode must never change — it ties all future versions together for
+  in-place upgrades.  ProductCode is regenerated per-release (GUID *).
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+
+  <Product
+    Id="*"
+    Name="VASSL"
+    Language="1033"
+    Version="!(bind.FileVersion.vassl_exe)"
+    Manufacturer="Video Access Security Solutions Ltd."
+    UpgradeCode="2231DCB3-D2E7-44C9-B3E6-E38005647FD8">
+
+    <Package
+      InstallerVersion="405"
+      Compressed="yes"
+      InstallScope="perMachine"
+      Description="VASSL — Video Access Security Solutions Ltd."
+      Comments="Internal operations platform for inventory, pricing, and quotations."
+      Manufacturer="Video Access Security Solutions Ltd."/>
+
+    <!-- Always remove older versions before installing the new one -->
+    <MajorUpgrade
+      DowngradeErrorMessage="A newer version of VASSL is already installed."
+      AllowSameVersionUpgrades="no"/>
+
+    <MediaTemplate EmbedCab="yes"/>
+
+    <!-- ── Branding ───────────────────────────────────────────────────── -->
+    <Icon Id="VasslIcon" SourceFile="$(sys.SOURCEFILEDIR)..\..\..\assets\icons\vassl.ico"/>
+    <Property Id="ARPPRODUCTICON" Value="VasslIcon"/>
+    <Property Id="ARPHELPLINK"    Value="https://github.com/kamalu-org/tools"/>
+
+    <!-- ── UI ────────────────────────────────────────────────────────── -->
+    <UIRef Id="WixUI_InstallDir"/>
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER"/>
+    <WixVariable Id="WixUILicenseRtf" Value="$(sys.SOURCEFILEDIR)License.rtf"/>
+
+    <!-- ── Directory structure ───────────────────────────────────────── -->
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLFOLDER" Name="VASSL"/>
+      </Directory>
+
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="VasslStartMenu" Name="VASSL"/>
+      </Directory>
+
+      <Directory Id="DesktopFolder"/>
+    </Directory>
+
+    <!-- ── Main executable component ────────────────────────────────── -->
+    <DirectoryRef Id="INSTALLFOLDER">
+      <Component Id="VasslExe" Guid="B3E53ECF-21A3-4CCD-8096-E56B4C7E7524" Win64="yes">
+        <File
+          Id="vassl_exe"
+          Name="vassl.exe"
+          Source="$(sys.SOURCEFILEDIR)..\..\..\target\x86_64-pc-windows-msvc\release\vassl.exe"
+          KeyPath="yes"/>
+
+        <!-- Remove the install folder on uninstall -->
+        <RemoveFolder Id="RemoveInstallFolder" Directory="INSTALLFOLDER" On="uninstall"/>
+        <RemoveFolder Id="RemoveStartMenu"     Directory="VasslStartMenu" On="uninstall"/>
+
+        <!-- Registry key so Windows knows where VASSL is installed -->
+        <RegistryValue
+          Root="HKLM"
+          Key="SOFTWARE\VASSL"
+          Name="InstallDir"
+          Type="string"
+          Value="[INSTALLFOLDER]"
+          KeyPath="no"/>
+      </Component>
+    </DirectoryRef>
+
+    <!-- ── Start Menu shortcut ───────────────────────────────────────── -->
+    <DirectoryRef Id="VasslStartMenu">
+      <Component Id="VasslStartMenuShortcut" Guid="34B279B6-5A27-42F5-86D5-69E7B68AD02F" Win64="yes">
+        <Shortcut
+          Id="StartMenuShortcut"
+          Name="VASSL"
+          Description="VASSL — Video Access Security Solutions Ltd."
+          Target="[INSTALLFOLDER]vassl.exe"
+          WorkingDirectory="INSTALLFOLDER"
+          Icon="VasslIcon"/>
+        <RemoveFolder Id="RemoveStartMenuFolder" Directory="VasslStartMenu" On="uninstall"/>
+        <RegistryValue
+          Root="HKCU"
+          Key="SOFTWARE\VASSL\Shortcuts"
+          Name="StartMenu"
+          Type="integer"
+          Value="1"
+          KeyPath="yes"/>
+      </Component>
+    </DirectoryRef>
+
+    <!-- ── Desktop shortcut ──────────────────────────────────────────── -->
+    <DirectoryRef Id="DesktopFolder">
+      <Component Id="VasslDesktopShortcut" Guid="914DB2EB-5251-4218-B1B9-31C65C277BD9" Win64="yes">
+        <Shortcut
+          Id="DesktopShortcut"
+          Name="VASSL"
+          Description="VASSL — Video Access Security Solutions Ltd."
+          Target="[INSTALLFOLDER]vassl.exe"
+          WorkingDirectory="INSTALLFOLDER"
+          Icon="VasslIcon"/>
+        <RegistryValue
+          Root="HKCU"
+          Key="SOFTWARE\VASSL\Shortcuts"
+          Name="Desktop"
+          Type="integer"
+          Value="1"
+          KeyPath="yes"/>
+      </Component>
+    </DirectoryRef>
+
+    <!-- ── Feature (everything is in one feature) ────────────────────── -->
+    <Feature Id="Complete" Title="VASSL" Level="1">
+      <ComponentRef Id="VasslExe"/>
+      <ComponentRef Id="VasslStartMenuShortcut"/>
+      <ComponentRef Id="VasslDesktopShortcut"/>
+    </Feature>
+
+  </Product>
+</Wix>

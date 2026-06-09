@@ -172,18 +172,31 @@ jobs:
       - name: Build release binary
         run: cargo build --release --target x86_64-pc-windows-msvc -p vassl-app
 
-      - name: Package
+      - name: Install cargo-wix
+        run: cargo install cargo-wix --locked --version "^0.3"
+
+      - name: Build MSI installer
+        run: cargo wix -p vassl-app --no-build --nocapture
+        # Output: target/wix/vassl-<version>-x86_64.msi
+
+      - name: Rename artifacts
         shell: pwsh
         run: |
+          # ZIP (portable — no install required)
           Compress-Archive `
             -Path "target\x86_64-pc-windows-msvc\release\vassl.exe" `
-            -DestinationPath "VASSL-windows-x86_64.zip"
-          Move-Item VASSL-windows-x86_64.zip $env:GITHUB_WORKSPACE\
+            -DestinationPath "$env:GITHUB_WORKSPACE\VASSL-windows-x86_64.zip"
+
+          # MSI (installer)
+          $msi = Get-ChildItem target\wix\*.msi | Select-Object -First 1
+          Copy-Item $msi.FullName "$env:GITHUB_WORKSPACE\VASSL-windows-x86_64.msi"
 
       - uses: actions/upload-artifact@v4
         with:
           name: VASSL-windows-x86_64
-          path: VASSL-windows-x86_64.zip
+          path: |
+            VASSL-windows-x86_64.zip
+            VASSL-windows-x86_64.msi
           retention-days: 30
 
   # ─── GitHub Release ──────────────────────────────────────────────────────────
@@ -215,3 +228,4 @@ jobs:
             artifacts/VASSL-macos-universal/VASSL-macos-universal.zip
             artifacts/VASSL-macos-universal/VASSL-macos-universal.dmg
             artifacts/VASSL-windows-x86_64/VASSL-windows-x86_64.zip
+            artifacts/VASSL-windows-x86_64/VASSL-windows-x86_64.msi
