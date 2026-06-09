@@ -32,7 +32,7 @@
     <!-- ── Branding ───────────────────────────────────────────────────── -->
     <Icon Id="VasslIcon" SourceFile="$(sys.SOURCEFILEDIR)..\..\..\assets\icons\vassl.ico"/>
     <Property Id="ARPPRODUCTICON" Value="VasslIcon"/>
-    <Property Id="ARPHELPLINK"    Value="https://github.com/kamalu-org/tools"/>
+    <Property Id="ARPHELPLINK"    Value="mailto:gkamalu@videoaccessjm.com"/>
 
     <!-- ── UI ────────────────────────────────────────────────────────── -->
     <UIRef Id="WixUI_InstallDir"/>
