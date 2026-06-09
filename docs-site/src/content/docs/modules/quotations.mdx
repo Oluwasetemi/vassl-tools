@@ -5,7 +5,7 @@ description: Building and approving project quotations in VASSL.
 
 import { Aside, Steps, Badge } from '@astrojs/starlight/components';
 
-The Quotations module manages client quotations for Video Access Security Solutions Ltd projects. Quotations are grouped under **Projects** — a project represents a client engagement, and can have one or more quotations.
+The Quotations module manages client quotations for Video Access Security Solutions Ltd projects. Quotations are organised under **Projects** — a project represents a client engagement and can have one or more quotations.
 
 Open with **Cmd+2** (macOS) / **Ctrl+2** (Windows).
 
@@ -17,8 +17,8 @@ Open with **Cmd+2** (macOS) / **Ctrl+2** (Windows).
   </thead>
   <tbody>
     <tr><td><strong>Project</strong></td><td>A client engagement (e.g. "Accra Mall CCTV Upgrade")</td></tr>
-    <tr><td><strong>Quotation</strong></td><td>A priced list of items for a project</td></tr>
-    <tr><td><strong>Line Item</strong></td><td>A single product + quantity + price row in a quotation</td></tr>
+    <tr><td><strong>Quotation</strong></td><td>A priced list of items for a project, sent to a client</td></tr>
+    <tr><td><strong>Line Item</strong></td><td>A single product + quantity + price row within a quotation</td></tr>
   </tbody>
 </table>
 
@@ -29,63 +29,110 @@ Open with **Cmd+2** (macOS) / **Ctrl+2** (Windows).
     <tr><th>Status</th><th>Meaning</th></tr>
   </thead>
   <tbody>
-    <tr><td><Badge text="Draft" variant="caution" /></td><td>Being built, not yet sent</td></tr>
-    <tr><td><Badge text="Sent" variant="note" /></td><td>Delivered to client</td></tr>
-    <tr><td><Badge text="Approved" variant="success" /></td><td>Client accepted — stock is reserved</td></tr>
+    <tr><td><Badge text="Draft" variant="caution" /></td><td>Being built — not yet sent to the client</td></tr>
+    <tr><td><Badge text="Sent" variant="note" /></td><td>Delivered to the client, awaiting response</td></tr>
+    <tr><td><Badge text="Approved" variant="success" /></td><td>Client accepted — stock entries are created automatically</td></tr>
     <tr><td><Badge text="Rejected" variant="danger" /></td><td>Client declined</td></tr>
   </tbody>
 </table>
 
 ## Creating a project
 
+Projects must be created before quotations. A project holds the client details that appear on printed quotes.
+
 <Steps>
-1. Press **Cmd+N** to open the New Project form.
-2. Enter:
-   - **Project Name** — descriptive name (e.g. "Accra Mall Phase 2")
-   - **Client Name** — the client organisation or contact
-   - **Notes** — optional
+1. Click **+ New Project** or press the **+ New Project** button in the toolbar.
+2. Fill in the project form:
+
+   <table>
+     <thead><tr><th>Field</th><th>Required</th><th>Notes</th></tr></thead>
+     <tbody>
+       <tr><td>Project Name</td><td>Yes</td><td>Descriptive name (e.g. "Accra Mall Phase 2")</td></tr>
+       <tr><td>Client Name</td><td>Yes</td><td>The client organisation or individual</td></tr>
+       <tr><td>Client Address</td><td>No</td><td>Physical or mailing address</td></tr>
+       <tr><td>Attn</td><td>No</td><td>Attention — contact person at the client</td></tr>
+       <tr><td>Tel</td><td>No</td><td>Client telephone number</td></tr>
+     </tbody>
+   </table>
+
 3. Save. The project appears in the list.
 </Steps>
 
 ## Creating a quotation
 
 <Steps>
-1. Select a project in the left panel.
-2. Press **Cmd+N** to create a new quotation under that project.
-3. Enter a **title** and optional **notes**.
-4. Save. The quotation opens in Draft status.
+1. Press **Cmd+N** / **Ctrl+N** or click **+ New Quotation**.
+2. Fill in the quotation form:
+
+   <table>
+     <thead><tr><th>Field</th><th>Required</th><th>Notes</th></tr></thead>
+     <tbody>
+       <tr><td>Reference</td><td>—</td><td>Auto-generated as <code>VASSL-YYYY-NNNN</code> — read-only</td></tr>
+       <tr><td>Project</td><td>Yes</td><td>Select from the project dropdown</td></tr>
+       <tr><td>Exchange Rate</td><td>No</td><td>JMD/USD rate (default 156.00)</td></tr>
+       <tr><td>Discount %</td><td>No</td><td>Discount applied to the subtotal (default 0)</td></tr>
+       <tr><td>GCT %</td><td>No</td><td>Jamaica's General Consumption Tax (default 15 %)</td></tr>
+       <tr><td>Validity</td><td>No</td><td>Days until the quote expires (default 30)</td></tr>
+       <tr><td>Notes</td><td>No</td><td>Free-form text shown on the quote document</td></tr>
+     </tbody>
+   </table>
+
+3. Save. The quotation opens in **Draft** status.
 </Steps>
+
+<Aside type="note">
+Reference numbers are assigned automatically in the format `VASSL-YYYY-NNNN` (e.g. `VASSL-2026-0001`). They cannot be changed after creation.
+</Aside>
 
 ## Adding line items
 
 <Steps>
-1. Open a quotation in Draft status.
-2. Press **Cmd+N** inside the quotation detail to add a line item.
-3. Select a **product** — price book values are auto-filled.
-4. Adjust **quantity** as needed.
-5. The line total and quotation total update automatically.
+1. Open a quotation in **Draft** status — switch to the **Items** tab.
+2. Click **+ Add Item** (enabled when a quotation is selected).
+3. Optionally pick a product from the product picker — this auto-fills the **Description** and **Unit Price** from the most recent Price Book entry.
+4. Review and adjust the line item fields:
+
+   <table>
+     <thead><tr><th>Field</th><th>Required</th><th>Notes</th></tr></thead>
+     <tbody>
+       <tr><td>Description</td><td>Yes</td><td>What this line covers</td></tr>
+       <tr><td>Quantity</td><td>Yes</td><td>Must be greater than 0</td></tr>
+       <tr><td>Unit</td><td>No</td><td>e.g. <code>ea</code>, <code>lot</code>, <code>set</code></td></tr>
+       <tr><td>Unit Price (USD)</td><td>Yes</td><td>Price per unit — must be ≥ 0</td></tr>
+       <tr><td>Discount %</td><td>No</td><td>Per-line discount, clamped 0–100 (default 0)</td></tr>
+       <tr><td>Total</td><td>—</td><td>Computed read-only: Qty × Unit Price</td></tr>
+     </tbody>
+   </table>
+
+5. Save.
 </Steps>
 
 <Aside type="note">
-Line item prices are pulled from the **most recent Price Book entry** for each product at the time you add the line item. If prices change later, the quotation retains the price at the time it was built.
+Line item prices are pulled from the **most recent Price Book entry** at the time you add the item. If prices change later, the quotation retains the price recorded at build time.
 </Aside>
 
 ## Approving a quotation
 
-When a client accepts:
+When a client accepts a quotation:
 
 <Steps>
 1. Open the quotation.
 2. Change the status to **Approved**.
-3. VASSL automatically creates **stock entries** in Inventory for each line item — recording the outgoing stock against the project.
+3. VASSL automatically creates **stock entries** in Inventory for each line item, recording the outgoing stock against the project.
 </Steps>
 
 <Aside type="tip">
-Approving a quotation is the primary way outgoing stock is recorded. You do not need to manually adjust inventory after a project is confirmed.
+Approving a quotation is the primary mechanism for recording outgoing stock. You do not need to manually adjust inventory after a project is confirmed.
 </Aside>
 
-## Diagrams
+## Workflow summary
 
-{/* TODO: Add annotated screenshot of the Quotations panel */}
-{/* TODO: Add workflow diagram: Draft → Sent → Approved/Rejected */}
-{/* TODO: Add diagram showing stock sync on approval */}
+```
+New Project → New Quotation (Draft)
+                    │
+                    ├─ Add Line Items
+                    ├─ Mark as Sent
+                    │
+                    ├─ Approved ──► Stock entries created in Inventory
+                    └─ Rejected
+```

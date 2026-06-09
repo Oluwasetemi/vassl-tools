@@ -5,13 +5,13 @@ description: Managing cost prices, markups, and selling prices in VASSL.
 
 import { Aside, Steps } from '@astrojs/starlight/components';
 
-The Price Book module stores the selling price for every product. Each entry records the **cost price**, **duty cost**, **markup percentage**, and the resulting **selling price**. Full history is kept — every pricing change is recorded with a date.
+The Price Book module stores the selling price for every product. Each entry records the **cost price**, **duty percentage**, **markup percentage**, and the resulting **selling price**. Full history is kept — every pricing change is recorded with a date.
 
 Open with **Cmd+3** (macOS) / **Ctrl+3** (Windows).
 
 ## Price table
 
-The main panel shows current prices for all products:
+The main panel shows the **current** (most recent) price for each product:
 
 <table>
   <thead>
@@ -20,60 +20,82 @@ The main panel shows current prices for all products:
   <tbody>
     <tr><td>Product</td><td>Product name</td></tr>
     <tr><td>SKU</td><td>Product code</td></tr>
-    <tr><td>Cost Price</td><td>Your cost in USD (excluding duty)</td></tr>
-    <tr><td>Duty Cost</td><td>Import duty in USD</td></tr>
+    <tr><td>Cost Price</td><td>Your cost in USD or JMD</td></tr>
+    <tr><td>Duty Cost</td><td>Import duty in USD (derived from Cost × Duty %)</td></tr>
     <tr><td>Markup %</td><td>Percentage added on top of landed cost</td></tr>
-    <tr><td>Selling Price</td><td>Calculated final price shown on quotations</td></tr>
-    <tr><td>Effective Date</td><td>When this price entry came into effect</td></tr>
-    <tr><td>Qty</td><td>Default quantity for this price entry</td></tr>
+    <tr><td>Selling Price</td><td>Calculated final price used in quotations</td></tr>
+    <tr><td>Qty</td><td>Quantity associated with this price entry</td></tr>
   </tbody>
 </table>
 
 ### Selling price formula
 
 ```
-Selling Price = (Cost Price + Duty Cost) × (1 + Markup % / 100)
+Selling Price = Cost × (1 + Duty% / 100) × (1 + Markup% / 100)
+```
+
+**Duty %** is a property of the product itself (set in the Inventory module when adding or editing a product). It is not entered per price entry — the form reads it automatically.
+
+**Example:** Cost = $100 USD, Duty = 40 %, Markup = 30 %
+```
+Landed cost = 100 × 1.40 = $140
+Selling     = 140 × 1.30 = $182
 ```
 
 ### Filtering
 
-Use the search bar at the top to filter by product name or SKU.
+Use the search bar at the top to filter by product name or SKU in real time.
 
 ## Adding a price entry
 
+Price entries are tied to a specific product. You must select the product first.
+
 <Steps>
-1. Press **Cmd+N** or click **New Record**.
-2. Select the **Product** from the dropdown.
-3. Enter:
-   - **Cost Price (USD)** — landed cost before markup
-   - **Duty Cost (USD)** — import duty (can be 0)
-   - **Markup %** — e.g. `35` for 35%
-   - **Selling Price** — auto-calculated; you can override manually
-   - **Effective Date** — date this price takes effect
-   - **Quantity** — default quantity (usually 1)
-   - **Notes** — optional (e.g. "price valid Q1 2026")
-4. Save.
+1. Click a product row in the Price Book table to select it.
+2. Click **+ New Entry** in the toolbar (enabled when a product is selected), or right-click the row and choose **Add Price Entry**.
+3. Fill in the form:
+
+   <table>
+     <thead><tr><th>Field</th><th>Required</th><th>Notes</th></tr></thead>
+     <tbody>
+       <tr><td>Quantity</td><td>Yes</td><td>Quantity this price applies to (e.g. <code>1</code>, <code>10</code>)</td></tr>
+       <tr><td>Cost Price</td><td>Yes</td><td>Landed cost — toggle between USD and JMD with the currency button</td></tr>
+       <tr><td>Duty %</td><td>—</td><td>Read-only; taken from the product record in Inventory</td></tr>
+       <tr><td>Markup %</td><td>Yes</td><td>Percentage markup over landed cost (default from settings)</td></tr>
+       <tr><td>Selling Price</td><td>—</td><td>Auto-calculated and displayed in green; not editable</td></tr>
+     </tbody>
+   </table>
+
+4. Press **Enter** or click **Save**.
 </Steps>
 
 <Aside type="tip">
-Add a new entry rather than editing an existing one when prices change. This preserves the full pricing history for auditing and quotation accuracy.
+Always add a **new entry** rather than editing an existing one when prices change. This preserves the full pricing history for auditing and accurate historical quotation reference.
 </Aside>
+
+<Aside type="note">
+To change the Duty % for a product, edit the product in the **Inventory** module. The updated duty percentage will take effect in all new price entries.
+</Aside>
+
+### Currency toggle
+
+The Cost Price field supports two currencies:
+
+- **USD** — US dollars (default)
+- **JMD** — Jamaican dollars
+
+The currency selection and the exchange rate are persisted in Settings (`pricebook.currency` and `pricebook.exchange_rate`, default 156.00 JMD/USD). When JMD is entered, it is stored converted to USD.
 
 ## Price history
 
-Click the **History** button on any price table row to see all previous price entries for that product in chronological order. This is useful for:
+Switch to the **History** tab or right-click a product row and select **Price History** to see all previous price entries for that product in chronological order. This is useful for:
 
-- Tracking price trends over time
-- Understanding why a historical quotation used a certain price
-- Comparing cost changes across suppliers
+- Tracking cost and selling price trends over time
+- Understanding why a historical quotation used a particular price
+- Comparing landed costs across different purchase periods
 
 ## Relationship with Inventory and Quotations
 
-- **Inventory** holds cost data through stock entries (unit cost at time of purchase)
-- **Price Book** holds selling prices used when building quotations
-- When stock is added via the Price Book's stock form, a matching stock entry is automatically created in Inventory
-
-## Diagrams
-
-{/* TODO: Add annotated screenshot of the Price Book panel */}
-{/* TODO: Add price calculation diagram */}
+- The product's **Duty %** lives in Inventory and flows into every new price entry automatically
+- **Selling prices** from the most recent price entry are used to pre-fill line items when building quotations
+- Stock entries created from quotation approvals are recorded back in Inventory against the originating project

@@ -30,52 +30,112 @@ The main panel shows all products as a table with:
 
 ### Stock status colours
 
-- **Green** — stock is at or above the minimum level
-- **Amber** — stock is below minimum but greater than zero
-- **Red** — stock is at zero (out of stock)
+Stock status is calculated from the current quantity relative to the minimum stock level:
+
+<table>
+  <thead>
+    <tr><th>Colour</th><th>Status</th><th>Condition</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Green</td><td>Healthy</td><td>Stock &gt; Min × 1.2</td></tr>
+    <tr><td>Amber</td><td>Low</td><td>Min &lt; Stock ≤ Min × 1.2</td></tr>
+    <tr><td>Red</td><td>Critical</td><td>Stock ≤ Min (and Min &gt; 0)</td></tr>
+    <tr><td>—</td><td>No alert</td><td>Min stock level = 0</td></tr>
+  </tbody>
+</table>
+
+The 20 % buffer above minimum (the Amber zone) gives advance warning before stock actually hits the critical threshold.
+
+<Aside type="note">
+Products with a Min Stock Level of 0 show no status badge — they are considered untracked for restock purposes.
+</Aside>
 
 ### Filtering
 
-Use the search bar at the top of the panel (`Cmd+F`) to filter products by name or SKU in real time.
+Use the search bar at the top of the panel (`Cmd+F` / `Ctrl+F`) to filter products by name, SKU, or category in real time. Press the **×** button to clear the filter.
 
 ## Adding a product
 
 <Steps>
-1. Press **Cmd+N** (macOS) / **Ctrl+N** (Windows) or click **New Record**.
+1. Press **Cmd+N** (macOS) / **Ctrl+N** (Windows) or click **+ New Product**.
 2. Fill in the product form:
-   - **SKU** — must be unique across all products
-   - **Name** — display name
-   - **Category** — optional; used for grouping
-   - **Unit** — e.g. `pcs`, `box`, `roll`, `metre`
-   - **Min Stock Level** — triggers amber/red status when breached
-   - **Description** — optional; longer product description
-   - **Preferred Supplier** — select from your supplier list
+
+   <table>
+     <thead><tr><th>Field</th><th>Required</th><th>Notes</th></tr></thead>
+     <tbody>
+       <tr><td>SKU</td><td>Yes</td><td>Unique across all products. Immutable after creation.</td></tr>
+       <tr><td>Name</td><td>Yes</td><td>Display name shown in lists and quotations</td></tr>
+       <tr><td>Category</td><td>No</td><td>Optional grouping (e.g. Cameras, Networking)</td></tr>
+       <tr><td>Unit</td><td>Yes</td><td>Unit of measure — e.g. <code>pcs</code>, <code>box</code>, <code>roll</code>, <code>metre</code></td></tr>
+       <tr><td>Model #</td><td>No</td><td>Manufacturer model number</td></tr>
+       <tr><td>Part #</td><td>No</td><td>Manufacturer part number</td></tr>
+       <tr><td>Duty %</td><td>No</td><td>Import duty percentage applied in price calculations (default 0)</td></tr>
+       <tr><td>Initial Stock</td><td>No</td><td>Starting quantity on hand (create mode only)</td></tr>
+       <tr><td>Min Stock Level</td><td>No</td><td>Threshold for restock alerts (default 0)</td></tr>
+       <tr><td>Description</td><td>No</td><td>Longer product notes or specifications</td></tr>
+       <tr><td>Preferred Supplier</td><td>No</td><td>Select from your supplier list</td></tr>
+     </tbody>
+   </table>
+
 3. Press **Enter** or click **Save**.
 </Steps>
 
 <Aside type="note">
-SKU is immutable after creation. Choose a consistent format (e.g. `HIK-DS2CD2143` for Hikvision model DS2CD2143).
+SKU is immutable after creation. Choose a consistent format — for example `HIK-DS2CD2143G2` for Hikvision model DS2CD2143G2, or `CAM-IP-2MP` for a generic 2 MP IP camera.
 </Aside>
 
-## Adding stock (Restock)
+### Editing a product
+
+Right-click any product row and select **Edit Product**. In edit mode:
+
+- **SKU** is shown as a read-only label (cannot be changed after creation)
+- **Current Stock** is editable — changing this value creates an automatic **Adjustment** stock entry for the delta
+- All other fields behave the same as in create mode
+
+## Adding stock (New Entry)
 
 Stock is added through **stock entries** — each entry records a delivery or acquisition event.
 
 <Steps>
-1. Select a product in the list.
-2. Click **Restock** or press **Cmd+N** while a product is selected.
+1. Select a product row in the list.
+2. Click **+ New Entry** (enabled when a product is selected).
 3. Fill in the stock entry form:
-   - **Quantity** — units received
-   - **Unit Cost (USD)** — cost per unit at time of receipt
-   - **Supplier** — who supplied this batch
-   - **Acquisition Type** — `Purchase`, `Transfer`, or `Donation`
-   - **Acquired At** — date received
-   - **Invoice Ref** — optional invoice or PO reference
-   - **Notes** — optional
+
+   <table>
+     <thead><tr><th>Field</th><th>Required</th><th>Notes</th></tr></thead>
+     <tbody>
+       <tr><td>Quantity</td><td>Yes</td><td>Units received (can be negative for Adjustments)</td></tr>
+       <tr><td>Unit Cost (USD)</td><td>Yes</td><td>Cost per unit at time of receipt</td></tr>
+       <tr><td>Supplier</td><td>No</td><td>Who supplied this batch</td></tr>
+       <tr><td>Acquisition Type</td><td>Yes</td><td><code>Restock</code> · <code>Project</code> · <code>Adjustment</code></td></tr>
+       <tr><td>Acquired At</td><td>Yes</td><td>Date received</td></tr>
+       <tr><td>Invoice Ref</td><td>No</td><td>Invoice or purchase order reference</td></tr>
+       <tr><td>Notes</td><td>No</td><td>Any additional notes</td></tr>
+     </tbody>
+   </table>
+
 4. Save. The product's **In Stock** count updates immediately.
 </Steps>
 
-## Diagrams
+**Acquisition types explained:**
 
-{/* TODO: Add annotated screenshot of the Inventory panel */}
-{/* TODO: Add stock status indicator diagram */}
+<table>
+  <thead><tr><th>Type</th><th>When to use</th></tr></thead>
+  <tbody>
+    <tr><td><code>Restock</code></td><td>Standard purchase from a supplier</td></tr>
+    <tr><td><code>Project</code></td><td>Stock received for a specific project</td></tr>
+    <tr><td><code>Adjustment</code></td><td>Manual correction — use a negative quantity to remove stock</td></tr>
+  </tbody>
+</table>
+
+## Restock Alerts tab
+
+Switch to the **Restock Alerts** tab (next to Products) to see only the products that are in **Critical** or **Low** status. This is a filtered view — no separate data.
+
+## Context menu
+
+Right-click any product row for quick actions:
+
+- **Edit Product** — open the edit form
+- **Price History** — jump to that product's price history in the Price Book
+- **Add Price Entry** — open the Price Book entry form for that product

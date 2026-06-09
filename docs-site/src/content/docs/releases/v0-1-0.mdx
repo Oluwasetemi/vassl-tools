@@ -7,54 +7,64 @@ import { Badge } from '@astrojs/starlight/components';
 
 <Badge text="Dev Channel" variant="caution" /> Released June 2026
 
-This is the initial development release of VASSL. All core modules are functional.
+This is the initial development release of VASSL. All four core modules are functional.
 
 ## What's new
 
 ### Inventory
-- Product catalogue with SKU, name, category, unit, and minimum stock level
-- Stock entries for tracking deliveries and acquisitions
-- Low-stock status indicators (green / amber / red)
-- Real-time filter search
-- Product description field
+- Product catalogue with SKU, name, category, unit, model number, part number, duty %, and minimum stock level
+- Optional long-form product description field
 - Preferred supplier assignment per product
+- Stock entries for tracking deliveries and acquisitions — types: `Restock`, `Project`, `Adjustment`
+- Stock status indicators: Healthy (green) · Low (amber, within 20 % of min) · Critical (red, at or below min)
+- Real-time filter search by name, SKU, and category
+- Context menu on product rows: Edit, Price History, Add Price Entry
 
 ### Price Book
-- Cost price, duty cost, markup %, and selling price per product
-- Full price history — every change is recorded
-- Auto-calculation of selling price from cost + duty + markup
-- Price history context menu
+- Cost price, duty % (from product), markup %, and selling price per product
+- Currency toggle per entry: USD or JMD (with configurable exchange rate)
+- Selling price formula: `Cost × (1 + Duty%/100) × (1 + Markup%/100)`
+- Full price history — every change recorded with a date
 - Real-time filter search
+- Price history context menu on rows
 
 ### Quotations
-- Project-based quotation management
-- Draft → Sent → Approved / Rejected workflow
-- Line items sourced from the price book
-- Automatic stock entry creation on quotation approval
+- Project-based quotation management with full client details (name, address, attention, telephone)
+- Auto-generated reference numbers in `VASSL-YYYY-NNNN` format
+- Quotation fields: Exchange Rate (JMD/USD), Discount %, GCT % (Jamaica's General Consumption Tax), Validity (days), Notes
+- Draft → Sent → Approved / Rejected status workflow
+- Line items: product picker auto-fills description and unit price from Price Book; per-line discount %
+- Automatic stock entry creation in Inventory on quotation approval
 
 ### Suppliers
-- Supplier contact management (name, contact person, email, phone)
+- Supplier contact management: name, contact person, email, phone, notes
 - Real-time filter search
-- Preferred supplier assignments from Inventory
+- Preferred supplier assignments from Inventory product edit form
+- Edit existing suppliers in place
 
 ### App shell
 - Native macOS menu bar (VASSL, File, Edit, View, Window, Help)
-- Global Search (`Cmd+Shift+F`) across all modules
-- Command Palette (`Cmd+F`) per module
-- Font family picker and font size controls in Settings
+- Custom Windows title bar with caption buttons (minimize, maximize, close)
+- Global Search (`Cmd/Ctrl+Shift+F`) searches products, suppliers, and quotations across all modules
+- Module search bar focus (`Cmd/Ctrl+F`) filters the active module's list
+- Font family picker and font size controls in Settings (`Cmd/Ctrl+,`)
+- `Cmd/Ctrl + =` / `Cmd/Ctrl + -` keyboard shortcuts for font size
 - OS dark/light mode automatic theme switching
-- Audit Log with full change history
-- `Cmd/Ctrl + =/-` keyboard shortcuts for font size
+- First-run setup prompt for current user name
+- Audit Log (`Cmd/Ctrl+Shift+A`) with full change history
+- Scrollable lists with draggable scrollbar thumb in all modules
+- Tooltips on all sidebar buttons and toolbar action buttons showing keyboard shortcuts
 
 ### Platform
 - macOS (Apple Silicon, Intel, Universal Binary)
-- Windows (x86_64)
-- GitHub Actions release workflow for automated builds
-- Release channel inferred from version number (`0.x.y` → Dev, `x.y.z-preview` → Preview, `x.y.z` → Stable)
+- Windows x86_64 — custom borderless title bar to match app theme
+- GitHub Actions release workflow for automated macOS and Windows builds
+- Release channel inferred from version: `0.x.y` → Dev · `x.y.z-preview` → Preview · `x.y.z` → Stable
+- 7-day rotating log files in OS local data directory
 
 ## Known limitations
 
 - No data export (CSV / Excel) yet
 - No multi-user support — single database file per machine
 - No cloud sync or backup
-- App is unsigned — macOS Gatekeeper requires manual bypass on first launch
+- App is unsigned — macOS Gatekeeper requires right-click → Open on first launch

@@ -7,6 +7,8 @@ import { Steps, Aside } from '@astrojs/starlight/components';
 
 The Suppliers module stores contact information for companies and individuals that Video Access Security Solutions Ltd procures from. Suppliers can be assigned as the **preferred supplier** on individual products.
 
+Open with **Cmd+4** (macOS) / **Ctrl+4** (Windows).
+
 ## Supplier list
 
 The panel shows all suppliers with:
@@ -30,13 +32,20 @@ Use the search bar to filter by supplier name in real time.
 ## Adding a supplier
 
 <Steps>
-1. Press **Cmd+N** to open the New Supplier form.
-2. Fill in:
-   - **Name** — must be unique
-   - **Contact Person** — optional
-   - **Email** — optional
-   - **Phone** — optional
-   - **Notes** — optional
+1. Press **Cmd+N** (macOS) / **Ctrl+N** (Windows) or click **+ New Supplier**.
+2. Fill in the supplier form:
+
+   <table>
+     <thead><tr><th>Field</th><th>Required</th><th>Notes</th></tr></thead>
+     <tbody>
+       <tr><td>Name</td><td>Yes</td><td>Must be unique across all suppliers</td></tr>
+       <tr><td>Contact Person</td><td>No</td><td>Primary contact individual at the supplier</td></tr>
+       <tr><td>Email</td><td>No</td><td>Contact email address</td></tr>
+       <tr><td>Phone</td><td>No</td><td>Contact phone number</td></tr>
+       <tr><td>Notes</td><td>No</td><td>Any additional notes about this supplier</td></tr>
+     </tbody>
+   </table>
+
 3. Save.
 </Steps>
 
