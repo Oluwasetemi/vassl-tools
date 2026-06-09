@@ -182,6 +182,32 @@ fn init_tracing() -> tracing_appender::non_blocking::WorkerGuard {
     guard
 }
 
+#[cfg(target_os = "macos")]
+fn set_dock_icon() {
+    use cocoa::base::nil;
+    use objc::{class, msg_send, sel, sel_impl};
+
+    let png_bytes = match assets::VasslAssets::get("icons/vassl_512.png") {
+        Some(f) => f.data,
+        None => return,
+    };
+
+    unsafe {
+        let pool: cocoa::base::id = msg_send![class!(NSAutoreleasePool), new];
+        let data: cocoa::base::id = msg_send![class!(NSData),
+            dataWithBytes: png_bytes.as_ptr()
+            length: png_bytes.len()
+        ];
+        let image: cocoa::base::id = msg_send![class!(NSImage), alloc];
+        let image: cocoa::base::id = msg_send![image, initWithData: data];
+        if image != nil {
+            let app: cocoa::base::id = msg_send![class!(NSApplication), sharedApplication];
+            let _: () = msg_send![app, setApplicationIconImage: image];
+        }
+        let _: () = msg_send![pool, drain];
+    }
+}
+
 fn main() {
     let _tracing_guard = init_tracing();
     // Bridge log::warn! / log::error! from GPUI into our tracing pipeline.
@@ -191,6 +217,9 @@ fn main() {
     gpui_platform::application()
         .with_assets(assets::VasslAssets)
         .run(|cx: &mut App| {
+        #[cfg(target_os = "macos")]
+        set_dock_icon();
+
         if let Err(e) = vassl_db::init(cx) {
             tracing::error!("DB init failed: {e:?}");
             cx.quit();

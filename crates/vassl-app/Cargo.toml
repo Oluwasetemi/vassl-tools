@@ -51,3 +51,7 @@ semver                       = { version = "1", features = ["serde"] }
 ureq                         = { version = "2", features = ["json", "native-tls"] }
 zip                          = { version = "2", default-features = false, features = ["deflate"] }
 rust-embed.workspace         = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+cocoa = "0.25"
+objc  = "0.2"
