@@ -7,6 +7,8 @@
 
 mod about_dialog;
 mod actions;
+mod license;
+mod license_dialog;
 mod changelog;
 mod assets;
 mod auto_update;

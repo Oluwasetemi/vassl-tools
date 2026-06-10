@@ -6392,7 +6392,7 @@ dependencies = [
 
 [[package]]
 name = "vassl-app"
-version = "0.1.0-alpha.7"
+version = "0.1.0-alpha.8"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6406,6 +6406,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
+ "sha2",
  "sqlez",
  "tracing",
  "tracing-appender",

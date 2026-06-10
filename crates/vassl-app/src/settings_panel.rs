@@ -1246,8 +1246,7 @@ mod tests {
 
     #[test]
     fn stepper_reset_returns_to_13() {
-        let mut v = 22.5_f64;
-        v = 13.0;
+        let v = 13.0_f64;
         assert!((v - 13.0).abs() < f64::EPSILON);
     }
 

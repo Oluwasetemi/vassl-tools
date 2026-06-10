@@ -257,7 +257,10 @@ mod tests {
     fn make_project(id: i64, name: &str, client: &str) -> Project {
         Project { id, name: name.into(), client_name: client.into(),
                   description: None, status: ProjectStatus::Active,
-                  created_at: "2026-01-01T00:00:00Z".into() }
+                  created_at: "2026-01-01T00:00:00Z".into(),
+            client_address: Some("no1, address test".into()),
+            client_attn: Some("client atten".into()),
+            client_tel: Some("123456789".into()) }
     }
 
     #[test]

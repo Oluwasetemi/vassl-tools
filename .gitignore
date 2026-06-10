@@ -11,3 +11,5 @@ assets/*.sql
 # Source spreadsheets (binary data assets)
 assets/*.xls
 assets/*.xlsx
+
+signing_secret.rs

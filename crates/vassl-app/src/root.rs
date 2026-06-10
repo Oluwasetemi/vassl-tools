@@ -1,5 +1,5 @@
 use gpui::{Context, Entity, FocusHandle, Focusable, IntoElement, PathPromptOptions, Render,
-           Subscription, Window, div, prelude::*, px, rgb};
+           Subscription, Window, div, prelude::*, px, rgb, rems};
 #[cfg(not(target_os = "macos"))]
 use gpui::{MouseButton, MouseDownEvent, OwnedMenuItem, deferred, rems};
 #[cfg(not(target_os = "macos"))]
@@ -12,6 +12,7 @@ use crate::actions::{About, CheckForUpdates, DecreaseFontSize, EscapeModal, Focu
                      OpenGlobalSearch, OpenInventory, OpenPriceBook, OpenQuotations, OpenSuppliers,
                      OpenSettings, SelectNext, SelectPrev, Zoom};
 use crate::changelog::ChangelogPanel;
+use crate::license_dialog::{LicenseDialog, LicenseDialogEvent};
 use crate::auto_update::{AutoUpdateEvent, AutoUpdater, UpdateStatus};
 use vassl_ui::NewRecord;
 use crate::global_search::{GlobalSearch, GlobalSearchEvent, SearchResultKind};
@@ -48,6 +49,9 @@ pub struct VasslRoot {
     about_dialog:          Option<Entity<AboutDialog>>,
     _about_sub:            Option<Subscription>,
     changelog_panel:       Option<Entity<ChangelogPanel>>,
+    license_dialog:        Option<Entity<LicenseDialog>>,
+    _license_sub:          Option<Subscription>,
+    build_expired:         bool,
     updater:               Entity<AutoUpdater>,
     _updater_sub:          Subscription,
     _inventory_panel_sub:  Subscription,
@@ -155,6 +159,35 @@ impl VasslRoot {
                 }
             },
         );
+
+        // ── License + build-expiry checks ─────────────────────────────────────
+        let build_expired = crate::license::build_expired();
+        let (license_dialog, _license_sub) = if !build_expired {
+            let needs_license = {
+                let db = vassl_db::AppDatabase::global(&**cx);
+                let stored_key = vassl_db::shared::get_setting(db, "license.key")
+                    .ok().flatten();
+                match stored_key {
+                    None => true,
+                    Some(key) => crate::license::validate_key(&key).is_err(),
+                }
+            };
+            if needs_license {
+                let dialog = cx.new(LicenseDialog::new);
+                let fh = dialog.read(cx).focus_handle(cx);
+                window.focus(&fh, cx);
+                let sub = cx.subscribe(&dialog, |this, _, _ev: &LicenseDialogEvent, cx| {
+                    this._license_sub  = None;
+                    this.license_dialog = None;
+                    cx.notify();
+                });
+                (Some(dialog), Some(sub))
+            } else {
+                (None, None)
+            }
+        } else {
+            (None, None)
+        };
 
         let inventory_panel  = cx.new(InventoryPanel::new);
         let pricebook_panel  = cx.new(PriceBookPanel::new);
@@ -275,6 +308,9 @@ impl VasslRoot {
             about_dialog:         None,
             _about_sub:           None,
             changelog_panel:      None,
+            license_dialog,
+            _license_sub,
+            build_expired,
             updater,
             _updater_sub,
             _inventory_panel_sub,
@@ -568,6 +604,25 @@ impl VasslRoot {
 impl Render for VasslRoot {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = cx.global::<ThemeHandle>().0.clone();
+
+        // Build expiry blocks the entire app — render a static dead-end screen.
+        if self.build_expired {
+            return div()
+                .relative().flex().flex_col().w_full().h_full()
+                .font_family(gpui::SharedString::from(c.font_family.clone()))
+                .bg(rgb(c.canvas_bg))
+                .flex().items_center().justify_center()
+                .child(
+                    div().flex().flex_col().items_center().gap(px(12.))
+                        .child(div().text_size(rems(1.385)).text_color(rgb(c.text_default))
+                            .child("This VASSL build has expired"))
+                        .child(div().text_size(rems(0.923)).text_color(rgb(c.text_muted))
+                            .child("Please contact your VASSL administrator for an updated version."))
+                        .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted))
+                            .child(format!("Version {}", env!("CARGO_PKG_VERSION"))))
+                );
+        }
+
         let active = self.sidebar.read(cx).active;
 
         let content = div().flex_1().h_full().flex().flex_col();
@@ -798,6 +853,9 @@ impl Render for VasslRoot {
         }
         if let Some(changelog) = &self.changelog_panel {
             root = root.child(changelog.clone());
+        }
+        if let Some(dialog) = &self.license_dialog {
+            root = root.child(dialog.clone());
         }
 
         root

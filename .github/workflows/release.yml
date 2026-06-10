@@ -47,7 +47,25 @@ jobs:
           key: ${{ runner.os }}-${{ matrix.target }}-build-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-${{ matrix.target }}-build-
 
+      - name: Write signing secret
+        env:
+          VASSL_SIGNING_SECRET: ${{ secrets.VASSL_SIGNING_SECRET }}
+        run: |
+          python3 - <<'EOF'
+          import os, textwrap
+          h = os.environ["VASSL_SIGNING_SECRET"]
+          pairs = [f"0x{h[i:i+2]}" for i in range(0, 64, 2)]
+          rows  = textwrap.fill(", ".join(pairs), width=60, initial_indent="    ", subsequent_indent="    ")
+          print(f"const SIGNING_SECRET: [u8; 32] = [\n{rows},\n];")
+          EOF
+          ) > crates/vassl-app/src/signing_secret.rs
+
+      - name: Compute build expiry (3 days)
+        run: echo "VASSL_BUILD_EXPIRES=$(date -v+3d +%Y-%m-%d)" >> "$GITHUB_ENV"
+
       - name: Build release binary
+        env:
+          VASSL_BUILD_EXPIRES: ${{ env.VASSL_BUILD_EXPIRES }}
         run: cargo build --release --target ${{ matrix.target }} -p vassl-app
 
       - name: Bundle .app, create ZIP and DMG
@@ -169,7 +187,26 @@ jobs:
           key: ${{ runner.os }}-x86_64-build-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-x86_64-build-
 
+      - name: Write signing secret
+        shell: pwsh
+        env:
+          VASSL_SIGNING_SECRET: ${{ secrets.VASSL_SIGNING_SECRET }}
+        run: |
+          $h = $env:VASSL_SIGNING_SECRET
+          $pairs = 0..31 | ForEach-Object { "0x$($h.Substring($_*2,2))" }
+          $body  = $pairs -join ", "
+          "const SIGNING_SECRET: [u8; 32] = [$body];" |
+            Out-File -FilePath "crates/vassl-app/src/signing_secret.rs" -Encoding utf8
+
+      - name: Compute build expiry (90 days)
+        shell: pwsh
+        run: |
+          $expiry = (Get-Date).AddDays(90).ToString('yyyy-MM-dd')
+          echo "VASSL_BUILD_EXPIRES=$expiry" >> $env:GITHUB_ENV
+
       - name: Build release binary
+        env:
+          VASSL_BUILD_EXPIRES: ${{ env.VASSL_BUILD_EXPIRES }}
         run: cargo build --release --target x86_64-pc-windows-msvc -p vassl-app
 
       - name: Install cargo-wix
