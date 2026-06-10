@@ -1,6 +1,6 @@
-use gpui::{Context, Entity, IntoElement, Render, Subscription, Window,
+use gpui::{Context, Entity, IntoElement, MouseButton, MouseDownEvent, Render, Subscription, Window,
            div, prelude::*, px, rems, rgb};
-use vassl_ui::{NewRecord, TextInput, ThemeHandle, text_field, tooltip_keyed};
+use vassl_ui::{AppSettings, NewRecord, TextInput, ThemeHandle, text_field, tooltip_keyed};
 
 use crate::store::SupplierStore;
 use crate::supplier_form::{SupplierForm, SupplierFormEvent};
@@ -116,7 +116,7 @@ impl Render for SupplierPanel {
                                     .w(px(160.))
                                     .child({
                                         let focused = self.search_input.read(cx).focus_handle.is_focused(window);
-                                        text_field("", self.search_input.clone(), focused, cx)
+                                        text_field("", self.search_input.clone(), focused, false, cx)
                                     })
                             )
                             .child({
@@ -173,6 +173,71 @@ impl Render for SupplierPanel {
 
         if let Some(form) = &self.form {
             root = root.child(form.clone());
+        }
+
+        // Context menu overlay
+        let allow_delete = cx.global::<AppSettings>().allow_delete;
+        let ctx_menu = self.store.read(cx).context_menu.clone();
+        if let Some(target) = ctx_menu {
+            let viewport = window.viewport_size();
+            const MENU_W: f32 = 220.0;
+            const MENU_H: f32 = 120.0;
+            let menu_x = target.x.min((viewport.width.as_f32()  - MENU_W).max(0.0));
+            let menu_y = target.y.min((viewport.height.as_f32() - MENU_H).max(0.0));
+            let sid = target.supplier_id;
+
+            root = root
+                .child(
+                    div()
+                        .absolute().inset_0()
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(|this, _: &MouseDownEvent, _: &mut Window, cx| {
+                                this.store.update(cx, |s, cx| s.clear_context_menu(cx));
+                            }),
+                        )
+                )
+                .child(
+                    div()
+                        .absolute()
+                        .left(px(menu_x))
+                        .top(px(menu_y))
+                        .w(px(220.))
+                        .bg(rgb(c.surface_default))
+                        .rounded(px(6.))
+                        .shadow_md()
+                        .child(
+                            div()
+                                .px(px(12.)).pt(px(10.)).pb(px(4.))
+                                .text_size(rems(1.))
+                                .text_color(rgb(c.text_default))
+                                .font_weight(gpui::FontWeight::BOLD)
+                                .child(target.supplier_name.clone())
+                        )
+                        .when(allow_delete, |menu| {
+                            let hover_bg = rgb(c.surface_hover);
+                            menu.child(div().h(px(1.)).bg(rgb(c.surface_default)))
+                                .child(
+                                    div()
+                                        .id("ctx-sup-delete")
+                                        .px(px(12.)).py(px(8.))
+                                        .cursor_pointer()
+                                        .hover(move |s| s.bg(hover_bg))
+                                        .text_size(rems(1.))
+                                        .text_color(rgb(c.status_red))
+                                        .child("Delete Supplier")
+                                        .on_mouse_down(
+                                            MouseButton::Left,
+                                            cx.listener(move |this, _: &MouseDownEvent, _: &mut Window, cx| {
+                                                this.store.update(cx, |s, cx| {
+                                                    s.clear_context_menu(cx);
+                                                    s.delete_supplier(sid, cx);
+                                                });
+                                            }),
+                                        )
+                                )
+                        })
+                );
         }
 
         root

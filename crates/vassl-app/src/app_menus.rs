@@ -2,7 +2,7 @@ use gpui::{Menu, MenuItem, OsAction, SystemMenuType};
 
 use crate::actions::{
     About, DecreaseFontSize, FocusSearch, Hide, HideOthers, IncreaseFontSize, Minimize,
-    OpenAuditLog, OpenDocumentation, OpenGlobalSearch, OpenInventory, OpenPriceBook, OpenQuotations,
+    OpenAuditLog, OpenChangelog, OpenDocumentation, OpenGlobalSearch, OpenInventory, OpenPriceBook, OpenQuotations,
     OpenSettings, Quit, ShowAll, Zoom,
 };
 use vassl_ui::NewRecord;
@@ -78,6 +78,7 @@ pub fn app_menus() -> Vec<Menu> {
             disabled: false,
             items: vec![
                 MenuItem::action("Documentation", OpenDocumentation),
+                MenuItem::action("Changelog", OpenChangelog),
                 MenuItem::separator(),
                 MenuItem::action("About VASSL", About),
             ],

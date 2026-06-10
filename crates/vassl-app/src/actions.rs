@@ -28,4 +28,5 @@ actions!(vassl, [
     InstallUpdate,
     // Help
     OpenDocumentation,
+    OpenChangelog,
 ]);

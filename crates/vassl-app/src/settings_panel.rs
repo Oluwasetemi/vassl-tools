@@ -42,8 +42,10 @@ pub struct SettingsPanel {
     open_select:         Option<SettingSelect>,
 
     // General
-    pub user_name:    gpui::Entity<TextInput>,
-    pub company_name: gpui::Entity<TextInput>,
+    pub user_name:        gpui::Entity<TextInput>,
+    pub company_name:     gpui::Entity<TextInput>,
+    pub allow_delete:     bool,
+    pub allow_price_edit: bool,
 
     // Appearance
     pub theme:       String,   // "dark" | "light" — saved by render_appearance toggle
@@ -102,6 +104,8 @@ impl SettingsPanel {
         let prefix_val        = vassl_db::shared::get_setting(db, "quotations.prefix").ok().flatten().unwrap_or_else(|| "VASSL".into());
         let tax_val           = vassl_db::shared::get_setting(db, "quotations.tax_rate").ok().flatten().unwrap_or_else(|| "0".into());
         let notes_val         = vassl_db::shared::get_setting(db, "quotations.notes_template").ok().flatten().unwrap_or_default();
+        let allow_delete_val      = vassl_db::shared::get_setting(db, "general.allow_delete").ok().flatten().unwrap_or_else(|| "false".into());
+        let allow_price_edit_val  = vassl_db::shared::get_setting(db, "general.allow_price_edit").ok().flatten().unwrap_or_else(|| "false".into());
 
         // Load persisted keymap overrides
         let keymap_overrides: HashMap<String, String> = crate::keybindings::default_app_bindings()
@@ -145,6 +149,8 @@ impl SettingsPanel {
             open_select:     None,
             user_name,
             company_name,
+            allow_delete:     allow_delete_val == "true",
+            allow_price_edit: allow_price_edit_val == "true",
             theme:           theme_val,
             font_family:     font_family_val,
             font_size,
@@ -650,13 +656,13 @@ impl SettingsPanel {
             .child(Self::render_row(
                 "Low Stock Threshold",
                 "Alert when stock quantity falls at or below this number.",
-                vassl_ui::text_field("", self.low_stock.clone(), stock_focused, cx),
+                vassl_ui::text_field("", self.low_stock.clone(), stock_focused, false, cx),
                 &c,
             ))
             .child(Self::render_row(
                 "Default Stock Unit",
                 "Unit label used when adding new products (e.g. pcs, kg, L).",
-                vassl_ui::text_field("", self.default_unit.clone(), unit_focused, cx),
+                vassl_ui::text_field("", self.default_unit.clone(), unit_focused, false, cx),
                 &c,
             ))
             // SKU auto-compute section
@@ -678,13 +684,13 @@ impl SettingsPanel {
                 .child(Self::render_row(
                     "SKU Fields",
                     "Comma-separated field names to join (e.g. model_number,part_number).",
-                    vassl_ui::text_field("", self.sku_fields.clone(), fields_focused, cx),
+                    vassl_ui::text_field("", self.sku_fields.clone(), fields_focused, false, cx),
                     &c,
                 ))
                 .child(Self::render_row(
                     "SKU Separator",
                     "Character(s) to join fields (e.g. - or /).",
-                    vassl_ui::text_field("", self.sku_separator.clone(), sep_focused, cx),
+                    vassl_ui::text_field("", self.sku_separator.clone(), sep_focused, false, cx),
                     &c,
                 ))
             )
@@ -787,13 +793,13 @@ impl SettingsPanel {
             .child(Self::render_row(
                 "USD → JMD Rate",
                 "Conversion rate applied when displaying prices in JMD.",
-                vassl_ui::text_field("", self.usd_to_jmd.clone(), rate_focused, cx),
+                vassl_ui::text_field("", self.usd_to_jmd.clone(), rate_focused, false, cx),
                 &c,
             ))
             .child(Self::render_row(
                 "Default Margin %",
                 "Pre-filled margin percentage when creating new price book entries.",
-                vassl_ui::text_field("", self.default_margin.clone(), margin_focused, cx),
+                vassl_ui::text_field("", self.default_margin.clone(), margin_focused, false, cx),
                 &c,
             ))
     }
@@ -808,19 +814,19 @@ impl SettingsPanel {
             .child(Self::render_row(
                 "Quote Number Prefix",
                 "Prefix for auto-generated quotation reference numbers (e.g. VASSL-2026-0001).",
-                vassl_ui::text_field("", self.quote_prefix.clone(), prefix_focused, cx),
+                vassl_ui::text_field("", self.quote_prefix.clone(), prefix_focused, false, cx),
                 &c,
             ))
             .child(Self::render_row(
                 "Default Tax / VAT %",
                 "Pre-filled tax rate on new quotations. Set to 0 to disable.",
-                vassl_ui::text_field("", self.tax_rate.clone(), tax_focused, cx),
+                vassl_ui::text_field("", self.tax_rate.clone(), tax_focused, false, cx),
                 &c,
             ))
             .child(Self::render_row(
                 "Default Notes Template",
                 "Text pre-filled in the Notes field on new quotations.",
-                vassl_ui::text_field("", self.notes_template.clone(), notes_focused, cx),
+                vassl_ui::text_field("", self.notes_template.clone(), notes_focused, false, cx),
                 &c,
             ))
     }
@@ -966,20 +972,106 @@ impl SettingsPanel {
         let c           = cx.global::<ThemeHandle>().0.clone();
         let name_focused = self.user_name.read(cx).focus_handle.is_focused(window);
         let co_focused   = self.company_name.read(cx).focus_handle.is_focused(window);
+        let allow_delete     = self.allow_delete;
+        let allow_price_edit = self.allow_price_edit;
+
+        // Allow Delete toggle pill
+        let delete_toggle = {
+            let (pill_bg, thumb_x) = if allow_delete {
+                (c.surface_active, px(16.))
+            } else {
+                (c.surface_default, px(2.))
+            };
+            div().id("settings-allow-delete-toggle")
+                .w(px(32.)).h(px(18.)).rounded_full()
+                .bg(rgb(pill_bg)).cursor_pointer().relative()
+                .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
+                    this.allow_delete = !this.allow_delete;
+                    let v = if this.allow_delete { "true" } else { "false" };
+                    this.save_setting("general.allow_delete", v.into(), cx);
+                    cx.set_global(vassl_ui::AppSettings {
+                        allow_delete:     this.allow_delete,
+                        allow_price_edit: this.allow_price_edit,
+                    });
+                    cx.notify();
+                }))
+                .child(
+                    div().absolute()
+                        .top(px(2.)).left(thumb_x)
+                        .w(px(14.)).h(px(14.)).rounded_full()
+                        .bg(rgb(c.canvas_bg))
+                )
+        };
+
+        // Allow Price Edit toggle pill
+        let price_edit_toggle = {
+            let (pill_bg, thumb_x) = if allow_price_edit {
+                (c.surface_active, px(16.))
+            } else {
+                (c.surface_default, px(2.))
+            };
+            div().id("settings-allow-price-edit-toggle")
+                .w(px(32.)).h(px(18.)).rounded_full()
+                .bg(rgb(pill_bg)).cursor_pointer().relative()
+                .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
+                    this.allow_price_edit = !this.allow_price_edit;
+                    let v = if this.allow_price_edit { "true" } else { "false" };
+                    this.save_setting("general.allow_price_edit", v.into(), cx);
+                    cx.set_global(vassl_ui::AppSettings {
+                        allow_delete:     this.allow_delete,
+                        allow_price_edit: this.allow_price_edit,
+                    });
+                    cx.notify();
+                }))
+                .child(
+                    div().absolute()
+                        .top(px(2.)).left(thumb_x)
+                        .w(px(14.)).h(px(14.)).rounded_full()
+                        .bg(rgb(c.canvas_bg))
+                )
+        };
 
         div().flex().flex_col()
             .child(Self::render_row(
                 "User Name",
                 "Your display name, used in audit logs.",
-                vassl_ui::text_field("", self.user_name.clone(), name_focused, cx),
+                vassl_ui::text_field("", self.user_name.clone(), name_focused, false, cx),
                 &c,
             ))
             .child(Self::render_row(
                 "Company Name",
                 "Appears on quotation headers.",
-                vassl_ui::text_field("", self.company_name.clone(), co_focused, cx),
+                vassl_ui::text_field("", self.company_name.clone(), co_focused, false, cx),
                 &c,
             ))
+            .child(
+                div().flex().flex_col()
+                    .child(
+                        div().flex().flex_row().items_center().py(px(14.)).px(px(32.))
+                            .child(
+                                div().flex_1().flex().flex_col().gap(px(3.))
+                                    .child(div().text_size(rems(1.)).text_color(rgb(c.text_default)).child("Allow Deleting Records"))
+                                    .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted))
+                                        .child("When enabled, context menus will show a Delete option for products, suppliers, and other records."))
+                            )
+                            .child(delete_toggle)
+                    )
+                    .child(div().h(px(1.)).mx(px(32.)).bg(rgb(c.surface_default)))
+            )
+            .child(
+                div().flex().flex_col()
+                    .child(
+                        div().flex().flex_row().items_center().py(px(14.)).px(px(32.))
+                            .child(
+                                div().flex_1().flex().flex_col().gap(px(3.))
+                                    .child(div().text_size(rems(1.)).text_color(rgb(c.text_default)).child("Allow Editing Price Entries"))
+                                    .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted))
+                                        .child("When enabled, price entries can be edited directly from the pricebook context menu."))
+                            )
+                            .child(price_edit_toggle)
+                    )
+                    .child(div().h(px(1.)).mx(px(32.)).bg(rgb(c.surface_default)))
+            )
     }
 }
 

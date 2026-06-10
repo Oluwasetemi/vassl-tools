@@ -149,15 +149,17 @@ impl Render for SupplierList {
 }
 
 fn supplier_row(s: &Supplier, selected: bool, store: Entity<SupplierStore>, c: &ThemeColors) -> impl IntoElement {
-    let id       = s.id;
-    let row_bg   = if selected { c.surface_active } else { c.canvas_bg };
-    let hover_bg = rgb(c.surface_hover);
+    let id         = s.id;
+    let name_clone = s.name.clone();
+    let row_bg     = if selected { c.surface_active } else { c.canvas_bg };
+    let hover_bg   = rgb(c.surface_hover);
     let contact = match (&s.email, &s.phone) {
         (Some(e), Some(p)) => format!("{e}  {p}"),
         (Some(e), None)    => e.clone(),
         (None, Some(p))    => p.clone(),
         (None, None)       => String::new(),
     };
+    let store2 = store.clone();
 
     div()
         .id(format!("supplier-{id}"))
@@ -172,18 +174,38 @@ fn supplier_row(s: &Supplier, selected: bool, store: Entity<SupplierStore>, c: &
                 store.update(cx, |s, cx| s.select_supplier(id, cx));
             },
         )
+        .on_mouse_down(
+            MouseButton::Right,
+            move |ev: &MouseDownEvent, _: &mut Window, cx: &mut App| {
+                store2.update(cx, |s, cx| {
+                    s.set_context_menu(crate::store::ContextMenuTarget {
+                        supplier_id:   id,
+                        supplier_name: name_clone.clone(),
+                        x:             ev.position.x.as_f32(),
+                        y:             ev.position.y.as_f32(),
+                    }, cx);
+                });
+            },
+        )
         .child(
             div()
-                .flex_1()
+                .w(px(200.))
                 .text_size(rems(1.))
                 .text_color(rgb(c.text_default))
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
                 .child(s.name.clone())
         )
         .when(!contact.is_empty(), |el| {
             el.child(
                 div()
+                    .flex_1()
                     .text_size(rems(0.846))
                     .text_color(rgb(c.text_muted))
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .text_ellipsis()
                     .child(contact)
             )
         })

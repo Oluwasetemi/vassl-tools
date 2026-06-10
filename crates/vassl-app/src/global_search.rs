@@ -165,7 +165,7 @@ impl Render for GlobalSearch {
                     .bg(rgb(c.canvas_bg)).rounded(px(8.)).p(px(12.))
                     .flex().flex_col().gap(px(8.))
                     .on_mouse_down(gpui::MouseButton::Left, |_, _, _| {})
-                    .child(text_field("", self.query.clone(), query_focused, cx))
+                    .child(text_field("", self.query.clone(), query_focused, false, cx))
                     .child({
                         let results = div()
                             .id("global-search-results")

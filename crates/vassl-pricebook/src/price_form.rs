@@ -15,18 +15,22 @@ pub enum PriceFormEvent { Submitted, Cancelled }
 impl EventEmitter<PriceFormEvent> for PriceEntryForm {}
 
 pub struct PriceEntryForm {
-    store:        Entity<PriceBookStore>,
-    product_id:   i64,
-    product_name: String,
-    duty_percent: f64,
-    currency:     String,
-    pub cost:     Entity<TextInput>,
-    quantity:     Entity<TextInput>,
-    markup:       Entity<TextInput>,
-    cancel_focus: FocusHandle,
-    save_focus:   FocusHandle,
-    error:        Option<String>,
-    focus_handle: FocusHandle,
+    store:         Entity<PriceBookStore>,
+    product_id:    i64,
+    product_name:  String,
+    duty_percent:  f64,
+    currency:      String,
+    pub cost:      Entity<TextInput>,
+    quantity:      Entity<TextInput>,
+    markup:        Entity<TextInput>,
+    cancel_focus:  FocusHandle,
+    save_focus:    FocusHandle,
+    error:         Option<String>,
+    qty_error:     bool,
+    cost_error:    bool,
+    markup_error:  bool,
+    focus_handle:  FocusHandle,
+    edit_entry_id: Option<i64>,
 }
 
 /// Returns (qty, cost, markup_pct).
@@ -69,10 +73,66 @@ impl PriceEntryForm {
             cost:         cx.new(|cx| TextInput::with_placeholder("e.g. 120.00", cx)),
             quantity:     quantity_field,
             markup:       markup_field,
-            cancel_focus: cx.focus_handle(),
-            save_focus:   cx.focus_handle(),
-            error:        None,
-            focus_handle: cx.focus_handle(),
+            cancel_focus:  cx.focus_handle(),
+            save_focus:    cx.focus_handle(),
+            error:         None,
+            qty_error:     false,
+            cost_error:    false,
+            markup_error:  false,
+            focus_handle:  cx.focus_handle(),
+            edit_entry_id: None,
+        }
+    }
+
+    pub fn edit_for(
+        store:         Entity<PriceBookStore>,
+        product_id:    i64,
+        product_name:  String,
+        current_stock: f64,
+        duty_percent:  f64,
+        entry:         vassl_core::PriceEntry,
+        cx:            &mut Context<Self>,
+    ) -> Self {
+        let entry_cost    = entry.cost_price_usd.to_string();
+        let entry_qty     = entry.quantity.to_string();
+        let entry_markup  = entry.markup_percent.to_string();
+        let entry_currency = entry.currency.clone();
+        let entry_id      = entry.id;
+
+        let quantity_field = cx.new(|cx| {
+            let mut f = TextInput::with_placeholder("e.g. 10", cx);
+            f.set_text(entry_qty, cx);
+            f
+        });
+        let markup_field = cx.new(|cx| {
+            let mut f = TextInput::with_placeholder("e.g. 30", cx);
+            f.set_text(entry_markup, cx);
+            f
+        });
+        let cost_field = cx.new(|cx| {
+            let mut f = TextInput::with_placeholder("e.g. 120.00", cx);
+            f.set_text(entry_cost, cx);
+            f
+        });
+        let _ = current_stock;
+
+        Self {
+            store,
+            product_id,
+            product_name,
+            duty_percent,
+            currency:      entry_currency,
+            cost:          cost_field,
+            quantity:      quantity_field,
+            markup:        markup_field,
+            cancel_focus:  cx.focus_handle(),
+            save_focus:    cx.focus_handle(),
+            error:         None,
+            qty_error:     false,
+            cost_error:    false,
+            markup_error:  false,
+            focus_handle:  cx.focus_handle(),
+            edit_entry_id: Some(entry_id),
         }
     }
 
@@ -96,6 +156,9 @@ impl PriceEntryForm {
         let q = self.quantity.read(cx).text().to_string();
         let c = self.cost.read(cx).text().to_string();
         let m = self.markup.read(cx).text().to_string();
+        self.qty_error    = q.trim().parse::<f64>().map_or(true, |v| v <= 0.0);
+        self.cost_error   = c.trim().parse::<f64>().map_or(true, |v| v < 0.0);
+        self.markup_error = m.trim().parse::<f64>().map_or(true, |v| v <= 0.0);
         match validate_price_entry(&q, &c, &m) {
             Err(msg) => { self.error = Some(msg); cx.notify(); }
             Ok((qv, cv, mv)) => {
@@ -106,18 +169,26 @@ impl PriceEntryForm {
                 let store     = self.store.clone();
                 let inv_store = cx.global::<InventoryStoreHandle>().0.clone();
                 let currency  = self.currency.clone();
+                let edit_id   = self.edit_entry_id;
                 cx.spawn(async move |this, cx| {
-                    let result = db.insert_entry(pid, qv, cv, duty_usd, mv, sell, None, &currency).await;
+                    let result = if let Some(entry_id) = edit_id {
+                        db.update_price_entry(entry_id, qv, cv, duty_usd, mv, sell, None, &currency).await
+                            .map(|_| entry_id)
+                    } else {
+                        db.insert_entry(pid, qv, cv, duty_usd, mv, sell, None, &currency).await
+                    };
                     let _ = this.update(cx, |form, cx| {
                         match result {
                             Err(e) => {
-                                tracing::error!("insert_entry failed: {e:?}");
+                                tracing::error!("price entry save failed: {e:?}");
                                 form.error = Some(format!("Save failed: {e}"));
                                 cx.notify();
                             }
                             Ok(_) => {
                                 let _ = store.update(cx, |s, cx| s.load_products(cx));
-                                let _ = inv_store.update(cx, |s, cx| s.load_products(cx));
+                                if edit_id.is_none() {
+                                    let _ = inv_store.update(cx, |s, cx| s.load_products(cx));
+                                }
                                 cx.emit(PriceFormEvent::Submitted);
                             }
                         }
@@ -150,7 +221,9 @@ impl Render for PriceEntryForm {
             .flex().items_center().justify_center()
             .bg(rgba(0x00000099))
             .key_context("PriceEntryForm")
-            .on_action(cx.listener(|_, _: &EscapeForm, _, cx| {
+            .on_action(cx.listener(|_, _: &EscapeForm, window, cx| {
+                let root = cx.global::<vassl_ui::RootFocusHandle>().0.clone();
+                window.focus(&root, cx);
                 cx.emit(PriceFormEvent::Cancelled);
             }))
             .on_action(cx.listener(|this, _: &TabField, window, cx| {
@@ -194,7 +267,11 @@ impl Render for PriceEntryForm {
                             .flex().flex_row().items_center()
                             .child(div().flex_1()
                                 .text_size(rems(1.)).text_color(rgb(c.text_default))
-                                .child(format!("New Price Entry — {}", self.product_name)))
+                                .child(if self.edit_entry_id.is_some() {
+                                    format!("Edit Price Entry — {}", self.product_name)
+                                } else {
+                                    format!("New Price Entry — {}", self.product_name)
+                                }))
                             .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted)).child("Esc to cancel"))
                     )
                     // ── fields ──────────────────────────────────────────
@@ -203,7 +280,7 @@ impl Render for PriceEntryForm {
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Quantity"))
-                                    .child(div().flex_1().child(text_field("", self.quantity.clone(), qty_focused, cx)))
+                                    .child(div().flex_1().child(text_field("", self.quantity.clone(), qty_focused, self.qty_error, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
@@ -211,7 +288,7 @@ impl Render for PriceEntryForm {
                                     .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default))
                                         .child(if is_jmd { "Cost Price (JMD)" } else { "Cost Price (USD)" }))
                                     .child(div().flex().flex_row().items_center().gap(px(8.)).flex_1()
-                                        .child(div().flex_1().child(text_field("", self.cost.clone(), cost_focused, cx)))
+                                        .child(div().flex_1().child(text_field("", self.cost.clone(), cost_focused, self.cost_error, cx)))
                                         // Currency toggle — USD / JMD
                                         .child({
                                             let usd_bg = if !is_jmd { c.surface_active } else { c.surface_default };
@@ -256,7 +333,7 @@ impl Render for PriceEntryForm {
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Markup %"))
-                                    .child(div().flex_1().child(text_field("", self.markup.clone(), mrkp_focused, cx)))
+                                    .child(div().flex_1().child(text_field("", self.markup.clone(), mrkp_focused, self.markup_error, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
@@ -287,7 +364,11 @@ impl Render for PriceEntryForm {
                                     .cursor_pointer()
                                     .when(cancel_f, |d| d.border_2().border_color(rgb(c.surface_active)))
                                     .when(!cancel_f, |d| d.border_1().border_color(rgb(c.surface_default)))
-                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| { cx.emit(PriceFormEvent::Cancelled); }))
+                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, window, cx| {
+                                        let root = cx.global::<vassl_ui::RootFocusHandle>().0.clone();
+                                        window.focus(&root, cx);
+                                        cx.emit(PriceFormEvent::Cancelled);
+                                    }))
                                     .child("Cancel")
                             )
                             .child(
@@ -299,7 +380,7 @@ impl Render for PriceEntryForm {
                                     .when(save_f, |d| d.border_2().border_color(rgb(c.text_default)))
                                     .when(!save_f, |d| d.border_1().border_color(rgb(c.surface_active)))
                                     .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| { this.submit(cx); }))
-                                    .child("Save Entry")
+                                    .child(if self.edit_entry_id.is_some() { "Update Entry" } else { "Save Entry" })
                             )
                     )
             )

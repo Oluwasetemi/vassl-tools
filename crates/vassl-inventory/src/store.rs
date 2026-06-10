@@ -130,6 +130,26 @@ impl InventoryStore {
         .detach();
     }
 
+    pub fn delete_product(&mut self, product_id: i64, cx: &mut Context<Self>) {
+        let db = InventoryDb::global(&**cx);
+        cx.spawn(async move |this, cx| {
+            let result = db.delete_product(product_id).await;
+            let _ = this.update(cx, |store, cx| {
+                match result {
+                    Ok(_) => {
+                        store.products.retain(|p| p.product.id != product_id);
+                        if store.selected_product_id == Some(product_id) {
+                            store.selected_product_id = None;
+                            store.stock_entries.clear();
+                        }
+                        cx.notify();
+                    }
+                    Err(e) => tracing::error!("delete_product failed: {e:?}"),
+                }
+            });
+        }).detach();
+    }
+
     pub fn set_context_menu(&mut self, target: ContextMenuTarget, cx: &mut Context<Self>) {
         self.context_menu = Some(target);
         cx.notify();

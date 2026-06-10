@@ -23,6 +23,7 @@ pub struct SupplierForm {
     cancel_focus:   FocusHandle,
     save_focus:     FocusHandle,
     error:          Option<String>,
+    name_error:     bool,
     focus_handle:   FocusHandle,
 }
 
@@ -45,6 +46,7 @@ impl SupplierForm {
             cancel_focus:   cx.focus_handle(),
             save_focus:     cx.focus_handle(),
             error:          None,
+            name_error:     false,
             focus_handle:   cx.focus_handle(),
         }
     }
@@ -81,6 +83,7 @@ impl SupplierForm {
             cancel_focus:   cx.focus_handle(),
             save_focus:     cx.focus_handle(),
             error:          None,
+            name_error:     false,
             focus_handle:   cx.focus_handle(),
         }
     }
@@ -95,6 +98,8 @@ impl SupplierForm {
         let email_op   = if email.is_empty()   { None } else { Some(email) };
         let phone_op   = if phone.is_empty()   { None } else { Some(phone) };
         let notes_op   = if notes.is_empty()   { None } else { Some(notes) };
+
+        self.name_error = name_raw.trim().is_empty();
 
         match validate_supplier_name(&name_raw) {
             Err(msg) => { self.error = Some(msg); cx.notify(); }
@@ -157,7 +162,9 @@ impl Render for SupplierForm {
             .flex().items_center().justify_center()
             .bg(rgba(0x00000099))
             .key_context("SupplierForm")
-            .on_action(cx.listener(|_, _: &EscapeForm, _, cx| {
+            .on_action(cx.listener(|_, _: &EscapeForm, window, cx| {
+                let root = cx.global::<vassl_ui::RootFocusHandle>().0.clone();
+                window.focus(&root, cx);
                 cx.emit(SupplierFormEvent::Cancelled);
             }))
             .on_action(cx.listener(|this, _: &TabField, window, cx| {
@@ -210,31 +217,31 @@ impl Render for SupplierForm {
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Name"))
-                                    .child(div().flex_1().child(text_field("", self.name.clone(), name_f, cx)))
+                                    .child(div().flex_1().child(text_field("", self.name.clone(), name_f, self.name_error, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child("Contact Person"))
-                                    .child(div().flex_1().child(text_field("", self.contact_person.clone(), contact_f, cx)))
+                                    .child(div().flex_1().child(text_field("", self.contact_person.clone(), contact_f, false, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child("Email"))
-                                    .child(div().flex_1().child(text_field("", self.email.clone(), email_f, cx)))
+                                    .child(div().flex_1().child(text_field("", self.email.clone(), email_f, false, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child("Phone"))
-                                    .child(div().flex_1().child(text_field("", self.phone.clone(), phone_f, cx)))
+                                    .child(div().flex_1().child(text_field("", self.phone.clone(), phone_f, false, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_start().py(px(10.))
                                     .child(div().w(px(160.)).pt(px(6.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child("Notes"))
-                                    .child(div().flex_1().h(px(64.)).child(text_field("", self.notes.clone(), notes_f, cx)))
+                                    .child(div().flex_1().h(px(64.)).child(text_field("", self.notes.clone(), notes_f, false, cx)))
                             )
                             .child(
                                 div().h(px(18.)).flex().items_center()
@@ -255,7 +262,11 @@ impl Render for SupplierForm {
                                     .cursor_pointer()
                                     .when(cancel_f, |d| d.border_2().border_color(rgb(c.surface_active)))
                                     .when(!cancel_f, |d| d.border_1().border_color(rgb(c.surface_default)))
-                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| cx.emit(SupplierFormEvent::Cancelled)))
+                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, window, cx| {
+                                        let root = cx.global::<vassl_ui::RootFocusHandle>().0.clone();
+                                        window.focus(&root, cx);
+                                        cx.emit(SupplierFormEvent::Cancelled);
+                                    }))
                                     .child("Cancel")
                             )
                             .child(

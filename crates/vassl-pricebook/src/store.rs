@@ -27,6 +27,7 @@ pub struct PriceBookStore {
     pub loading:             bool,
     pub context_menu:        Option<ContextMenuTarget>,
     pub search_query:        String,
+    pub edit_target:         Option<vassl_core::PriceEntry>,
 }
 
 pub struct PriceBookStoreHandle(pub Entity<PriceBookStore>);
@@ -49,6 +50,7 @@ impl PriceBookStore {
             loading:             false,
             context_menu:        None,
             search_query:        String::new(),
+            edit_target:         None,
         }
     }
 
@@ -108,6 +110,37 @@ impl PriceBookStore {
             });
         })
         .detach();
+    }
+
+    pub fn delete_price_entry(&mut self, entry_id: i64, product_id: i64, cx: &mut Context<Self>) {
+        let db = PriceBookDb::global(&**cx);
+        cx.spawn(async move |this, cx| {
+            let result = db.delete_price_entry(entry_id).await;
+            let _ = this.update(cx, |store, cx| {
+                match result {
+                    Ok(_) => {
+                        store.history.retain(|e| e.id != entry_id);
+                        if let Some(pp) = store.product_prices.iter_mut().find(|pp| pp.product_id == product_id) {
+                            if pp.latest.as_ref().map(|e| e.id) == Some(entry_id) {
+                                pp.latest = store.history.first().cloned();
+                            }
+                        }
+                        cx.notify();
+                    }
+                    Err(e) => tracing::error!("delete_price_entry failed: {e:?}"),
+                }
+            });
+        }).detach();
+    }
+
+    pub fn set_edit_target(&mut self, entry: vassl_core::PriceEntry, cx: &mut Context<Self>) {
+        self.edit_target = Some(entry);
+        cx.notify();
+    }
+
+    pub fn clear_edit_target(&mut self, cx: &mut Context<Self>) {
+        self.edit_target = None;
+        cx.notify();
     }
 
     pub fn set_context_menu(&mut self, target: ContextMenuTarget, cx: &mut Context<Self>) {
@@ -189,6 +222,7 @@ mod tests {
             loading: false,
             context_menu: None,
             search_query: String::new(),
+            edit_target: None,
         };
         assert_eq!(store.filtered_product_prices().len(), 2);
     }
@@ -205,6 +239,7 @@ mod tests {
             loading: false,
             context_menu: None,
             search_query: "camera".into(),
+            edit_target: None,
         };
         let results = store.filtered_product_prices();
         assert_eq!(results.len(), 1);
@@ -222,6 +257,7 @@ mod tests {
             loading: false,
             context_menu: None,
             search_query: "cam-".into(),
+            edit_target: None,
         };
         assert_eq!(store.filtered_product_prices().len(), 1);
     }

@@ -1,7 +1,7 @@
 use gpui::{Context, Entity, EventEmitter, IntoElement, MouseButton, MouseDownEvent,
            Render, Subscription, Window, div, prelude::*, px, rems, rgb};
 use vassl_inventory::InventoryStoreHandle;
-use vassl_ui::{TextInput, ThemeHandle, text_field, tooltip};
+use vassl_ui::{AppSettings, TextInput, ThemeHandle, text_field, tooltip};
 
 use crate::price_form::{PriceEntryForm, PriceFormEvent};
 use crate::price_table::PriceTable;
@@ -79,6 +79,40 @@ impl PriceBookPanel {
         if let Some(fh) = self.create_form(cx) {
             window.focus(&fh, cx);
         }
+    }
+
+    pub fn open_edit_form_for(&mut self, product_id: i64, name: String, entry: vassl_core::PriceEntry, cx: &mut Context<Self>) {
+        if self.form.is_some() { return; }
+        let inv_store = cx.global::<InventoryStoreHandle>().0.read(cx);
+        let current_stock = inv_store.products.iter()
+            .find(|p| p.product.id == product_id)
+            .map(|p| p.current_stock)
+            .unwrap_or(0.0);
+        let duty_percent = inv_store.products.iter()
+            .find(|p| p.product.id == product_id)
+            .map(|p| p.product.duty_percent)
+            .unwrap_or_else(|| {
+                self.store.read(cx).product_prices.iter()
+                    .find(|pp| pp.product_id == product_id)
+                    .map(|pp| pp.duty_percent)
+                    .unwrap_or(0.0)
+            });
+        let _ = inv_store;
+        let form = cx.new(|cx| crate::price_form::PriceEntryForm::edit_for(
+            self.store.clone(), product_id, name, current_stock, duty_percent, entry, cx,
+        ));
+        let sub = cx.subscribe(&form, |this, _form, ev: &crate::price_form::PriceFormEvent, cx| {
+            match ev {
+                crate::price_form::PriceFormEvent::Submitted | crate::price_form::PriceFormEvent::Cancelled => {
+                    this._form_sub = None;
+                    this.form      = None;
+                    cx.notify();
+                }
+            }
+        });
+        self.form      = Some(form);
+        self._form_sub = Some(sub);
+        cx.notify();
     }
 
     pub fn open_form_for(&mut self, product_id: i64, name: String, cx: &mut Context<Self>) {
@@ -228,7 +262,7 @@ impl Render for PriceBookPanel {
                                     .w(px(160.))
                                     .child({
                                         let focused = self.search_input.read(cx).focus_handle.is_focused(window);
-                                        text_field("", self.search_input.clone(), focused, cx)
+                                        text_field("", self.search_input.clone(), focused, false, cx)
                                     })
                             )
                             .child({
@@ -274,8 +308,15 @@ impl Render for PriceBookPanel {
         }
 
         // Context menu overlay
+        let allow_delete     = cx.global::<AppSettings>().allow_delete;
+        let allow_price_edit = cx.global::<AppSettings>().allow_price_edit;
         let ctx_menu = self.store.read(cx).context_menu.clone();
         if let Some(target) = ctx_menu {
+            let viewport = window.viewport_size();
+            const MENU_W: f32 = 220.0;
+            const MENU_H: f32 = 260.0;
+            let menu_x = target.x.min((viewport.width.as_f32()  - MENU_W).max(0.0));
+            let menu_y = target.y.min((viewport.height.as_f32() - MENU_H).max(0.0));
             let info_line = {
                 let store = self.store.read(cx);
                 store.product_prices
@@ -295,6 +336,14 @@ impl Render for PriceBookPanel {
 
             let pid  = target.product_id;
             let name = target.product_name.clone();
+            let latest_entry = {
+                let store = self.store.read(cx);
+                store.product_prices.iter()
+                    .find(|pp| pp.product_id == pid)
+                    .and_then(|pp| pp.latest.clone())
+            };
+            let has_latest = latest_entry.is_some();
+            let product_name_clone = name.clone();
 
             root = root
                 .child(
@@ -310,8 +359,8 @@ impl Render for PriceBookPanel {
                 .child(
                     div()
                         .absolute()
-                        .left(px(target.x))
-                        .top(px(target.y))
+                        .left(px(menu_x))
+                        .top(px(menu_y))
                         .w(px(220.))
                         .bg(rgb(c.surface_default))
                         .rounded(px(6.))
@@ -356,6 +405,7 @@ impl Render for PriceBookPanel {
                         })
                         .child({
                             let hover_bg = rgb(c.surface_hover);
+                            let name_for_add = name.clone();
                             div()
                                 .id("ctx-pb-add-price")
                                 .px(px(12.)).py(px(8.))
@@ -368,12 +418,65 @@ impl Render for PriceBookPanel {
                                     MouseButton::Left,
                                     cx.listener(move |this, _: &MouseDownEvent, window: &mut Window, cx| {
                                         this.store.update(cx, |s, cx| s.clear_context_menu(cx));
-                                        this.open_form_for(pid, name.clone(), cx);
+                                        this.open_form_for(pid, name_for_add.clone(), cx);
                                         if let Some(form) = &this.form {
                                             let first = form.read(cx).cost.read(cx).focus_handle.clone();
                                             window.focus(&first, cx);
                                         }
                                     }),
+                                )
+                        })
+                        .when(allow_price_edit && has_latest, |menu| {
+                            let hover_bg    = rgb(c.surface_hover);
+                            let entry       = latest_entry.clone();
+                            let pname_clone = product_name_clone.clone();
+                            menu.child(div().h(px(1.)).bg(rgb(c.surface_default)))
+                                .child(
+                                    div()
+                                        .id("ctx-pb-edit-price")
+                                        .px(px(12.)).py(px(8.))
+                                        .cursor_pointer()
+                                        .hover(move |s| s.bg(hover_bg))
+                                        .text_size(rems(1.))
+                                        .text_color(rgb(c.text_default))
+                                        .child("Edit Latest Price Entry")
+                                        .on_mouse_down(
+                                            MouseButton::Left,
+                                            cx.listener(move |this, _: &MouseDownEvent, window: &mut Window, cx| {
+                                                this.store.update(cx, |s, cx| s.clear_context_menu(cx));
+                                                if let Some(entry) = entry.clone() {
+                                                    this.open_edit_form_for(pid, pname_clone.clone(), entry, cx);
+                                                    if let Some(form) = &this.form {
+                                                        let first = form.read(cx).cost.read(cx).focus_handle.clone();
+                                                        window.focus(&first, cx);
+                                                    }
+                                                }
+                                            }),
+                                        )
+                                )
+                        })
+                        .when(allow_delete && has_latest, |menu| {
+                            let hover_bg = rgb(c.surface_hover);
+                            let entry_id = latest_entry.as_ref().map(|e| e.id).unwrap_or(0);
+                            menu.child(div().h(px(1.)).bg(rgb(c.surface_default)))
+                                .child(
+                                    div()
+                                        .id("ctx-pb-delete-price")
+                                        .px(px(12.)).py(px(8.))
+                                        .cursor_pointer()
+                                        .hover(move |s| s.bg(hover_bg))
+                                        .text_size(rems(1.))
+                                        .text_color(rgb(c.status_red))
+                                        .child("Delete Latest Price Entry")
+                                        .on_mouse_down(
+                                            MouseButton::Left,
+                                            cx.listener(move |this, _: &MouseDownEvent, _: &mut Window, cx| {
+                                                this.store.update(cx, |s, cx| {
+                                                    s.clear_context_menu(cx);
+                                                    s.delete_price_entry(entry_id, pid, cx);
+                                                });
+                                            }),
+                                        )
                                 )
                         })
                 );

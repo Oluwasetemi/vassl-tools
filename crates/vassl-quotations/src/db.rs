@@ -99,8 +99,11 @@ fn status_to_str(s: &QuotationStatus) -> &'static str {
 
 impl QuotationDb {
     pub fn next_reference_number(&self) -> anyhow::Result<String> {
-        let year    = chrono::Utc::now().format("%Y").to_string();
-        let pattern = format!("VASSL-{year}-%");
+        let year   = chrono::Utc::now().format("%Y").to_string();
+        let prefix = vassl_db::shared::get_setting(self, "quotations.prefix")
+            .ok().flatten()
+            .unwrap_or_else(|| "VASSL".to_string());
+        let pattern = format!("{prefix}-{year}-%");
         let count: i64 = self
             .select_row_bound::<String, Option<i64>>(
                 "SELECT COUNT(*) FROM quotations WHERE reference_number LIKE ?1",
@@ -110,7 +113,7 @@ impl QuotationDb {
             .context("execute count")?
             .flatten()
             .unwrap_or(0);
-        Ok(format!("VASSL-{year}-{:04}", count + 1))
+        Ok(format!("{prefix}-{year}-{:04}", count + 1))
     }
 
     pub fn list_quotations_with_project(&self) -> anyhow::Result<Vec<QuotationRow>> {
@@ -412,6 +415,34 @@ impl QuotationDb {
             Ok(())
         })
         .await
+    }
+
+    pub async fn delete_quotation(&self, id: i64) -> anyhow::Result<()> {
+        self.write(move |conn| {
+            conn.exec_bound::<i64>("DELETE FROM quotation_items WHERE quotation_id = ?1")
+                .context("prepare delete quotation_items")?
+                (id).context("execute delete quotation_items")?;
+            conn.exec_bound::<i64>("DELETE FROM quotations WHERE id = ?1")
+                .context("prepare delete quotation")?
+                (id).context("execute delete quotation")?;
+            Ok(())
+        }).await
+    }
+
+    pub async fn delete_project(&self, id: i64) -> anyhow::Result<()> {
+        self.write(move |conn| {
+            conn.exec_bound::<i64>(
+                "DELETE FROM quotation_items WHERE quotation_id IN (SELECT id FROM quotations WHERE project_id = ?1)"
+            ).context("prepare cascade delete items")?
+            (id).context("execute cascade delete items")?;
+            conn.exec_bound::<i64>("DELETE FROM quotations WHERE project_id = ?1")
+                .context("prepare delete quotations")?
+                (id).context("execute delete quotations")?;
+            conn.exec_bound::<i64>("DELETE FROM projects WHERE id = ?1")
+                .context("prepare delete project")?
+                (id).context("execute delete project")?;
+            Ok(())
+        }).await
     }
 
     /// Deletes a line item. If the parent quotation is accepted and the item had a product,

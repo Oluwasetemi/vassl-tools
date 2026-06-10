@@ -1,4 +1,4 @@
-use gpui::Global;
+use gpui::{FocusHandle, Global};
 
 #[derive(Clone, Debug)]
 pub struct ThemeColors {
@@ -9,11 +9,31 @@ pub struct ThemeColors {
     pub surface_active:  u32,
     pub text_default:    u32,
     pub text_muted:      u32,
+    /// Text colour to use when rendered ON a `surface_active` background.
+    /// Light mode needs white here; dark mode matches `text_default`.
+    pub text_on_active:  u32,
     pub status_green:    u32,
     pub status_amber:    u32,
     pub status_red:      u32,
     pub status_grey:     u32,
     pub font_family:     String,
+}
+
+/// Holds the root window's focus handle so any nested form can restore focus
+/// after dismissal without threading the handle through constructors.
+pub struct RootFocusHandle(pub FocusHandle);
+impl Global for RootFocusHandle {}
+
+#[derive(Clone, Debug)]
+pub struct AppSettings {
+    pub allow_delete:     bool,
+    pub allow_price_edit: bool,
+}
+
+impl gpui::Global for AppSettings {}
+
+impl Default for AppSettings {
+    fn default() -> Self { Self { allow_delete: false, allow_price_edit: false } }
 }
 
 impl ThemeColors {
@@ -26,6 +46,7 @@ impl ThemeColors {
             surface_active:  0x1a3c5e,
             text_default:    0xcdd6f4,
             text_muted:      0x6c7086,
+            text_on_active:  0xcdd6f4, // light text on dark-blue active bg
             status_green:    0xa6e3a1,
             status_amber:    0xf9e2af,
             status_red:      0xf38ba8,
@@ -41,8 +62,11 @@ impl ThemeColors {
             surface_default: 0xccd0da,
             surface_hover:   0xbec2cc,
             surface_active:  0x1e66f5,
-            text_default:    0x4c4f69,
-            text_muted:      0x8c8fa1,
+            // Darkened for WCAG AA compliance on all light surfaces (~13:1 on canvas)
+            text_default:    0x232634,
+            // Darkened: 0x8c8fa1 gave ~2:1 on surfaces; 0x5c5f77 gives ~5:1 on canvas
+            text_muted:      0x5c5f77,
+            text_on_active:  0xffffff, // white on vivid-blue active bg
             status_green:    0x40a02b,
             status_amber:    0xdf8e1d,
             status_red:      0xd20f39,

@@ -481,10 +481,11 @@ pub fn text_field(
     label:   &str,
     input:   gpui::Entity<TextInput>,
     focused: bool,
+    error:   bool,
     cx:      &gpui::App,
 ) -> impl IntoElement {
     let c            = cx.global::<ThemeHandle>().0.clone();
-    let border_color = if focused { c.surface_active } else { c.surface_default };
+    let border_color = if error { c.status_red } else if focused { c.surface_active } else { c.surface_default };
     let field_bg     = if focused { c.canvas_bg } else { c.surface_default };
     gpui::div().flex().flex_col().gap(px(4.))
         .when(!label.is_empty(), |d| {
@@ -500,8 +501,8 @@ pub fn text_field(
                 .px(px(8.)).py(px(4.))
                 .bg(gpui::rgb(field_bg))
                 .rounded(px(4.))
-                .when(focused, |d| d.border_2())
-                .when(!focused, |d| d.border_1())
+                .when(focused || error, |d| d.border_2())
+                .when(!focused && !error, |d| d.border_1())
                 .border_color(gpui::rgb(border_color))
                 .text_size(rems(1.))
                 .text_color(gpui::rgb(c.text_default))

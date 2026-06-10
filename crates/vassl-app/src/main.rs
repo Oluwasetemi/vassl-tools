@@ -7,6 +7,7 @@
 
 mod about_dialog;
 mod actions;
+mod changelog;
 mod assets;
 mod auto_update;
 mod app;

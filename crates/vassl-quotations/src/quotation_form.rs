@@ -62,14 +62,23 @@ impl QuotationForm {
             this.project_dropdown.update(cx, |d, cx| d.set_items(items, loading, cx));
         });
 
+        let db = vassl_db::AppDatabase::global(&**cx);
+        let rate_default  = vassl_db::shared::get_setting(db, "pricebook.usd_to_jmd_rate").ok().flatten().unwrap_or_else(|| "156.00".into());
+        let gct_default   = vassl_db::shared::get_setting(db, "quotations.tax_rate").ok().flatten().unwrap_or_else(|| "15.0".into());
+        let notes_default = vassl_db::shared::get_setting(db, "quotations.notes_template").ok().flatten().unwrap_or_default();
+
         Self {
             store,
             reference_number,
             project_dropdown,
-            notes:            cx.new(|cx| TextInput::with_placeholder("optional", cx)),
-            exchange_rate:    cx.new(|cx| TextInput::with_text("156.00", cx)),
+            notes:            cx.new(move |cx| {
+                let mut f = TextInput::with_placeholder("optional", cx);
+                if !notes_default.is_empty() { f.set_text(&notes_default, cx); }
+                f
+            }),
+            exchange_rate:    cx.new(move |cx| TextInput::with_text(&rate_default, cx)),
             discount_percent: cx.new(|cx| TextInput::with_text("0.0", cx)),
-            gct_percent:      cx.new(|cx| TextInput::with_text("15.0", cx)),
+            gct_percent:      cx.new(move |cx| TextInput::with_text(&gct_default, cx)),
             validity_days:    cx.new(|cx| TextInput::with_text("30", cx)),
             cancel_focus:     cx.focus_handle(),
             save_focus:       cx.focus_handle(),
@@ -146,7 +155,9 @@ impl Render for QuotationForm {
             .flex().items_center().justify_center()
             .bg(rgba(0x00000099))
             .key_context("QuotationForm")
-            .on_action(cx.listener(|_, _: &EscapeForm, _, cx| {
+            .on_action(cx.listener(|_, _: &EscapeForm, window, cx| {
+                let root = cx.global::<vassl_ui::RootFocusHandle>().0.clone();
+                window.focus(&root, cx);
                 cx.emit(QuotationFormEvent::Cancelled);
             }))
             .on_action(cx.listener(|this, _: &TabField, window, cx| {
@@ -225,12 +236,12 @@ impl Render for QuotationForm {
                                     .child(
                                         div().flex().flex_row().items_center().flex_1()
                                             .child(label_col("Rate (JMD/USD)", &c))
-                                            .child(div().flex_1().child(text_field("", self.exchange_rate.clone(), rate_f, cx)))
+                                            .child(div().flex_1().child(text_field("", self.exchange_rate.clone(), rate_f, false, cx)))
                                     )
                                     .child(
                                         div().flex().flex_row().items_center().flex_1()
                                             .child(label_col("Discount %", &c))
-                                            .child(div().flex_1().child(text_field("", self.discount_percent.clone(), disc_f, cx)))
+                                            .child(div().flex_1().child(text_field("", self.discount_percent.clone(), disc_f, false, cx)))
                                     )
                             )
                             .child(divider(&c))
@@ -240,12 +251,12 @@ impl Render for QuotationForm {
                                     .child(
                                         div().flex().flex_row().items_center().flex_1()
                                             .child(label_col("GCT %", &c))
-                                            .child(div().flex_1().child(text_field("", self.gct_percent.clone(), gct_f, cx)))
+                                            .child(div().flex_1().child(text_field("", self.gct_percent.clone(), gct_f, false, cx)))
                                     )
                                     .child(
                                         div().flex().flex_row().items_center().flex_1()
                                             .child(label_col("Valid (days)", &c))
-                                            .child(div().flex_1().child(text_field("", self.validity_days.clone(), days_f, cx)))
+                                            .child(div().flex_1().child(text_field("", self.validity_days.clone(), days_f, false, cx)))
                                     )
                             )
                             .child(divider(&c))
@@ -253,7 +264,7 @@ impl Render for QuotationForm {
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(label_col("Notes", &c))
-                                    .child(div().flex_1().child(text_field("", self.notes.clone(), notes_f, cx)))
+                                    .child(div().flex_1().child(text_field("", self.notes.clone(), notes_f, false, cx)))
                             )
                             .child(
                                 div().h(px(18.)).flex().items_center()
@@ -276,7 +287,11 @@ impl Render for QuotationForm {
                                     .cursor_pointer()
                                     .when(cancel_f, |d| d.border_2().border_color(rgb(c.surface_active)))
                                     .when(!cancel_f, |d| d.border_1().border_color(rgb(c.surface_default)))
-                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| { cx.emit(QuotationFormEvent::Cancelled); }))
+                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, window, cx| {
+                                        let root = cx.global::<vassl_ui::RootFocusHandle>().0.clone();
+                                        window.focus(&root, cx);
+                                        cx.emit(QuotationFormEvent::Cancelled);
+                                    }))
                                     .child("Cancel")
                             )
                             .child(

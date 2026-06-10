@@ -26,6 +26,9 @@ pub struct LineItemForm {
     cancel_focus:     FocusHandle,
     save_focus:       FocusHandle,
     error:            Option<String>,
+    desc_error:       bool,
+    qty_error:        bool,
+    price_error:      bool,
     focus_handle:     FocusHandle,
 }
 
@@ -74,6 +77,9 @@ impl LineItemForm {
             cancel_focus:     cx.focus_handle(),
             save_focus:       cx.focus_handle(),
             error:            None,
+            desc_error:       false,
+            qty_error:        false,
+            price_error:      false,
             focus_handle:     cx.focus_handle(),
         }
     }
@@ -91,6 +97,9 @@ impl LineItemForm {
         let disc_s = self.discount_percent.read(cx).text().to_string();
         let unit_s = self.unit.read(cx).text().trim().to_string();
         let unit   = if unit_s.is_empty() { None } else { Some(unit_s) };
+        self.desc_error  = desc.trim().is_empty();
+        self.qty_error   = qty_s.trim().parse::<f64>().map_or(true, |v| v <= 0.0);
+        self.price_error = up_s.trim().parse::<f64>().map_or(true, |v| v < 0.0);
         match validate_line_item(&desc, &qty_s, &up_s, &disc_s) {
             Err(msg) => { self.error = Some(msg); cx.notify(); }
             Ok((description, quantity, unit_price, disc, total)) => {
@@ -141,7 +150,9 @@ impl Render for LineItemForm {
             .flex().items_center().justify_center()
             .bg(rgba(0x00000099))
             .key_context("LineItemForm")
-            .on_action(cx.listener(|_, _: &EscapeForm, _, cx| {
+            .on_action(cx.listener(|_, _: &EscapeForm, window, cx| {
+                let root = cx.global::<vassl_ui::RootFocusHandle>().0.clone();
+                window.focus(&root, cx);
                 cx.emit(LineItemFormEvent::Cancelled);
             }))
             .on_action(cx.listener(|this, _: &TabField, window, cx| {
@@ -235,31 +246,31 @@ impl Render for LineItemForm {
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Description"))
-                                    .child(div().flex_1().child(text_field("", self.description.clone(), desc_focused, cx)))
+                                    .child(div().flex_1().child(text_field("", self.description.clone(), desc_focused, self.desc_error, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Quantity"))
-                                    .child(div().flex_1().child(text_field("", self.quantity.clone(), qty_focused, cx)))
+                                    .child(div().flex_1().child(text_field("", self.quantity.clone(), qty_focused, self.qty_error, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Unit"))
-                                    .child(div().flex_1().child(text_field("", self.unit.clone(), unit_focused, cx)))
+                                    .child(div().flex_1().child(text_field("", self.unit.clone(), unit_focused, false, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Unit Price (USD)"))
-                                    .child(div().flex_1().child(text_field("", self.unit_price.clone(), up_focused, cx)))
+                                    .child(div().flex_1().child(text_field("", self.unit_price.clone(), up_focused, self.price_error, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Discount %"))
-                                    .child(div().flex_1().child(text_field("", self.discount_percent.clone(), disc_focused, cx)))
+                                    .child(div().flex_1().child(text_field("", self.discount_percent.clone(), disc_focused, false, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
@@ -290,7 +301,11 @@ impl Render for LineItemForm {
                                     .cursor_pointer()
                                     .when(cancel_f, |d| d.border_2().border_color(rgb(c.surface_active)))
                                     .when(!cancel_f, |d| d.border_1().border_color(rgb(c.surface_default)))
-                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| { cx.emit(LineItemFormEvent::Cancelled); }))
+                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, window, cx| {
+                                        let root = cx.global::<vassl_ui::RootFocusHandle>().0.clone();
+                                        window.focus(&root, cx);
+                                        cx.emit(LineItemFormEvent::Cancelled);
+                                    }))
                                     .child("Cancel")
                             )
                             .child(

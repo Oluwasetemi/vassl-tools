@@ -7,7 +7,7 @@ pub mod tooltip;
 pub use dropdown::{Dropdown, DropdownEvent, DropdownItem, format_selected_label};
 pub use scrollbar::{ScrollDragState, ScrollbarGeometry, scrollbar_geometry};
 pub use text_input::{TextElement, TextInput, text_field};
-pub use theme::{ThemeColors, ThemeHandle};
+pub use theme::{ThemeColors, ThemeHandle, RootFocusHandle, AppSettings};
 pub use tooltip::{tooltip, tooltip_keyed};
 
 gpui::actions!(vassl_ui, [NewRecord]);

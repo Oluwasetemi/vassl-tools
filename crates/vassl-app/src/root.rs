@@ -4,13 +4,14 @@ use gpui::{Context, Entity, FocusHandle, Focusable, IntoElement, PathPromptOptio
 use gpui::{MouseButton, MouseDownEvent, OwnedMenuItem, deferred, rems};
 #[cfg(not(target_os = "macos"))]
 use vassl_ui::tooltip;
-use vassl_ui::{ThemeColors, ThemeHandle};
+use vassl_ui::{ThemeColors, ThemeHandle, RootFocusHandle};
 
 use crate::about_dialog::{AboutDialog, AboutEvent};
 use crate::actions::{About, CheckForUpdates, DecreaseFontSize, EscapeModal, FocusSearch,
-                     IncreaseFontSize, InstallUpdate, Minimize, OpenAuditLog, OpenGlobalSearch,
-                     OpenInventory, OpenPriceBook, OpenQuotations, OpenSuppliers, OpenSettings,
-                     SelectNext, SelectPrev, Zoom};
+                     IncreaseFontSize, InstallUpdate, Minimize, OpenAuditLog, OpenChangelog,
+                     OpenGlobalSearch, OpenInventory, OpenPriceBook, OpenQuotations, OpenSuppliers,
+                     OpenSettings, SelectNext, SelectPrev, Zoom};
+use crate::changelog::ChangelogPanel;
 use crate::auto_update::{AutoUpdateEvent, AutoUpdater, UpdateStatus};
 use vassl_ui::NewRecord;
 use crate::global_search::{GlobalSearch, GlobalSearchEvent, SearchResultKind};
@@ -46,6 +47,7 @@ pub struct VasslRoot {
     _global_search_sub:    Option<Subscription>,
     about_dialog:          Option<Entity<AboutDialog>>,
     _about_sub:            Option<Subscription>,
+    changelog_panel:       Option<Entity<ChangelogPanel>>,
     updater:               Entity<AutoUpdater>,
     _updater_sub:          Subscription,
     _inventory_panel_sub:  Subscription,
@@ -79,6 +81,14 @@ impl VasslRoot {
                     FirstRunEvent::Saved => {
                         this._first_run_sub = None;
                         this.first_run      = None;
+                        // Reload username into the already-constructed SettingsPanel,
+                        // which was built before the first-run form saved its value.
+                        let db   = vassl_db::AppDatabase::global(&**cx);
+                        let name = vassl_db::shared::current_user(db)
+                            .ok().flatten()
+                            .unwrap_or_default();
+                        let input = this.settings_panel.read(cx).user_name.clone();
+                        input.update(cx, |inp, cx| inp.set_text(name, cx));
                         cx.notify();
                     }
                 }
@@ -114,9 +124,26 @@ impl VasslRoot {
         // Give the root focus on startup so Cmd+F and other app-level shortcuts
         // fire immediately without requiring the user to click a text field first.
         window.focus(&focus_handle, cx);
+        // Publish the root focus handle as a global so any form can restore focus
+        // after dismissal without threading the handle through every constructor.
+        cx.set_global(RootFocusHandle(focus_handle.clone()));
 
         let settings_panel   = cx.new(SettingsPanel::new);
         settings_panel.update(cx, |panel, cx| panel.wire_observers(cx));
+        {
+            let sp = settings_panel.read(cx);
+            cx.set_global(vassl_ui::AppSettings {
+                allow_delete:     sp.allow_delete,
+                allow_price_edit: sp.allow_price_edit,
+            });
+        }
+        cx.observe(&settings_panel, |_, settings_entity, cx| {
+            let sp = settings_entity.read(cx);
+            cx.set_global(vassl_ui::AppSettings {
+                allow_delete:     sp.allow_delete,
+                allow_price_edit: sp.allow_price_edit,
+            });
+        }).detach();
         let _settings_panel_sub = cx.subscribe(
             &settings_panel,
             |_this, panel, ev: &SettingsPanelEvent, cx| {
@@ -247,6 +274,7 @@ impl VasslRoot {
             _global_search_sub:   None,
             about_dialog:         None,
             _about_sub:           None,
+            changelog_panel:      None,
             updater,
             _updater_sub,
             _inventory_panel_sub,
@@ -621,6 +649,14 @@ impl Render for VasslRoot {
             .on_action(cx.listener(|this, _: &About, _w, cx| {
                 this.open_about(cx);
             }))
+            .on_action(cx.listener(|this, _: &OpenChangelog, _w, cx| {
+                if this.changelog_panel.is_some() {
+                    this.changelog_panel = None;
+                } else {
+                    this.changelog_panel = Some(cx.new(ChangelogPanel::new));
+                }
+                cx.notify();
+            }))
             .on_action(cx.listener(|this, _: &CheckForUpdates, _, cx| {
                 this.updater.update(cx, |u, cx| u.check(cx));
             }))
@@ -653,7 +689,11 @@ impl Render for VasslRoot {
                 }
             }))
             .on_action(cx.listener(|this, _: &EscapeModal, w, cx| {
-                if this.about_dialog.is_some() {
+                if this.changelog_panel.is_some() {
+                    this.changelog_panel = None;
+                    w.focus(&this.focus_handle, cx);
+                    cx.notify();
+                } else if this.about_dialog.is_some() {
                     this._about_sub   = None;
                     this.about_dialog = None;
                     w.focus(&this.focus_handle, cx);
@@ -705,6 +745,11 @@ impl Render for VasslRoot {
             .font_family(gpui::SharedString::from(c.font_family.clone()))
             .bg(rgb(c.canvas_bg));
 
+        // On Windows with appears_transparent=true the DWM resize border occupies
+        // the top ~8 px of the client area, pushing rendered content out of frame.
+        #[cfg(target_os = "windows")]
+        let root = root.pt(px(8.));
+
         // Windows/Linux: render menus as a custom bar; macOS uses the native system menu bar.
         #[cfg(not(target_os = "macos"))]
         let mut root = root.child(self.render_menu_bar(_window, cx));
@@ -750,6 +795,9 @@ impl Render for VasslRoot {
         }
         if let Some(about) = &self.about_dialog {
             root = root.child(about.clone());
+        }
+        if let Some(changelog) = &self.changelog_panel {
+            root = root.child(changelog.clone());
         }
 
         root

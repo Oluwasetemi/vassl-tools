@@ -118,6 +118,51 @@ impl PriceBookDb {
         })
     }
 
+    pub async fn delete_price_entry(&self, id: i64) -> anyhow::Result<()> {
+        self.write(move |conn| {
+            conn.exec_bound::<i64>("DELETE FROM price_book_entries WHERE id = ?1")
+                .context("prepare delete price_book_entries")?
+                (id)
+                .context("execute delete price_book_entries")?;
+            let changed_by = current_user(conn).ok().flatten().unwrap_or_else(|| "system".into());
+            if let Err(e) = log_audit(conn, "price_book_entries", id, "DELETE", &changed_by, None, None) {
+                tracing::warn!("audit log failed for delete_price_entry: {e:?}");
+            }
+            Ok(())
+        }).await
+    }
+
+    pub async fn update_price_entry(
+        &self,
+        id:                i64,
+        quantity:          f64,
+        cost_price_usd:    f64,
+        duty_cost_usd:     f64,
+        markup_percent:    f64,
+        selling_price_usd: f64,
+        notes:             Option<&str>,
+        currency:          &str,
+    ) -> anyhow::Result<()> {
+        let notes    = notes.map(String::from);
+        let currency = currency.to_string();
+        self.write(move |conn| {
+            conn.exec_bound::<(f64, f64, f64, f64, f64, Option<String>, String, i64)>(
+                "UPDATE price_book_entries
+                 SET quantity=?1, cost_price_usd=?2, duty_cost_usd=?3,
+                     markup_percent=?4, selling_price_usd=?5, notes=?6, currency=?7
+                 WHERE id=?8",
+            )
+            .context("prepare update_price_entry")?
+            ((quantity, cost_price_usd, duty_cost_usd, markup_percent, selling_price_usd, notes, currency, id))
+            .context("execute update_price_entry")?;
+            let changed_by = current_user(conn).ok().flatten().unwrap_or_else(|| "system".into());
+            if let Err(e) = log_audit(conn, "price_book_entries", id, "UPDATE", &changed_by, None, None) {
+                tracing::warn!("audit log failed for update_price_entry: {e:?}");
+            }
+            Ok(())
+        }).await
+    }
+
     pub async fn insert_entry(
         &self,
         product_id:        i64,

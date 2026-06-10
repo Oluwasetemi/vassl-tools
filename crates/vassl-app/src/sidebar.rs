@@ -41,7 +41,7 @@ impl Render for Sidebar {
                         key:     Option<&'static str>| {
             let is_active = active == module;
             let bg        = if is_active { rgb(c.surface_active) } else { rgb(c.surface_default) };
-            let fg        = if is_active { rgb(c.text_default)   } else { rgb(c.text_muted) };
+            let fg        = if is_active { rgb(c.text_on_active) } else { rgb(c.text_muted) };
             let hover_bg  = rgb(c.surface_hover);
 
             let btn = div()

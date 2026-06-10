@@ -163,6 +163,9 @@ fn quotation_row(q: &QuotationRow, selected: bool, store: Entity<QuotationStore>
         // Project + client
         .child(
             div().flex_1().text_size(rems(0.923)).text_color(rgb(c.text_muted))
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
                 .child(format!("{} / {}", q.project_name, q.client_name))
         )
         // Total

@@ -77,6 +77,20 @@ impl SupplierDb {
         .await
     }
 
+    pub async fn delete_supplier(&self, id: i64) -> anyhow::Result<()> {
+        self.write(move |conn| {
+            conn.exec_bound::<i64>("DELETE FROM suppliers WHERE id = ?1")
+                .context("prepare delete supplier")?
+                (id)
+                .context("execute delete supplier")?;
+            let changed_by = current_user(conn).ok().flatten().unwrap_or_else(|| "system".into());
+            if let Err(e) = log_audit(conn, "suppliers", id, "DELETE", &changed_by, None, None) {
+                tracing::warn!("audit log failed for delete_supplier: {e:?}");
+            }
+            Ok(())
+        }).await
+    }
+
     pub async fn update_supplier(
         &self,
         id:             i64,

@@ -236,6 +236,36 @@ impl InventoryDb {
         .await
     }
 
+    /// Delete a product and all dependent rows across domains.
+    pub async fn delete_product(&self, id: i64) -> anyhow::Result<()> {
+        self.write(move |conn| {
+            // NULL-out the product_id on quotation items (soft reference — keep the line item)
+            conn.exec_bound::<i64>("UPDATE quotation_items SET product_id = NULL WHERE product_id = ?1")
+                .context("prepare nullify quotation_items")?
+                (id)
+                .context("execute nullify quotation_items")?;
+            // Remove price book entries that reference this product
+            conn.exec_bound::<i64>("DELETE FROM price_book_entries WHERE product_id = ?1")
+                .context("prepare delete price_book_entries")?
+                (id)
+                .context("execute delete price_book_entries")?;
+            // Remove stock entries
+            conn.exec_bound::<i64>("DELETE FROM stock_entries WHERE product_id = ?1")
+                .context("prepare delete stock_entries")?
+                (id)
+                .context("execute delete stock_entries")?;
+            conn.exec_bound::<i64>("DELETE FROM products WHERE id = ?1")
+                .context("prepare delete product")?
+                (id)
+                .context("execute delete product")?;
+            let changed_by = current_user(conn).ok().flatten().unwrap_or_else(|| "system".into());
+            if let Err(e) = log_audit(conn, "products", id, "DELETE", &changed_by, None, None) {
+                tracing::warn!("audit log failed for delete_product: {e:?}");
+            }
+            Ok(())
+        }).await
+    }
+
     /// Insert a new stock entry.
     pub async fn insert_stock_entry(
         &self,

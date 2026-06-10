@@ -24,6 +24,8 @@ pub struct StockEntryForm {
     cancel_focus:     FocusHandle,
     save_focus:       FocusHandle,
     error:            Option<String>,
+    qty_error:        bool,
+    cost_error:       bool,
     focus_handle:     FocusHandle,
 }
 
@@ -49,7 +51,9 @@ impl StockEntryForm {
             acquisition_type: AcquisitionType::Restock,
             cancel_focus: cx.focus_handle(),
             save_focus:   cx.focus_handle(),
-            error:       None,
+            error:        None,
+            qty_error:    false,
+            cost_error:   false,
             focus_handle: cx.focus_handle(),
         }
     }
@@ -61,6 +65,11 @@ impl StockEntryForm {
     }
 
     fn submit(&mut self, cx: &mut Context<Self>) {
+        let qty_str  = self.quantity.read(cx).text().to_string();
+        let cost_str = self.unit_cost.read(cx).text().to_string();
+        self.qty_error  = qty_str.trim().parse::<f64>().map_or(true, |v| v <= 0.0);
+        self.cost_error = cost_str.trim().parse::<f64>().map_or(true, |v| v < 0.0);
+
         match self.validate(cx) {
             Err(msg) => { self.error = Some(msg); cx.notify(); }
             Ok((qty, cost)) => {
@@ -111,7 +120,9 @@ impl Render for StockEntryForm {
             .flex().items_center().justify_center()
             .bg(rgba(0x00000099))
             .key_context("StockEntryForm")
-            .on_action(cx.listener(|_, _: &EscapeForm, _, cx| {
+            .on_action(cx.listener(|_, _: &EscapeForm, window, cx| {
+                let root = cx.global::<vassl_ui::RootFocusHandle>().0.clone();
+                window.focus(&root, cx);
                 cx.emit(StockFormEvent::Cancelled);
             }))
             .on_action(cx.listener(|this, _: &TabField, window, cx| {
@@ -164,19 +175,19 @@ impl Render for StockEntryForm {
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Quantity"))
-                                    .child(div().flex_1().child(text_field("", self.quantity.clone(), qty_focused, cx)))
+                                    .child(div().flex_1().child(text_field("", self.quantity.clone(), qty_focused, self.qty_error, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Unit Cost (USD)"))
-                                    .child(div().flex_1().child(text_field("", self.unit_cost.clone(), cost_focused, cx)))
+                                    .child(div().flex_1().child(text_field("", self.unit_cost.clone(), cost_focused, self.cost_error, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Invoice Ref"))
-                                    .child(div().flex_1().child(text_field("", self.invoice_ref.clone(), inv_focused, cx)))
+                                    .child(div().flex_1().child(text_field("", self.invoice_ref.clone(), inv_focused, false, cx)))
                             )
                             .child(
                                 div().h(px(18.)).flex().items_center()
@@ -199,7 +210,11 @@ impl Render for StockEntryForm {
                                     .cursor_pointer()
                                     .when(cancel_f, |d| d.border_2().border_color(rgb(c.surface_active)))
                                     .when(!cancel_f, |d| d.border_1().border_color(rgb(c.surface_default)))
-                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| { cx.emit(StockFormEvent::Cancelled); }))
+                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, window, cx| {
+                                        let root = cx.global::<vassl_ui::RootFocusHandle>().0.clone();
+                                        window.focus(&root, cx);
+                                        cx.emit(StockFormEvent::Cancelled);
+                                    }))
                                     .child("Cancel")
                             )
                             .child(

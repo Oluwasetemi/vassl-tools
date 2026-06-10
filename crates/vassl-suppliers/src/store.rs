@@ -2,11 +2,20 @@ use gpui::{Context, Entity, EventEmitter, Global};
 use vassl_core::Supplier;
 use crate::db::SupplierDb;
 
+#[derive(Debug, Clone)]
+pub struct ContextMenuTarget {
+    pub supplier_id:   i64,
+    pub supplier_name: String,
+    pub x:             f32,
+    pub y:             f32,
+}
+
 pub struct SupplierStore {
     pub suppliers:            Vec<Supplier>,
     pub selected_supplier_id: Option<i64>,
     pub loading:              bool,
     pub search_query:         String,
+    pub context_menu:         Option<ContextMenuTarget>,
 }
 
 pub struct SupplierStoreHandle(pub Entity<SupplierStore>);
@@ -18,7 +27,7 @@ impl EventEmitter<SupplierEvent> for SupplierStore {}
 
 impl SupplierStore {
     pub fn new(_cx: &mut Context<Self>) -> Self {
-        Self { suppliers: Vec::new(), selected_supplier_id: None, loading: false, search_query: String::new() }
+        Self { suppliers: Vec::new(), selected_supplier_id: None, loading: false, search_query: String::new(), context_menu: None }
     }
 
     pub fn load_suppliers(&mut self, cx: &mut Context<Self>) {
@@ -71,6 +80,35 @@ impl SupplierStore {
         Some(next)
     }
 
+    pub fn set_context_menu(&mut self, target: ContextMenuTarget, cx: &mut Context<Self>) {
+        self.context_menu = Some(target);
+        cx.notify();
+    }
+
+    pub fn clear_context_menu(&mut self, cx: &mut Context<Self>) {
+        self.context_menu = None;
+        cx.notify();
+    }
+
+    pub fn delete_supplier(&mut self, supplier_id: i64, cx: &mut Context<Self>) {
+        let db = SupplierDb::global(&**cx);
+        cx.spawn(async move |this, cx| {
+            let result = db.delete_supplier(supplier_id).await;
+            let _ = this.update(cx, |store, cx| {
+                match result {
+                    Ok(_) => {
+                        store.suppliers.retain(|s| s.id != supplier_id);
+                        if store.selected_supplier_id == Some(supplier_id) {
+                            store.selected_supplier_id = None;
+                        }
+                        cx.notify();
+                    }
+                    Err(e) => tracing::error!("delete_supplier failed: {e:?}"),
+                }
+            });
+        }).detach();
+    }
+
     pub fn set_search_query(&mut self, query: String, cx: &mut Context<Self>) {
         if self.search_query == query { return; }
         self.search_query = query;
@@ -114,6 +152,7 @@ mod tests {
             selected_supplier_id: None,
             loading: false,
             search_query: String::new(),
+            context_menu: None,
         };
         assert_eq!(store.filtered_suppliers().len(), 2);
     }
@@ -128,6 +167,7 @@ mod tests {
             selected_supplier_id: None,
             loading: false,
             search_query: "acme".into(),
+            context_menu: None,
         };
         assert_eq!(store.filtered_suppliers().len(), 1);
         assert_eq!(store.filtered_suppliers()[0].name, "Acme Ltd");
@@ -140,6 +180,7 @@ mod tests {
             selected_supplier_id: None,
             loading: false,
             search_query: "orders".into(),
+            context_menu: None,
         };
         assert_eq!(store.filtered_suppliers().len(), 1);
     }

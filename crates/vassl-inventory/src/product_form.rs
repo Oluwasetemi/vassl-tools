@@ -40,6 +40,9 @@ pub struct ProductForm {
     cancel_focus:       FocusHandle,
     save_focus:         FocusHandle,
     error:              Option<String>,
+    sku_error:          bool,
+    name_error:         bool,
+    unit_error:         bool,
     focus_handle:       FocusHandle,
 }
 
@@ -102,6 +105,9 @@ impl ProductForm {
             f.suppress_placeholder = true;
             f
         });
+        let db            = vassl_db::AppDatabase::global(&**cx);
+        let default_unit  = vassl_db::shared::get_setting(db, "inventory.default_unit").ok().flatten().unwrap_or_default();
+        let default_min   = vassl_db::shared::get_setting(db, "inventory.low_stock_threshold").ok().flatten().unwrap_or_default();
         Self {
             mode:           FormMode::Create,
             store,
@@ -110,19 +116,30 @@ impl ProductForm {
             sku:          cx.new(|cx| TextInput::with_placeholder("e.g. CAM-IP-2MP", cx)),
             name:         cx.new(|cx| TextInput::with_placeholder("e.g. IP Camera 2MP", cx)),
             category:     cx.new(|cx| TextInput::with_placeholder("optional: Cameras, Cabling…", cx)),
-            unit:         cx.new(|cx| TextInput::with_placeholder("pcs, meters, rolls…", cx)),
+            unit:         cx.new(move |cx| {
+                let mut f = TextInput::with_placeholder("pcs, meters, rolls…", cx);
+                if !default_unit.is_empty() { f.set_text(&default_unit, cx); }
+                f
+            }),
             model_number: cx.new(|cx| TextInput::with_placeholder("e.g. DS-2CD2143G2-I", cx)),
             part_number:  cx.new(|cx| TextInput::with_placeholder("e.g. PN-001", cx)),
             duty_percent: cx.new(|cx| TextInput::with_placeholder("e.g. 42.5", cx)),
             initial_qty:  cx.new(|cx| TextInput::with_placeholder("e.g. 10  (optional)", cx)),
             edit_stock:   cx.new(|cx| TextInput::with_placeholder("", cx)),
-            min_stock:    cx.new(|cx| TextInput::with_placeholder("0", cx)),
+            min_stock:    cx.new(move |cx| {
+                let mut f = TextInput::with_placeholder("0", cx);
+                if !default_min.is_empty() { f.set_text(&default_min, cx); }
+                f
+            }),
             description,
             supplier_dropdown,
             _supplier_sub,
             cancel_focus: cx.focus_handle(),
             save_focus:   cx.focus_handle(),
             error:        None,
+            sku_error:    false,
+            name_error:   false,
+            unit_error:   false,
             focus_handle: cx.focus_handle(),
         }
     }
@@ -200,6 +217,9 @@ impl ProductForm {
             cancel_focus: cx.focus_handle(),
             save_focus:   cx.focus_handle(),
             error:        None,
+            sku_error:    false,
+            name_error:   false,
+            unit_error:   false,
             focus_handle: cx.focus_handle(),
         }
     }
@@ -220,9 +240,13 @@ impl ProductForm {
         // -1 is the sentinel "(None)" item; treat as no supplier
         let sup_id    = self.supplier_dropdown.read(cx).selected_id.filter(|&id| id > 0);
 
+        self.name_error = name.trim().is_empty();
+        self.unit_error = unit.trim().is_empty();
+
         match &self.mode {
             FormMode::Create => {
-                let sku     = self.sku.read(cx).text().to_string();
+                let sku = self.sku.read(cx).text().to_string();
+                self.sku_error = sku.trim().is_empty();
                 let qty_s   = self.initial_qty.read(cx).text().trim().to_string();
                 let init_qty: Option<f64> = if qty_s.is_empty() {
                     None
@@ -352,11 +376,13 @@ impl Render for ProductForm {
             .flex().items_center().justify_center()
             .bg(rgba(0x00000099))
             .key_context("ProductForm")
-            .on_action(cx.listener(|this, _: &EscapeForm, _, cx| {
+            .on_action(cx.listener(|this, _: &EscapeForm, window, cx| {
                 // Close an open dropdown first; only cancel the form on the second Esc
                 if this.supplier_dropdown.read(cx).is_open {
                     this.supplier_dropdown.update(cx, |d, cx| { d.is_open = false; cx.notify(); });
                 } else {
+                    let root = cx.global::<vassl_ui::RootFocusHandle>().0.clone();
+                    window.focus(&root, cx);
                     cx.emit(ProductFormEvent::Cancelled);
                 }
             }))
@@ -451,7 +477,7 @@ impl Render for ProductForm {
                                 let sku_f = self.sku.read(cx).focus_handle.is_focused(window);
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("SKU"))
-                                    .child(div().flex_1().child(text_field("", self.sku.clone(), sku_f, cx)))
+                                    .child(div().flex_1().child(text_field("", self.sku.clone(), sku_f, self.sku_error, cx)))
                             })
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             // Current Stock — editable in Edit mode
@@ -459,58 +485,58 @@ impl Render for ProductForm {
                                 .child(
                                     div().flex().flex_row().items_center().py(px(10.))
                                         .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Current Stock"))
-                                        .child(div().flex_1().child(text_field("", self.edit_stock.clone(), stock_f, cx)))
+                                        .child(div().flex_1().child(text_field("", self.edit_stock.clone(), stock_f, false, cx)))
                                 )
                                 .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             )
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Name"))
-                                    .child(div().flex_1().child(text_field("", self.name.clone(), name_f, cx)))
+                                    .child(div().flex_1().child(text_field("", self.name.clone(), name_f, self.name_error, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child("Category"))
-                                    .child(div().flex_1().child(text_field("", self.category.clone(), cat_f, cx)))
+                                    .child(div().flex_1().child(text_field("", self.category.clone(), cat_f, false, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Unit"))
-                                    .child(div().flex_1().child(text_field("", self.unit.clone(), unit_f, cx)))
+                                    .child(div().flex_1().child(text_field("", self.unit.clone(), unit_f, self.unit_error, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child("Model #"))
-                                    .child(div().flex_1().child(text_field("", self.model_number.clone(), model_f, cx)))
+                                    .child(div().flex_1().child(text_field("", self.model_number.clone(), model_f, false, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child("Part #"))
-                                    .child(div().flex_1().child(text_field("", self.part_number.clone(), part_f, cx)))
+                                    .child(div().flex_1().child(text_field("", self.part_number.clone(), part_f, false, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Duty %"))
-                                    .child(div().flex_1().child(text_field("", self.duty_percent.clone(), duty_f, cx)))
+                                    .child(div().flex_1().child(text_field("", self.duty_percent.clone(), duty_f, false, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .when(!is_edit, |d| d
                                 .child(
                                     div().flex().flex_row().items_center().py(px(10.))
                                         .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child("Initial Stock"))
-                                        .child(div().flex_1().child(text_field("", self.initial_qty.clone(), qty_f, cx)))
+                                        .child(div().flex_1().child(text_field("", self.initial_qty.clone(), qty_f, false, cx)))
                                 )
                                 .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             )
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child("Min Stock Level"))
-                                    .child(div().flex_1().child(text_field("", self.min_stock.clone(), min_f, cx)))
+                                    .child(div().flex_1().child(text_field("", self.min_stock.clone(), min_f, false, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
@@ -568,7 +594,9 @@ impl Render for ProductForm {
                                     .cursor_pointer()
                                     .when(cancel_f, |d| d.border_2().border_color(rgb(c.surface_active)))
                                     .when(!cancel_f, |d| d.border_1().border_color(rgb(c.surface_default)))
-                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| {
+                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, window, cx| {
+                                        let root = cx.global::<vassl_ui::RootFocusHandle>().0.clone();
+                                        window.focus(&root, cx);
                                         cx.emit(ProductFormEvent::Cancelled);
                                     }))
                                     .child("Cancel")

@@ -4,13 +4,31 @@ use vassl_inventory::InventoryStoreHandle;
 
 use crate::db::{QuotationDb, QuotationRow};
 
+#[derive(Debug, Clone)]
+pub struct QuotationContextMenu {
+    pub quotation_id:  i64,
+    pub reference_num: String,
+    pub x: f32,
+    pub y: f32,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProjectContextMenu {
+    pub project_id:   i64,
+    pub project_name: String,
+    pub x: f32,
+    pub y: f32,
+}
+
 pub struct QuotationStore {
-    pub quotations:        Vec<QuotationRow>,
-    pub selected_id:       Option<i64>,
-    pub line_items:        Vec<QuotationItem>,
-    pub selected_extras:   Option<QuotationExtras>,
-    pub projects:          Vec<Project>,
-    pub loading:           bool,
+    pub quotations:               Vec<QuotationRow>,
+    pub selected_id:              Option<i64>,
+    pub line_items:               Vec<QuotationItem>,
+    pub selected_extras:          Option<QuotationExtras>,
+    pub projects:                 Vec<Project>,
+    pub loading:                  bool,
+    pub context_menu_quotation:   Option<QuotationContextMenu>,
+    pub context_menu_project:     Option<ProjectContextMenu>,
 }
 
 pub struct QuotationStoreHandle(pub Entity<QuotationStore>);
@@ -36,12 +54,14 @@ impl EventEmitter<QuotationEvent> for QuotationStore {}
 impl QuotationStore {
     pub fn new(_cx: &mut Context<Self>) -> Self {
         Self {
-            quotations:      Vec::new(),
-            selected_id:     None,
-            line_items:      Vec::new(),
-            selected_extras: None,
-            projects:        Vec::new(),
-            loading:         false,
+            quotations:             Vec::new(),
+            selected_id:            None,
+            line_items:             Vec::new(),
+            selected_extras:        None,
+            projects:               Vec::new(),
+            loading:                false,
+            context_menu_quotation: None,
+            context_menu_project:   None,
         }
     }
 
@@ -159,6 +179,56 @@ impl QuotationStore {
         }).detach();
     }
 
+    pub fn set_quotation_context_menu(&mut self, target: QuotationContextMenu, cx: &mut Context<Self>) { self.context_menu_quotation = Some(target); cx.notify(); }
+    pub fn clear_quotation_context_menu(&mut self, cx: &mut Context<Self>) { self.context_menu_quotation = None; cx.notify(); }
+    pub fn set_project_context_menu(&mut self, target: ProjectContextMenu, cx: &mut Context<Self>) { self.context_menu_project = Some(target); cx.notify(); }
+    pub fn clear_project_context_menu(&mut self, cx: &mut Context<Self>) { self.context_menu_project = None; cx.notify(); }
+
+    pub fn delete_quotation(&mut self, quotation_id: i64, cx: &mut Context<Self>) {
+        let db = QuotationDb::global(&**cx);
+        cx.spawn(async move |this, cx| {
+            let result = db.delete_quotation(quotation_id).await;
+            let _ = this.update(cx, |store, cx| {
+                match result {
+                    Ok(_) => {
+                        store.quotations.retain(|q| q.id != quotation_id);
+                        if store.selected_id == Some(quotation_id) {
+                            store.selected_id = None;
+                            store.line_items.clear();
+                            store.selected_extras = None;
+                        }
+                        cx.notify();
+                    }
+                    Err(e) => tracing::error!("delete_quotation failed: {e:?}"),
+                }
+            });
+        }).detach();
+    }
+
+    pub fn delete_project(&mut self, project_id: i64, cx: &mut Context<Self>) {
+        let db = QuotationDb::global(&**cx);
+        cx.spawn(async move |this, cx| {
+            let result = db.delete_project(project_id).await;
+            let _ = this.update(cx, |store, cx| {
+                match result {
+                    Ok(_) => {
+                        store.projects.retain(|p| p.id != project_id);
+                        store.quotations.retain(|q| q.project_id != project_id);
+                        if let Some(sel_id) = store.selected_id {
+                            if !store.quotations.iter().any(|q| q.id == sel_id) {
+                                store.selected_id = None;
+                                store.line_items.clear();
+                                store.selected_extras = None;
+                            }
+                        }
+                        cx.notify();
+                    }
+                    Err(e) => tracing::error!("delete_project failed: {e:?}"),
+                }
+            });
+        }).detach();
+    }
+
     pub fn delete_item(&mut self, item_id: i64, cx: &mut Context<Self>) {
         let quotation_id = match self.selected_id {
             Some(id) => id,
@@ -204,12 +274,14 @@ mod tests {
     #[test]
     fn quotation_store_starts_empty() {
         let store = QuotationStore {
-            quotations:      vec![],
-            selected_id:     None,
-            line_items:      vec![],
-            selected_extras: None,
-            projects:        vec![],
-            loading:         false,
+            quotations:             vec![],
+            selected_id:            None,
+            line_items:             vec![],
+            selected_extras:        None,
+            projects:               vec![],
+            loading:                false,
+            context_menu_quotation: None,
+            context_menu_project:   None,
         };
         assert!(store.quotations.is_empty());
         assert!(store.selected_id.is_none());

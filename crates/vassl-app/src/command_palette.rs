@@ -120,7 +120,7 @@ impl Render for CommandPalette {
                     .flex().flex_col().gap(px(8.))
                     // Prevent click-through to the backdrop dismiss handler.
                     .on_mouse_down(gpui::MouseButton::Left, |_, _, _| {})
-                    .child(text_field("", self.query.clone(), query_focused, cx))
+                    .child(text_field("", self.query.clone(), query_focused, false, cx))
                     .child({
                         let results = div().id("palette-results")
                             .flex().flex_col().gap(px(2.))

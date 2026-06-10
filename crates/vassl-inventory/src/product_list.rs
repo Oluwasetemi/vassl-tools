@@ -55,7 +55,7 @@ impl Render for ProductList {
                 .into_any_element();
         }
         let count = filtered.len();
-        let store_entity = self.store.clone();
+        let store_entity  = self.store.clone();
 
         let geom = scrollbar_geometry(&self.scroll_handle);
         let is_dragging = self.drag.is_some();
@@ -106,10 +106,11 @@ impl Render for ProductList {
                         let store = this.store.read(cx);
                         let filtered = store.filtered_products();
                         let c = cx.global::<ThemeHandle>().0.clone();
+                        let scroll = this.scroll_handle.clone();
                         range.map(|ix| {
                             let p = &filtered[ix];
                             let selected = store.selected_product_id == Some(p.product.id);
-                            product_row(p, selected, store_entity.clone(), &c)
+                            product_row(p, ix, selected, store_entity.clone(), scroll.clone(), &c)
                         }).collect()
                     }),
                 )
@@ -145,7 +146,7 @@ impl Render for ProductList {
     }
 }
 
-fn product_row(p: &ProductWithStock, selected: bool, store: Entity<InventoryStore>, c: &ThemeColors) -> impl IntoElement {
+fn product_row(p: &ProductWithStock, ix: usize, selected: bool, store: Entity<InventoryStore>, scroll_handle: UniformListScrollHandle, c: &ThemeColors) -> impl IntoElement {
     let product_id    = p.product.id;
     let product_name  = p.product.name.clone();
     let badge_color = match p.status {
@@ -173,6 +174,7 @@ fn product_row(p: &ProductWithStock, selected: bool, store: Entity<InventoryStor
         .on_mouse_down(
             MouseButton::Left,
             move |_event: &MouseDownEvent, _window: &mut Window, cx: &mut App| {
+                scroll_handle.scroll_to_item(ix, gpui::ScrollStrategy::Nearest);
                 store.update(cx, |s, cx| s.select_product(product_id, cx));
             },
         )
@@ -210,6 +212,9 @@ fn product_row(p: &ProductWithStock, selected: bool, store: Entity<InventoryStor
                 .flex_1()
                 .text_size(rems(1.))
                 .text_color(rgb(c.text_default))
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
                 .child(p.product.name.clone())
         )
         .child(

@@ -110,10 +110,11 @@ impl Render for PriceTable {
                         let filtered = store.filtered_product_prices();
                         let c = cx.global::<ThemeHandle>().0.clone();
                         let selected = store.selected_product_id;
+                        let scroll = this.scroll_handle.clone();
                         range.map(|ix| {
                             let pp = &filtered[ix];
                             let is_selected = selected == Some(pp.product_id);
-                            price_row(pp, is_selected, store_entity.clone(), &c)
+                            price_row(pp, ix, is_selected, store_entity.clone(), scroll.clone(), &c)
                         }).collect()
                     }),
                 )
@@ -148,7 +149,7 @@ impl Render for PriceTable {
     }
 }
 
-fn price_row(pp: &ProductPrice, selected: bool, store: Entity<PriceBookStore>, c: &ThemeColors) -> impl IntoElement {
+fn price_row(pp: &ProductPrice, ix: usize, selected: bool, store: Entity<PriceBookStore>, scroll_handle: UniformListScrollHandle, c: &ThemeColors) -> impl IntoElement {
     let product_id   = pp.product_id;
     let product_name = pp.name.clone();
     let row_bg       = if selected { c.surface_active } else { c.canvas_bg };
@@ -167,6 +168,7 @@ fn price_row(pp: &ProductPrice, selected: bool, store: Entity<PriceBookStore>, c
         .on_mouse_down(
             MouseButton::Left,
             move |_event: &MouseDownEvent, _window: &mut Window, cx: &mut App| {
+                scroll_handle.scroll_to_item(ix, gpui::ScrollStrategy::Nearest);
                 store.update(cx, |s, cx| s.select_product(product_id, cx));
             },
         )
@@ -193,8 +195,11 @@ fn price_row(pp: &ProductPrice, selected: bool, store: Entity<PriceBookStore>, c
         )
         .child(
             div()
-                .w(px(160.)).text_size(rems(1.))
+                .w(px(220.)).text_size(rems(1.))
                 .text_color(rgb(c.text_default))
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
                 .child(pp.name.clone())
         )
         .child(

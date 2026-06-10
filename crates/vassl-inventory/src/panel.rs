@@ -1,7 +1,7 @@
 use gpui::{Context, Entity, EventEmitter, IntoElement, MouseButton, MouseDownEvent,
            Render, Subscription, Window, div, prelude::*, px, rems, rgb};
 use vassl_ui::NewRecord;
-use vassl_ui::{TextInput, ThemeHandle, text_field, tooltip, tooltip_keyed};
+use vassl_ui::{AppSettings, TextInput, ThemeHandle, text_field, tooltip, tooltip_keyed};
 
 use vassl_core::Product;
 use crate::product_form::{ProductForm, ProductFormEvent};
@@ -229,7 +229,7 @@ impl Render for InventoryPanel {
                                     .w(px(160.))
                                     .child({
                                         let focused = self.search_input.read(cx).focus_handle.is_focused(window);
-                                        text_field("", self.search_input.clone(), focused, cx)
+                                        text_field("", self.search_input.clone(), focused, false, cx)
                                     })
                             )
                             .child({
@@ -308,6 +308,7 @@ impl Render for InventoryPanel {
         }
 
         // Context menu overlay
+        let allow_delete = cx.global::<AppSettings>().allow_delete;
         let ctx_menu = self.store.read(cx).context_menu.clone();
         if let Some(target) = ctx_menu {
             let info_line = {
@@ -438,6 +439,29 @@ impl Render for InventoryPanel {
                                         });
                                     }),
                                 )
+                        })
+                        .when(allow_delete, |menu| {
+                            let hover_bg = rgb(c.surface_hover);
+                            menu.child(div().h(px(1.)).bg(rgb(c.surface_default)))
+                                .child({
+                                    div()
+                                        .id("ctx-inv-delete")
+                                        .px(px(12.)).py(px(8.))
+                                        .cursor_pointer()
+                                        .hover(move |s| s.bg(hover_bg))
+                                        .text_size(rems(1.))
+                                        .text_color(rgb(c.status_red))
+                                        .child("Delete Product")
+                                        .on_mouse_down(
+                                            MouseButton::Left,
+                                            cx.listener(move |this, _: &MouseDownEvent, _: &mut Window, cx| {
+                                                this.store.update(cx, |s, cx| {
+                                                    s.clear_context_menu(cx);
+                                                    s.delete_product(pid, cx);
+                                                });
+                                            }),
+                                        )
+                                })
                         })
                 );
         }
