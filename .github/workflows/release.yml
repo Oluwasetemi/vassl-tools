@@ -71,14 +71,17 @@ jobs:
       - name: Bundle .app, create ZIP and DMG
         run: |
           cargo install cargo-bundle --locked
-          cargo bundle --release --target ${{ matrix.target }} -p vassl-app --bin vassl
+          cargo bundle --release --target ${{ matrix.target }} -p vassl-app
 
-          BUNDLE="target/${{ matrix.target }}/release/bundle/osx/VASSL.app"
+          # Discover the .app bundle — name comes from [package.metadata.bundle]
+          BUNDLE_DIR="target/${{ matrix.target }}/release/bundle/osx"
+          BUNDLE=$(find "$BUNDLE_DIR" -maxdepth 1 -name "*.app" | head -1)
+          APP_NAME=$(basename "$BUNDLE")
           ARCH="${{ matrix.arch }}"
 
           # ── ZIP (used by the in-app auto-updater) ──────────────────────────
-          cd "target/${{ matrix.target }}/release/bundle/osx"
-          zip -r "$GITHUB_WORKSPACE/VASSL-macos-${ARCH}.zip" VASSL.app
+          cd "$BUNDLE_DIR"
+          zip -r "$GITHUB_WORKSPACE/VASSL-macos-${ARCH}.zip" "$APP_NAME"
           cd "$GITHUB_WORKSPACE"
 
           # ── DMG (for first-time / manual installation) ─────────────────────
@@ -125,23 +128,27 @@ jobs:
           unzip arm64/VASSL-macos-arm64.zip   -d arm64-out
           unzip x86_64/VASSL-macos-x86_64.zip -d x86_64-out
 
+          # Discover .app name dynamically (matches whatever cargo-bundle created)
+          APP_NAME=$(find arm64-out -maxdepth 1 -name "*.app" | head -1 | xargs basename)
+          BIN_NAME=$(ls "arm64-out/${APP_NAME}/Contents/MacOS/" | head -1)
+
           # Start from the arm64 bundle (has correct Info.plist / resources)
-          cp -r arm64-out/VASSL.app universal-app
+          cp -r "arm64-out/${APP_NAME}" universal-app
 
           # Merge the two binaries into a universal binary
           lipo -create \
-            arm64-out/VASSL.app/Contents/MacOS/vassl \
-            x86_64-out/VASSL.app/Contents/MacOS/vassl \
-            -output universal-app/Contents/MacOS/vassl
+            "arm64-out/${APP_NAME}/Contents/MacOS/${BIN_NAME}" \
+            "x86_64-out/${APP_NAME}/Contents/MacOS/${BIN_NAME}" \
+            -output "universal-app/Contents/MacOS/${BIN_NAME}"
 
-          # ── ZIP (auto-updater) — must contain VASSL.app at root ───────────
-          mv universal-app VASSL.app
-          zip -r VASSL-macos-universal.zip VASSL.app
-          mv VASSL.app universal-app
+          # ── ZIP (auto-updater) — must contain .app at root ────────────────
+          mv universal-app "${APP_NAME}"
+          zip -r VASSL-macos-universal.zip "${APP_NAME}"
+          mv "${APP_NAME}" universal-app
 
           # ── DMG (manual install) ────────────────────────────────────────────
           mkdir -p dmg-staging
-          cp -r universal-app dmg-staging/VASSL.app
+          cp -r universal-app "dmg-staging/${APP_NAME}"
           ln -s /Applications dmg-staging/Applications
           hdiutil create \
             -volname "VASSL" \
