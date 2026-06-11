@@ -9,6 +9,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   # ─── macOS (arm64 + x86_64) ─────────────────────────────────────────────────
@@ -70,7 +71,7 @@ jobs:
       - name: Bundle .app, create ZIP and DMG
         run: |
           cargo install cargo-bundle --locked
-          cargo bundle --release --target ${{ matrix.target }} -p vassl-app
+          cargo bundle --release --target ${{ matrix.target }} -p vassl-app --bin vassl
 
           BUNDLE="target/${{ matrix.target }}/release/bundle/osx/VASSL.app"
           ARCH="${{ matrix.arch }}"
