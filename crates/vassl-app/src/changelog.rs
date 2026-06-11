@@ -1,4 +1,5 @@
-use gpui::{Context, IntoElement, Render, Window, div, prelude::*, px, rems, rgb};
+use gpui::{Context, EventEmitter, IntoElement, MouseButton, MouseDownEvent, Render, Window,
+           div, prelude::*, px, rems, rgb, rgba};
 use vassl_ui::ThemeHandle;
 
 const CHANGELOG: &str = r#"
@@ -33,6 +34,10 @@ const CHANGELOG: &str = r#"
 - Database migration ordering issues on fresh installs.
 "#;
 
+pub enum ChangelogEvent { Dismissed }
+
+impl EventEmitter<ChangelogEvent> for ChangelogPanel {}
+
 pub struct ChangelogPanel;
 
 impl ChangelogPanel {
@@ -43,22 +48,62 @@ impl Render for ChangelogPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = cx.global::<ThemeHandle>().0.clone();
 
+        // Backdrop — covers the whole window, click-away closes the panel
         div()
-            .flex_1().flex().flex_col()
-            .bg(rgb(c.canvas_bg))
+            .absolute().inset_0()
+            .flex().items_center().justify_center()
+            .bg(rgba(0x000000CC))
+            .on_mouse_down(MouseButton::Left, cx.listener(|_, _: &MouseDownEvent, _, cx| {
+                cx.emit(ChangelogEvent::Dismissed);
+            }))
             .child(
+                // Panel — stops click propagation so clicking inside doesn't dismiss
                 div()
-                    .px(px(32.)).pt(px(24.)).pb(px(12.))
-                    .child(div().text_size(rems(1.385)).text_color(rgb(c.text_default)).child("Changelog"))
-                    .child(div().text_size(rems(0.923)).text_color(rgb(c.text_muted)).mt(px(4.)).child("What's new in VASSL"))
-            )
-            .child(div().h(px(1.)).mx(px(32.)).bg(rgb(c.surface_default)))
-            .child(
-                div()
-                    .id("changelog-scroll")
-                    .flex_1().overflow_y_scroll()
-                    .px(px(32.)).pt(px(16.)).pb(px(32.))
-                    .children(render_changelog_lines(&c))
+                    .id("changelog-panel")
+                    .w(px(600.)).h(px(520.))
+                    .bg(rgb(c.canvas_bg))
+                    .rounded(px(10.))
+                    .border_1().border_color(rgb(c.surface_default))
+                    .flex().flex_col()
+                    .overflow_hidden()
+                    .on_mouse_down(MouseButton::Left, |_, _, _| {}) // swallow clicks
+                    // Header
+                    .child(
+                        div()
+                            .px(px(24.)).pt(px(20.)).pb(px(14.))
+                            .bg(rgb(c.sidebar_bg))
+                            .flex().flex_row().items_center()
+                            .child(
+                                div().flex_1().flex().flex_col().gap(px(3.))
+                                    .child(div().text_size(rems(1.154)).text_color(rgb(c.text_default))
+                                        .font_weight(gpui::FontWeight::BOLD)
+                                        .child("Changelog"))
+                                    .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted))
+                                        .child("What's new in VASSL"))
+                            )
+                            .child(
+                                div().id("changelog-close")
+                                    .w(px(28.)).h(px(28.))
+                                    .flex().items_center().justify_center()
+                                    .rounded(px(5.))
+                                    .bg(rgb(c.surface_default))
+                                    .text_size(rems(1.)).text_color(rgb(c.text_muted))
+                                    .cursor_pointer()
+                                    .on_mouse_down(MouseButton::Left, cx.listener(|_, _: &MouseDownEvent, _, cx| {
+                                        cx.emit(ChangelogEvent::Dismissed);
+                                    }))
+                                    .child("×")
+                            )
+                    )
+                    .child(div().h(px(1.)).bg(rgb(c.surface_default)))
+                    // Scrollable content
+                    .child(
+                        div()
+                            .id("changelog-scroll")
+                            .flex_1().min_h(px(0.)).overflow_y_scroll()
+                            .px(px(24.)).pt(px(16.)).pb(px(32.))
+                            .children(render_changelog_lines(&c))
+                    )
             )
     }
 }
@@ -66,15 +111,15 @@ impl Render for ChangelogPanel {
 fn render_changelog_lines(c: &vassl_ui::ThemeColors) -> Vec<gpui::AnyElement> {
     CHANGELOG.lines().map(|line| {
         let (size, color, bold, indent) = if line.starts_with("## ") {
-            (rems(1.154f32), c.text_default, true, px(0.))
+            (rems(1.077f32), c.text_default, true, px(0.))
         } else if line.starts_with("### ") {
-            (rems(1.0f32), c.text_default, true, px(0.))
+            (rems(0.923f32), c.text_default, true, px(0.))
         } else if line.starts_with("- ") {
             (rems(0.923f32), c.text_muted, false, px(16.))
         } else if line.starts_with("---") {
             return div().h(px(1.)).my(px(12.)).bg(rgb(c.surface_default)).into_any_element();
         } else if line.trim().is_empty() {
-            return div().h(px(8.)).into_any_element();
+            return div().h(px(6.)).into_any_element();
         } else {
             (rems(0.923f32), c.text_muted, false, px(0.))
         };
@@ -88,7 +133,7 @@ fn render_changelog_lines(c: &vassl_ui::ThemeColors) -> Vec<gpui::AnyElement> {
             .ml(indent)
             .text_size(size)
             .text_color(rgb(color))
-            .mb(px(4.))
+            .mb(px(3.))
             .child(text);
         if bold { el = el.font_weight(gpui::FontWeight::BOLD); }
         el.into_any_element()

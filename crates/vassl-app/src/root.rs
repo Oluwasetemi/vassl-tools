@@ -11,7 +11,7 @@ use crate::actions::{About, CheckForUpdates, DecreaseFontSize, EscapeModal, Focu
                      IncreaseFontSize, InstallUpdate, Minimize, OpenAuditLog, OpenChangelog,
                      OpenGlobalSearch, OpenInventory, OpenPriceBook, OpenQuotations, OpenSuppliers,
                      OpenSettings, SelectNext, SelectPrev, Zoom};
-use crate::changelog::ChangelogPanel;
+use crate::changelog::{ChangelogPanel, ChangelogEvent};
 use crate::license_dialog::{LicenseDialog, LicenseDialogEvent};
 use crate::auto_update::{AutoUpdateEvent, AutoUpdater, UpdateStatus};
 use vassl_ui::NewRecord;
@@ -49,6 +49,7 @@ pub struct VasslRoot {
     about_dialog:          Option<Entity<AboutDialog>>,
     _about_sub:            Option<Subscription>,
     changelog_panel:       Option<Entity<ChangelogPanel>>,
+    _changelog_sub:        Option<Subscription>,
     license_dialog:        Option<Entity<LicenseDialog>>,
     _license_sub:          Option<Subscription>,
     build_expired:         bool,
@@ -308,6 +309,7 @@ impl VasslRoot {
             about_dialog:         None,
             _about_sub:           None,
             changelog_panel:      None,
+            _changelog_sub:       None,
             license_dialog,
             _license_sub,
             build_expired,
@@ -707,9 +709,17 @@ impl Render for VasslRoot {
             }))
             .on_action(cx.listener(|this, _: &OpenChangelog, _w, cx| {
                 if this.changelog_panel.is_some() {
+                    this._changelog_sub  = None;
                     this.changelog_panel = None;
                 } else {
-                    this.changelog_panel = Some(cx.new(ChangelogPanel::new));
+                    let panel = cx.new(ChangelogPanel::new);
+                    let sub   = cx.subscribe(&panel, |this, _, _ev: &ChangelogEvent, cx| {
+                        this._changelog_sub  = None;
+                        this.changelog_panel = None;
+                        cx.notify();
+                    });
+                    this.changelog_panel = Some(panel);
+                    this._changelog_sub  = Some(sub);
                 }
                 cx.notify();
             }))
@@ -746,6 +756,7 @@ impl Render for VasslRoot {
             }))
             .on_action(cx.listener(|this, _: &EscapeModal, w, cx| {
                 if this.changelog_panel.is_some() {
+                    this._changelog_sub  = None;
                     this.changelog_panel = None;
                     w.focus(&this.focus_handle, cx);
                     cx.notify();

@@ -21,6 +21,7 @@ pub enum SettingsCategory {
     Quotations,
     Database,
     Keyboard,
+    License,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -218,6 +219,78 @@ impl SettingsPanel {
             SettingsCategory::Quotations => "Quotations",
             SettingsCategory::Database   => "Database",
             SettingsCategory::Keyboard   => "Keyboard",
+            SettingsCategory::License    => "License",
+        }
+    }
+
+    fn render_license(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
+        let c  = cx.global::<ThemeHandle>().0.clone();
+        let db = vassl_db::AppDatabase::global(&**cx);
+
+        let stored_key = vassl_db::shared::get_setting(db, "license.key")
+            .ok().flatten();
+        let license_info = stored_key.as_deref()
+            .and_then(|key| crate::license::validate_key(key).ok());
+
+        let masked_key: Option<String> = stored_key.as_deref().map(|key| {
+            let prefix = key.get(..11).unwrap_or(key); // "VASSL-XXXXX"
+            format!("{prefix}-•••••-•••••-•••••")
+        });
+
+        match license_info {
+            Some(info) => {
+                let edition_str = info.edition.to_string();
+                let expiry_str  = match info.expiry {
+                    Some(d) => d.format("%Y-%m-%d").to_string(),
+                    None    => "Never expires".to_string(),
+                };
+
+                let edition_badge = div()
+                    .px(px(12.)).py(px(5.)).rounded(px(4.))
+                    .bg(rgb(c.surface_active))
+                    .text_size(rems(0.923)).text_color(rgb(c.text_default))
+                    .child(edition_str);
+
+                let expiry_chip = div()
+                    .px(px(12.)).py(px(5.)).rounded(px(4.))
+                    .bg(rgb(c.surface_default))
+                    .text_size(rems(0.923)).text_color(rgb(c.text_default))
+                    .child(expiry_str);
+
+                let key_chip = div()
+                    .px(px(12.)).py(px(5.)).rounded(px(4.))
+                    .bg(rgb(c.surface_default))
+                    .text_size(rems(0.923)).text_color(rgb(c.text_muted))
+                    .child(masked_key.unwrap_or_default());
+
+                div().flex().flex_col()
+                    .child(Self::render_row(
+                        "Edition",
+                        "Your VASSL license edition.",
+                        edition_badge,
+                        &c,
+                    ))
+                    .child(Self::render_row(
+                        "Expiry",
+                        "The date your license key expires, or \"Never expires\" if it does not.",
+                        expiry_chip,
+                        &c,
+                    ))
+                    .child(Self::render_row(
+                        "License Key",
+                        "The activated license key (partially masked).",
+                        key_chip,
+                        &c,
+                    ))
+            }
+            None => {
+                div().flex().flex_col()
+                    .child(
+                        div().px(px(32.)).py(px(20.))
+                            .text_size(rems(0.923)).text_color(rgb(c.text_muted))
+                            .child("No valid license is active.")
+                    )
+            }
         }
     }
 
@@ -1094,6 +1167,7 @@ impl Render for SettingsPanel {
             SettingsCategory::Quotations,
             SettingsCategory::Database,
             SettingsCategory::Keyboard,
+            SettingsCategory::License,
         ];
 
         // ── category nav (160px) ──────────────────────────────────────
@@ -1141,6 +1215,7 @@ impl Render for SettingsPanel {
                     SettingsCategory::Quotations => self.render_quotations(window, cx).into_any_element(),
                     SettingsCategory::Database   => self.render_database(cx).into_any_element(),
                     SettingsCategory::Keyboard   => self.render_keyboard(cx).into_any_element(),
+                    SettingsCategory::License    => self.render_license(cx).into_any_element(),
                 }
             });
 
