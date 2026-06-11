@@ -52,8 +52,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: target
-          key: ${{ runner.os }}-${{ matrix.target }}-build-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-${{ matrix.target }}-build-
+          key: ${{ runner.os }}-${{ matrix.target }}-build-v2-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-${{ matrix.target }}-build-v2-
 
       - name: Write signing secret
         env:
@@ -72,20 +72,25 @@ jobs:
       - name: Compute build expiry (3 days)
         run: echo "VASSL_BUILD_EXPIRES=$(date -v+3d +%Y-%m-%d)" >> "$GITHUB_ENV"
 
+      - name: Build release binary
+        env:
+          VASSL_BUILD_EXPIRES: ${{ env.VASSL_BUILD_EXPIRES }}
+        run: cargo build --release --target ${{ matrix.target }} -p vassl-app
+
       - name: Bundle .app, create ZIP and DMG
-        # IMPORTANT: VASSL_BUILD_EXPIRES must be set here so that cargo bundle's
-        # internal `cargo build` invocation sees the same environment as the explicit
-        # build step. Without it, Cargo detects option_env!("VASSL_BUILD_EXPIRES")
-        # changed and recompiles — but signing_secret.rs no longer exists in this
-        # step, so the re-build fails silently and cargo bundle packages an empty
-        # or stale stub, producing an incorrectly tiny (~200 KB) .app bundle.
+        # IMPORTANT: VASSL_BUILD_EXPIRES must be set in both the explicit cargo build
+        # step above AND here so that cargo bundle's internal `cargo build` invocation
+        # sees the same environment. If the env var differs between steps, Cargo detects
+        # option_env!("VASSL_BUILD_EXPIRES") changed and recompiles — but
+        # signing_secret.rs no longer exists in this step, causing the re-build to
+        # fail and cargo bundle to package a stale stub (~200 KB).
         env:
           VASSL_BUILD_EXPIRES: ${{ env.VASSL_BUILD_EXPIRES }}
         run: |
           cargo install cargo-bundle --locked
-          # cargo bundle compiles + bundles in one pass; the explicit cargo build
-          # step above is no longer needed and has been removed to avoid the
-          # double-compile / env mismatch that caused the 200 KB stub issue.
+          # The explicit build step above already produced the large release binary.
+          # cargo bundle re-checks fingerprints; since env vars match, it reuses the
+          # cached binary and simply wraps it in the .app structure.
           cargo bundle --release --target ${{ matrix.target }} -p vassl-app
 
           # Discover the .app bundle — name comes from [package.metadata.bundle]
