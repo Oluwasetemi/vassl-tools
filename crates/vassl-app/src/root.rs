@@ -1,7 +1,7 @@
 use gpui::{Context, Entity, FocusHandle, Focusable, IntoElement, PathPromptOptions, Render,
            Subscription, Window, div, prelude::*, px, rgb, rems};
 #[cfg(not(target_os = "macos"))]
-use gpui::{MouseButton, MouseDownEvent, OwnedMenuItem, deferred, rems};
+use gpui::{MouseButton, MouseDownEvent, OwnedMenuItem, deferred};
 #[cfg(not(target_os = "macos"))]
 use vassl_ui::tooltip;
 use vassl_ui::{ThemeColors, ThemeHandle, RootFocusHandle};
