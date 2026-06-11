@@ -15,16 +15,21 @@ env:
 
 jobs:
   # ─── macOS (arm64 + x86_64) ─────────────────────────────────────────────────
+  # Each arch uses its own NATIVE runner to avoid cross-compilation issues.
+  # cargo bundle does not reliably produce a full-sized binary when
+  # cross-compiling x86_64 on an arm64 host — native builds are the safe path.
   build-macos:
     name: macOS (${{ matrix.target }})
-    runs-on: macos-14   # Apple Silicon runner — can cross-compile for x86_64
+    runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
         include:
           - target: aarch64-apple-darwin
             arch:   arm64
+            runner: macos-14   # Apple Silicon — native arm64
           - target: x86_64-apple-darwin
             arch:   x86_64
+            runner: macos-13   # Intel — native x86_64, no cross-compilation
 
     steps:
       - uses: actions/checkout@v4
@@ -92,8 +97,8 @@ jobs:
           # Sanity-check: fail loudly if the binary inside the bundle is < 1 MB,
           # which would indicate the stub/empty-bundle problem recurred.
           BIN_SIZE=$(stat -f%z "${BUNDLE}/Contents/MacOS/"* | awk '{s+=$1} END {print s}')
-          if [ "${BIN_SIZE}" -lt 1048576 ]; then
-            echo "ERROR: bundled binary is only ${BIN_SIZE} bytes — expected > 1 MB" >&2
+          if [ "${BIN_SIZE}" -lt 5242880 ]; then
+            echo "ERROR: bundled binary is only ${BIN_SIZE} bytes — expected > 5 MB" >&2
             exit 1
           fi
 
