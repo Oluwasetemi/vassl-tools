@@ -1,8 +1,14 @@
 use gpui::{Context, Entity, IntoElement, MouseButton, Render, SharedString, Window,
-           div, prelude::*, px, rems, rgb};
+           div, prelude::*, px, relative, rems, rgb};
 use vassl_ui::ThemeHandle;
 use crate::auto_update::{AutoUpdater, UpdateStatus};
 use crate::actions::{CheckForUpdates, InstallUpdate};
+
+// Shared palette — must match about_dialog.rs constants.
+pub const BADGE_BLUE:  u32 = 0x2d6fce;
+pub const BADGE_AMBER: u32 = 0xd97706;
+pub const BADGE_RED:   u32 = 0xe05252;
+pub const BADGE_GREEN: u32 = 0x2a7a3b;
 
 pub struct StatusBar {
     pub last_action: Option<String>,
@@ -30,30 +36,111 @@ impl Render for StatusBar {
         let c = cx.global::<ThemeHandle>().0.clone();
         let label: SharedString = self.last_action.as_deref().unwrap_or("Ready").into();
 
-        // Determine update badge state
-        let update_badge = self.updater.as_ref().map(|u| {
-            let status = u.read(cx);
-            match &status.status {
-                UpdateStatus::Checking => Some(("Checking for updates…", false, false)),
-                UpdateStatus::Available(info) => {
-                    let msg = format!("Update available — v{}", info.version);
-                    Some((msg.leak() as &'static str, true, false))
-                }
-                UpdateStatus::Downloading { pct } => {
-                    let msg = format!("Downloading update… {}%", pct);
-                    Some((msg.leak() as &'static str, false, false))
-                }
-                UpdateStatus::ReadyToInstall(_) => {
-                    Some(("Restart to install update", true, true))
-                }
-                UpdateStatus::Installing => Some(("Installing update…", false, false)),
-                UpdateStatus::Error(e)   => {
-                    let msg = format!("Update error: {e}");
-                    Some((msg.leak() as &'static str, false, false))
-                }
-                _ => None,
+        let update_status = self.updater.as_ref().map(|u| u.read(cx).status.clone());
+
+        // ── Download progress bar ─────────────────────────────────────────────
+        // When a download is in progress, render a full-width progress strip
+        // above the status bar row so the user can't miss it.
+        let progress_strip: Option<gpui::AnyElement> = match &update_status {
+            Some(UpdateStatus::Downloading { pct }) => {
+                let frac = (*pct as f32 / 100.0).clamp(0.0, 1.0);
+                Some(
+                    div()
+                        .w_full()
+                        .h(px(3.))
+                        .bg(rgb(c.surface_default))
+                        .overflow_hidden()
+                        .child(
+                            // relative(frac) = CSS width: X% — always proportional to
+                            // the actual window width regardless of window size.
+                            div().h_full().w(relative(frac)).bg(rgb(BADGE_BLUE))
+                        )
+                        .into_any_element()
+                )
             }
-        }).flatten();
+            Some(UpdateStatus::Installing) => {
+                Some(
+                    div()
+                        .w_full()
+                        .h(px(3.))
+                        .bg(rgb(BADGE_AMBER))
+                        .into_any_element()
+                )
+            }
+            _ => None,
+        };
+
+        // ── Right-side badge ──────────────────────────────────────────────────
+        enum Badge { Text { msg: SharedString, color: u32, clickable: bool, action_install: bool }, Download { pct: u8 } }
+
+        let badge: Option<Badge> = match &update_status {
+            Some(UpdateStatus::Checking) =>
+                Some(Badge::Text { msg: "Checking for updates…".into(), color: c.text_muted, clickable: false, action_install: false }),
+            Some(UpdateStatus::Available(info)) =>
+                Some(Badge::Text { msg: format!("↓  Update v{} available", info.version).into(), color: BADGE_BLUE, clickable: true, action_install: false }),
+            Some(UpdateStatus::Downloading { pct }) =>
+                Some(Badge::Download { pct: *pct }),
+            Some(UpdateStatus::ReadyToInstall(_)) =>
+                Some(Badge::Text { msg: "↻  Restart to install update".into(), color: BADGE_AMBER, clickable: true, action_install: true }),
+            Some(UpdateStatus::Installing) =>
+                Some(Badge::Text { msg: "Installing update…".into(), color: c.text_muted, clickable: false, action_install: false }),
+            Some(UpdateStatus::Error(e)) =>
+                Some(Badge::Text { msg: format!("Update error: {e}").into(), color: 0xe05252, clickable: false, action_install: false }),
+            _ => None,
+        };
+
+        let badge_el: Option<gpui::AnyElement> = badge.map(|b| match b {
+            Badge::Download { pct } => {
+                // Wider pill with percentage text — makes it obvious a download is happening.
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(6.))
+                    .px(px(10.))
+                    .h(px(20.))
+                    .rounded(px(4.))
+                    .text_size(rems(0.769))
+                    .text_color(rgb(BADGE_BLUE))
+                    .border_1()
+                    .border_color(rgb(BADGE_BLUE))
+                    .child(SharedString::from(format!("Downloading update  {pct}%")))
+                    .into_any_element()
+            }
+            Badge::Text { msg, color, clickable, action_install } => {
+                let mut el = div()
+                    .flex()
+                    .items_center()
+                    .gap(px(6.))
+                    .px(px(10.))
+                    .h(px(20.))
+                    .rounded(px(4.))
+                    .text_size(rems(0.769))
+                    .text_color(rgb(color))
+                    .border_1()
+                    .border_color(rgb(color))
+                    .child(msg);
+                if clickable {
+                    if action_install {
+                        el = el.cursor_pointer()
+                            .on_mouse_down(MouseButton::Left, cx.listener(|_, _, _, cx| {
+                                cx.dispatch_action(&InstallUpdate);
+                            }));
+                    } else {
+                        el = el.cursor_pointer()
+                            .on_mouse_down(MouseButton::Left, cx.listener(|_, _, _, cx| {
+                                cx.dispatch_action(&CheckForUpdates);
+                            }));
+                    }
+                }
+                el.into_any_element()
+            }
+        });
+
+        // ── Assemble ──────────────────────────────────────────────────────────
+        let mut wrapper = div().w_full().flex().flex_col();
+        if let Some(strip) = progress_strip {
+            wrapper = wrapper.child(strip);
+        }
 
         let mut row = div()
             .w_full()
@@ -69,42 +156,11 @@ impl Render for StatusBar {
             .text_size(rems(0.846));
 
         row = row.child(div().child(label));
-
-        if let Some((msg, clickable, is_install)) = update_badge {
-            let badge_color = if clickable { 0x2d6fce_u32 } else { c.text_muted };
-            let mut badge = div()
-                .flex()
-                .items_center()
-                .gap(px(6.))
-                .px(px(8.))
-                .h(px(18.))
-                .rounded(px(4.))
-                .text_size(rems(0.77))
-                .text_color(rgb(badge_color))
-                .border_1()
-                .border_color(rgb(badge_color))
-                .child(SharedString::from(msg));
-
-            if clickable {
-                if is_install {
-                    badge = badge
-                        .cursor_pointer()
-                        .on_mouse_down(MouseButton::Left, cx.listener(|_, _, _, cx| {
-                            cx.dispatch_action(&InstallUpdate);
-                        }));
-                } else {
-                    badge = badge
-                        .cursor_pointer()
-                        .on_mouse_down(MouseButton::Left, cx.listener(|_, _, _, cx| {
-                            cx.dispatch_action(&CheckForUpdates);
-                        }));
-                }
-            }
-
-            row = row.child(badge);
+        if let Some(el) = badge_el {
+            row = row.child(el);
         }
 
-        row
+        wrapper.child(row)
     }
 }
 

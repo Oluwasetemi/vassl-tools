@@ -362,7 +362,8 @@ impl VasslRoot {
 
     fn open_about(&mut self, cx: &mut Context<Self>) {
         if self.about_dialog.is_some() { return; }
-        let dialog = cx.new(AboutDialog::new);
+        let updater = self.updater.clone();
+        let dialog  = cx.new(|cx| AboutDialog::new(updater, cx));
         let sub = cx.subscribe(&dialog, |this, _, ev: &AboutEvent, cx| {
             if matches!(ev, AboutEvent::Copied) {
                 cx.write_to_clipboard(gpui::ClipboardItem::new_string(

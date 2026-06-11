@@ -221,6 +221,17 @@ fn main() {
     tracing_log::LogTracer::init().ok();
     tracing::info!("VASSL starting");
 
+    // On Windows, clean up the .bak file left by the previous update's rename-swap.
+    // The running exe holds an open handle to its own file, so .bak can only be
+    // deleted after the process that *was* .bak has exited — i.e. on next launch.
+    #[cfg(target_os = "windows")]
+    if let Ok(exe) = std::env::current_exe() {
+        let bak = exe.with_extension("exe.bak");
+        if bak.exists() {
+            let _ = std::fs::remove_file(&bak);
+        }
+    }
+
     gpui_platform::application()
         .with_assets(assets::VasslAssets)
         .run(|cx: &mut App| {

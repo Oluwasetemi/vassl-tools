@@ -1,6 +1,6 @@
 [package]
 name        = "vassl-app"
-version     = "0.1.0-alpha.11"
+version     = "0.1.0-alpha.12"
 edition     = "2021"
 default-run = "vassl"
 
@@ -15,7 +15,7 @@ icon         = ["../../assets/icons/vassl_512.png",
                 "../../assets/icons/vassl_256.png",
                 "../../assets/icons/vassl_128.png",
                 "../../assets/icons/vassl_32.png"]
-version      = "0.1.0-alpha.11"
+version      = "0.1.0-alpha.12"
 copyright    = "Copyright © 2026 Video Access Security Solutions Ltd. All rights reserved."
 category     = "Business"
 short_description = "VASSL — internal tools for inventory, pricing, and quotations."

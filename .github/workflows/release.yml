@@ -9,6 +9,8 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  # GitHub migrated all runners to Node 24 on 2026-06-16; this flag is now
+  # a no-op and can be removed after confirming the migration is complete.
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -60,17 +62,25 @@ jobs:
           print(f"const SIGNING_SECRET: [u8; 32] = [\n{rows},\n];")
           EOF
 
+      # macOS alpha builds expire in 3 days — intentionally short to push
+      # alpha testers toward fresh releases. Windows uses 90 days (see below).
       - name: Compute build expiry (3 days)
         run: echo "VASSL_BUILD_EXPIRES=$(date -v+3d +%Y-%m-%d)" >> "$GITHUB_ENV"
 
-      - name: Build release binary
+      - name: Bundle .app, create ZIP and DMG
+        # IMPORTANT: VASSL_BUILD_EXPIRES must be set here so that cargo bundle's
+        # internal `cargo build` invocation sees the same environment as the explicit
+        # build step. Without it, Cargo detects option_env!("VASSL_BUILD_EXPIRES")
+        # changed and recompiles — but signing_secret.rs no longer exists in this
+        # step, so the re-build fails silently and cargo bundle packages an empty
+        # or stale stub, producing an incorrectly tiny (~200 KB) .app bundle.
         env:
           VASSL_BUILD_EXPIRES: ${{ env.VASSL_BUILD_EXPIRES }}
-        run: cargo build --release --target ${{ matrix.target }} -p vassl-app
-
-      - name: Bundle .app, create ZIP and DMG
         run: |
           cargo install cargo-bundle --locked
+          # cargo bundle compiles + bundles in one pass; the explicit cargo build
+          # step above is no longer needed and has been removed to avoid the
+          # double-compile / env mismatch that caused the 200 KB stub issue.
           cargo bundle --release --target ${{ matrix.target }} -p vassl-app
 
           # Discover the .app bundle — name comes from [package.metadata.bundle]
@@ -78,6 +88,14 @@ jobs:
           BUNDLE=$(find "$BUNDLE_DIR" -maxdepth 1 -name "*.app" | head -1)
           APP_NAME=$(basename "$BUNDLE")
           ARCH="${{ matrix.arch }}"
+
+          # Sanity-check: fail loudly if the binary inside the bundle is < 1 MB,
+          # which would indicate the stub/empty-bundle problem recurred.
+          BIN_SIZE=$(stat -f%z "${BUNDLE}/Contents/MacOS/"* | awk '{s+=$1} END {print s}')
+          if [ "${BIN_SIZE}" -lt 1048576 ]; then
+            echo "ERROR: bundled binary is only ${BIN_SIZE} bytes — expected > 1 MB" >&2
+            exit 1
+          fi
 
           # ── ZIP (used by the in-app auto-updater) ──────────────────────────
           cd "$BUNDLE_DIR"
