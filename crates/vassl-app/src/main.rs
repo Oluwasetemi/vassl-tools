@@ -293,7 +293,7 @@ fn main() {
         // Register all keybindings (remappable ones with overrides applied).
         apply_keybindings(cx, &keymap_overrides);
 
-        let bounds = Bounds::centered(None, size(px(1280.0), px(800.0)), cx);
+        let bounds = Bounds::centered(None, size(px(1280.0), px(720.0)), cx);
 
         match cx.open_window(
             WindowOptions {

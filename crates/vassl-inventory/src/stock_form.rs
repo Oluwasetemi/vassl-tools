@@ -26,7 +26,6 @@ pub struct StockEntryForm {
     error:            Option<String>,
     qty_error:        bool,
     cost_error:       bool,
-    focus_handle:     FocusHandle,
 }
 
 fn validate_entry(quantity: &str, unit_cost: &str) -> Result<(f64, f64), String> {
@@ -54,7 +53,6 @@ impl StockEntryForm {
             error:        None,
             qty_error:    false,
             cost_error:   false,
-            focus_handle: cx.focus_handle(),
         }
     }
 
@@ -103,7 +101,7 @@ impl StockEntryForm {
 }
 
 impl Focusable for StockEntryForm {
-    fn focus_handle(&self, _: &gpui::App) -> FocusHandle { self.focus_handle.clone() }
+    fn focus_handle(&self, cx: &gpui::App) -> FocusHandle { self.quantity.read(cx).focus_handle.clone() }
 }
 
 impl Render for StockEntryForm {

@@ -24,7 +24,6 @@ pub struct SupplierForm {
     save_focus:     FocusHandle,
     error:          Option<String>,
     name_error:     bool,
-    focus_handle:   FocusHandle,
 }
 
 fn validate_supplier_name(name: &str) -> Result<String, String> {
@@ -47,7 +46,6 @@ impl SupplierForm {
             save_focus:     cx.focus_handle(),
             error:          None,
             name_error:     false,
-            focus_handle:   cx.focus_handle(),
         }
     }
 
@@ -84,7 +82,6 @@ impl SupplierForm {
             save_focus:     cx.focus_handle(),
             error:          None,
             name_error:     false,
-            focus_handle:   cx.focus_handle(),
         }
     }
 
@@ -141,7 +138,7 @@ impl SupplierForm {
 }
 
 impl Focusable for SupplierForm {
-    fn focus_handle(&self, _: &gpui::App) -> FocusHandle { self.focus_handle.clone() }
+    fn focus_handle(&self, cx: &gpui::App) -> FocusHandle { self.name.read(cx).focus_handle.clone() }
 }
 
 impl Render for SupplierForm {

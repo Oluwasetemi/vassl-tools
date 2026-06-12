@@ -1,4 +1,4 @@
-use gpui::{Context, Entity, IntoElement, MouseButton, MouseDownEvent, Render, Subscription, Window,
+use gpui::{Context, Entity, Focusable, IntoElement, MouseButton, MouseDownEvent, Render, Subscription, Window,
            div, prelude::*, px, rems, rgb};
 use vassl_ui::{AppSettings, NewRecord, TextInput, ThemeHandle, text_field, tooltip_keyed};
 
@@ -43,9 +43,9 @@ impl SupplierPanel {
     pub fn create_new_form(&mut self, cx: &mut Context<Self>) -> Option<gpui::FocusHandle> {
         if self.form.is_some() { return None; }
         let form  = cx.new(|cx| SupplierForm::new(self.store.clone(), cx));
-        let first = form.read(cx).name.read(cx).focus_handle.clone();
+        let fh = form.read(cx).focus_handle(cx);
         self.wire_form_sub(form, cx);
-        Some(first)
+        Some(fh)
     }
 
     pub fn open_new_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -63,8 +63,7 @@ impl SupplierPanel {
         };
         let Some(supplier) = supplier else { return; };
         let form  = cx.new(|cx| SupplierForm::edit(self.store.clone(), &supplier, cx));
-        let first = form.read(cx).name.read(cx).focus_handle.clone();
-        window.focus(&first, cx);
+        cx.focus_view(&form, window);
         self.wire_form_sub(form, cx);
     }
 

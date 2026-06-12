@@ -197,7 +197,14 @@ impl SettingsPanel {
     }
 
     pub fn wire_observers(&mut self, cx: &mut Context<Self>) {
-        cx.observe(&self.user_name.clone(),     |this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("general.user_name",           v, cx); }).detach();
+        cx.observe(&self.user_name.clone(), |this, f, cx| {
+            let v = f.read(cx).text().to_string();
+            this.save_setting("general.user_name", v.clone(), cx);
+            // Keep current_user in sync — it's the key the audit log reads from.
+            // Both writes go to the serial DB queue, so any subsequent DB action
+            // that reads current_user() will always see the updated value.
+            this.save_setting("current_user", v, cx);
+        }).detach();
         cx.observe(&self.company_name.clone(),  |this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("general.company_name",         v, cx); }).detach();
         cx.observe(&self.low_stock.clone(),     |this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("inventory.low_stock_threshold", v, cx); }).detach();
         cx.observe(&self.default_unit.clone(),  |this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("inventory.default_unit",        v, cx); }).detach();

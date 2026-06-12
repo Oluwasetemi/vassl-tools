@@ -220,6 +220,14 @@ impl VasslRoot {
                             panel.store.update(cx, |s, cx| s.select_product(pid, cx));
                             panel.open_form_for(pid, pname, cx);
                         });
+                        // Focus the form's first input. Subscribe callbacks have no Window
+                        // parameter, so we retrieve the window handle via cx.windows() and
+                        // call update_window to access Window from within App context.
+                        let fh = this.pricebook_panel.read(cx).form_focus_handle(cx);
+                        let wh = cx.windows().into_iter().next();
+                        if let (Some(fh), Some(wh)) = (fh, wh) {
+                            let _ = wh.update(&mut *cx, |_, window, cx| window.focus(&fh, cx));
+                        }
                     }
                     InventoryPanelEvent::ImportXlsxRequested => {
                         let rx        = cx.prompt_for_paths(PathPromptOptions {
@@ -812,10 +820,6 @@ impl Render for VasslRoot {
             .font_family(gpui::SharedString::from(c.font_family.clone()))
             .bg(rgb(c.canvas_bg));
 
-        // On Windows with appears_transparent=true the DWM resize border occupies
-        // the top ~8 px of the client area, pushing rendered content out of frame.
-        #[cfg(target_os = "windows")]
-        let root = root.pt(px(8.));
 
         // Windows/Linux: render menus as a custom bar; macOS uses the native system menu bar.
         #[cfg(not(target_os = "macos"))]

@@ -1,4 +1,4 @@
-use gpui::{Context, Entity, IntoElement, Render, Subscription, Window,
+use gpui::{Context, Entity, Focusable, IntoElement, Render, Subscription, Window,
            div, prelude::*, px, rems, rgb};
 use vassl_pricebook::store::PriceBookStoreHandle;
 use vassl_ui::{NewRecord, ThemeHandle, tooltip, tooltip_keyed};
@@ -62,8 +62,7 @@ impl QuotationPanel {
     fn open_project_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.project_form.is_some() { return; }
         let form = cx.new(|cx| ProjectForm::new(self.store.clone(), cx));
-        let first = form.read(cx).name.read(cx).focus_handle.clone();
-        window.focus(&first, cx);
+        cx.focus_view(&form, window);
         let sub  = cx.subscribe(&form, |this, _form, ev: &ProjectFormEvent, cx| {
             match ev {
                 ProjectFormEvent::Submitted | ProjectFormEvent::Cancelled => {
@@ -85,7 +84,7 @@ impl QuotationPanel {
             db.next_reference_number().unwrap_or_else(|_| "VASSL-ERR-0000".to_string())
         };
         let form  = cx.new(|cx| QuotationForm::new(self.store.clone(), ref_num, cx));
-        let first = form.read(cx).notes.read(cx).focus_handle.clone();
+        let fh = form.read(cx).focus_handle(cx);
         let sub  = cx.subscribe(&form, |this, _form, ev: &QuotationFormEvent, cx| {
             match ev {
                 QuotationFormEvent::Submitted | QuotationFormEvent::Cancelled => {
@@ -98,7 +97,7 @@ impl QuotationPanel {
         self.form      = Some(form);
         self._form_sub = Some(sub);
         cx.notify();
-        Some(first)
+        Some(fh)
     }
 
     pub fn open_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -119,8 +118,7 @@ impl QuotationPanel {
             .cloned()
             .collect();
         let form = cx.new(|cx| LineItemForm::new(self.store.clone(), quotation_id, products, cx));
-        let first = form.read(cx).quantity.read(cx).focus_handle.clone();
-        window.focus(&first, cx);
+        cx.focus_view(&form, window);
         let sub = cx.subscribe(&form, |this, _, ev: &LineItemFormEvent, cx| {
             match ev {
                 LineItemFormEvent::Submitted => {

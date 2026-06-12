@@ -29,7 +29,6 @@ pub struct LineItemForm {
     desc_error:       bool,
     qty_error:        bool,
     price_error:      bool,
-    focus_handle:     FocusHandle,
 }
 
 
@@ -80,7 +79,6 @@ impl LineItemForm {
             desc_error:       false,
             qty_error:        false,
             price_error:      false,
-            focus_handle:     cx.focus_handle(),
         }
     }
 
@@ -130,7 +128,7 @@ impl LineItemForm {
 }
 
 impl Focusable for LineItemForm {
-    fn focus_handle(&self, _: &gpui::App) -> FocusHandle { self.focus_handle.clone() }
+    fn focus_handle(&self, cx: &gpui::App) -> FocusHandle { self.quantity.read(cx).focus_handle.clone() }
 }
 
 impl Render for LineItemForm {

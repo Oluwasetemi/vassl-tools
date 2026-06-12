@@ -43,7 +43,6 @@ pub struct ProductForm {
     sku_error:          bool,
     name_error:         bool,
     unit_error:         bool,
-    focus_handle:       FocusHandle,
 }
 
 fn validate_product(sku: &str, name: &str, unit: &str, min_stock: &str) -> Result<(String, String, String, f64), String> {
@@ -140,7 +139,6 @@ impl ProductForm {
             sku_error:    false,
             name_error:   false,
             unit_error:   false,
-            focus_handle: cx.focus_handle(),
         }
     }
 
@@ -220,7 +218,6 @@ impl ProductForm {
             sku_error:    false,
             name_error:   false,
             unit_error:   false,
-            focus_handle: cx.focus_handle(),
         }
     }
 
@@ -343,7 +340,7 @@ impl ProductForm {
 }
 
 impl Focusable for ProductForm {
-    fn focus_handle(&self, _: &gpui::App) -> FocusHandle { self.focus_handle.clone() }
+    fn focus_handle(&self, cx: &gpui::App) -> FocusHandle { self.sku.read(cx).focus_handle.clone() }
 }
 
 impl Render for ProductForm {

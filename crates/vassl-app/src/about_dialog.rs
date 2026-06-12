@@ -59,8 +59,10 @@ impl Render for AboutDialog {
 
         let (status_text, status_color, btn_label, btn_color, btn_action): (SharedString, u32, Option<&'static str>, u32, UpdateAction) =
             match &update_status {
-                UpdateStatus::Idle | UpdateStatus::UpToDate =>
-                    ("Up to date".into(), BADGE_GREEN, Some("Check"), BADGE_BLUE, UpdateAction::Check),
+                UpdateStatus::Idle =>
+                    ("Up to date".into(), BADGE_GREEN, Some("Check for updates"), BADGE_BLUE, UpdateAction::Check),
+                UpdateStatus::UpToDate =>
+                    ("Already up to date".into(), BADGE_GREEN, Some("Check again"), BADGE_BLUE, UpdateAction::Check),
                 UpdateStatus::Checking =>
                     ("Checking for updates…".into(), c.text_muted, None, 0, UpdateAction::None),
                 UpdateStatus::Available(info) => (

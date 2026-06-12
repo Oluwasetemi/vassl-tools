@@ -24,7 +24,6 @@ pub struct QuotationForm {
     cancel_focus:      FocusHandle,
     save_focus:        FocusHandle,
     error:             Option<String>,
-    focus_handle:      FocusHandle,
     _store_sub:        Subscription,
 }
 
@@ -83,7 +82,6 @@ impl QuotationForm {
             cancel_focus:     cx.focus_handle(),
             save_focus:       cx.focus_handle(),
             error:            None,
-            focus_handle:     cx.focus_handle(),
             _store_sub,
         }
     }
@@ -136,7 +134,7 @@ impl QuotationForm {
 }
 
 impl Focusable for QuotationForm {
-    fn focus_handle(&self, _: &gpui::App) -> FocusHandle { self.focus_handle.clone() }
+    fn focus_handle(&self, cx: &gpui::App) -> FocusHandle { self.notes.read(cx).focus_handle.clone() }
 }
 
 impl Render for QuotationForm {

@@ -29,7 +29,6 @@ pub struct PriceEntryForm {
     qty_error:     bool,
     cost_error:    bool,
     markup_error:  bool,
-    focus_handle:  FocusHandle,
     edit_entry_id: Option<i64>,
 }
 
@@ -79,7 +78,6 @@ impl PriceEntryForm {
             qty_error:     false,
             cost_error:    false,
             markup_error:  false,
-            focus_handle:  cx.focus_handle(),
             edit_entry_id: None,
         }
     }
@@ -131,7 +129,6 @@ impl PriceEntryForm {
             qty_error:     false,
             cost_error:    false,
             markup_error:  false,
-            focus_handle:  cx.focus_handle(),
             edit_entry_id: Some(entry_id),
         }
     }
@@ -201,7 +198,7 @@ impl PriceEntryForm {
 }
 
 impl Focusable for PriceEntryForm {
-    fn focus_handle(&self, _: &gpui::App) -> FocusHandle { self.focus_handle.clone() }
+    fn focus_handle(&self, cx: &gpui::App) -> FocusHandle { self.cost.read(cx).focus_handle.clone() }
 }
 
 impl Render for PriceEntryForm {

@@ -1,4 +1,4 @@
-use gpui::{Context, Entity, EventEmitter, IntoElement, MouseButton, MouseDownEvent,
+use gpui::{Context, Entity, EventEmitter, Focusable, IntoElement, MouseButton, MouseDownEvent,
            Render, Subscription, Window, div, prelude::*, px, rems, rgb};
 use vassl_ui::NewRecord;
 use vassl_ui::{AppSettings, TextInput, ThemeHandle, text_field, tooltip, tooltip_keyed};
@@ -92,8 +92,7 @@ impl InventoryPanel {
         };
 
         let form  = cx.new(|cx| StockEntryForm::new(self.store.clone(), product_id, product_name, cx));
-        let first = form.read(cx).quantity.read(cx).focus_handle.clone();
-        window.focus(&first, cx);
+        cx.focus_view(&form, window);
         let sub = cx.subscribe(&form, |this, _form, ev: &StockFormEvent, cx| {
             match ev {
                 StockFormEvent::Submitted | StockFormEvent::Cancelled => {
@@ -111,7 +110,7 @@ impl InventoryPanel {
     pub fn create_product_form(&mut self, cx: &mut Context<Self>) -> Option<gpui::FocusHandle> {
         if self.product_form.is_some() { return None; }
         let form  = cx.new(|cx| ProductForm::new(self.store.clone(), cx));
-        let first = form.read(cx).sku.read(cx).focus_handle.clone();
+        let fh = form.read(cx).focus_handle(cx);
         let sub  = cx.subscribe(&form, |this, _form, ev: &ProductFormEvent, cx| {
             match ev {
                 ProductFormEvent::Submitted | ProductFormEvent::Cancelled => {
@@ -124,7 +123,7 @@ impl InventoryPanel {
         self.product_form   = Some(form);
         self._prod_form_sub = Some(sub);
         cx.notify();
-        Some(first)
+        Some(fh)
     }
 
     pub fn open_product_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -140,8 +139,7 @@ impl InventoryPanel {
             .map(|p| p.current_stock)
             .unwrap_or(0.0);
         let form  = cx.new(|cx| ProductForm::new_edit(self.store.clone(), &product, current_stock, cx));
-        let first = form.read(cx).sku.read(cx).focus_handle.clone();
-        window.focus(&first, cx);
+        cx.focus_view(&form, window);
         let sub  = cx.subscribe(&form, |this, _form, ev: &ProductFormEvent, cx| {
             match ev {
                 ProductFormEvent::Submitted | ProductFormEvent::Cancelled => {

@@ -1,4 +1,4 @@
-use gpui::{Context, Entity, EventEmitter, IntoElement, MouseButton, MouseDownEvent,
+use gpui::{Context, Entity, EventEmitter, Focusable, IntoElement, MouseButton, MouseDownEvent,
            Render, Subscription, Window, div, prelude::*, px, rems, rgb};
 use vassl_inventory::InventoryStoreHandle;
 use vassl_ui::{AppSettings, TextInput, ThemeHandle, text_field, tooltip};
@@ -61,6 +61,11 @@ impl PriceBookPanel {
         }
     }
 
+    /// Returns the focus handle of the currently open form's first input, if any.
+    pub fn form_focus_handle(&self, cx: &gpui::App) -> Option<gpui::FocusHandle> {
+        self.form.as_ref().map(|f| f.read(cx).focus_handle(cx))
+    }
+
     pub fn create_form(&mut self, cx: &mut Context<Self>) -> Option<gpui::FocusHandle> {
         let (pid, name) = {
             let store = self.store.read(cx);
@@ -72,7 +77,7 @@ impl PriceBookPanel {
             (pid, name)
         };
         self.open_form_for(pid, name, cx);
-        self.form.as_ref().map(|f| f.read(cx).cost.read(cx).focus_handle.clone())
+        self.form.as_ref().map(|f| f.read(cx).focus_handle(cx))
     }
 
     fn open_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -420,8 +425,7 @@ impl Render for PriceBookPanel {
                                         this.store.update(cx, |s, cx| s.clear_context_menu(cx));
                                         this.open_form_for(pid, name_for_add.clone(), cx);
                                         if let Some(form) = &this.form {
-                                            let first = form.read(cx).cost.read(cx).focus_handle.clone();
-                                            window.focus(&first, cx);
+                                            cx.focus_view(form, window);
                                         }
                                     }),
                                 )
@@ -447,8 +451,7 @@ impl Render for PriceBookPanel {
                                                 if let Some(entry) = entry.clone() {
                                                     this.open_edit_form_for(pid, pname_clone.clone(), entry, cx);
                                                     if let Some(form) = &this.form {
-                                                        let first = form.read(cx).cost.read(cx).focus_handle.clone();
-                                                        window.focus(&first, cx);
+                                                        cx.focus_view(form, window);
                                                     }
                                                 }
                                             }),
