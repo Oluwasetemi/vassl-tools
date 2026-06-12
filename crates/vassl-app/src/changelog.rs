@@ -3,6 +3,17 @@ use gpui::{Context, EventEmitter, IntoElement, MouseButton, MouseDownEvent, Rend
 use vassl_ui::ThemeHandle;
 
 const CHANGELOG: &str = r#"
+## v0.1.0-alpha.17  —  2026-06-12
+
+### Fixed
+- All modals now auto-focus their first input when opened by button click (not just keyboard shortcut).
+- Esc key now works consistently across all modals regardless of how they were opened.
+- Audit log now immediately reflects a name change — no restart required.
+- Windows: restored clean title frame; reduced default window height to fit 768 px laptop screens.
+- About dialog now distinguishes "Up to date" (not yet checked) from "Already up to date" (checked, no update found).
+
+---
+
 ## v0.1.0-alpha.6  —  2026-06-10
 
 ### Added
