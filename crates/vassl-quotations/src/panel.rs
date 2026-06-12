@@ -62,7 +62,7 @@ impl QuotationPanel {
     fn open_project_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.project_form.is_some() { return; }
         let form = cx.new(|cx| ProjectForm::new(self.store.clone(), cx));
-        cx.focus_view(&form, window);
+        let fh = form.read(cx).focus_handle(cx);
         let sub  = cx.subscribe(&form, |this, _form, ev: &ProjectFormEvent, cx| {
             match ev {
                 ProjectFormEvent::Submitted | ProjectFormEvent::Cancelled => {
@@ -75,6 +75,7 @@ impl QuotationPanel {
         self.project_form      = Some(form);
         self._project_form_sub = Some(sub);
         cx.notify();
+        window.defer(cx, move |window, cx| { window.focus(&fh, cx); });
     }
 
     pub fn create_form(&mut self, cx: &mut Context<Self>) -> Option<gpui::FocusHandle> {
@@ -102,7 +103,7 @@ impl QuotationPanel {
 
     pub fn open_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(fh) = self.create_form(cx) {
-            window.focus(&fh, cx);
+            window.defer(cx, move |window, cx| { window.focus(&fh, cx); });
         }
     }
 
@@ -118,7 +119,7 @@ impl QuotationPanel {
             .cloned()
             .collect();
         let form = cx.new(|cx| LineItemForm::new(self.store.clone(), quotation_id, products, cx));
-        cx.focus_view(&form, window);
+        let fh = form.read(cx).focus_handle(cx);
         let sub = cx.subscribe(&form, |this, _, ev: &LineItemFormEvent, cx| {
             match ev {
                 LineItemFormEvent::Submitted => {
@@ -140,6 +141,7 @@ impl QuotationPanel {
         self.line_item_form      = Some(form);
         self._line_item_form_sub = Some(sub);
         cx.notify();
+        window.defer(cx, move |window, cx| { window.focus(&fh, cx); });
     }
 }
 

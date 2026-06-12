@@ -3,6 +3,14 @@ use gpui::{Context, EventEmitter, IntoElement, MouseButton, MouseDownEvent, Rend
 use vassl_ui::ThemeHandle;
 
 const CHANGELOG: &str = r#"
+## v0.1.0-alpha.18  —  2026-06-12
+
+### Fixed
+- Changelog and audit log panel header/footer corners now clip correctly to the border radius.
+- Modal overlays no longer propagate mouse events to the panel behind them.
+
+---
+
 ## v0.1.0-alpha.17  —  2026-06-12
 
 ### Fixed
@@ -77,12 +85,13 @@ impl Render for ChangelogPanel {
                     .border_1().border_color(rgb(c.surface_default))
                     .flex().flex_col()
                     .overflow_hidden()
-                    .on_mouse_down(MouseButton::Left, |_, _, _| {}) // swallow clicks
+                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     // Header
                     .child(
                         div()
                             .px(px(24.)).pt(px(20.)).pb(px(14.))
                             .bg(rgb(c.sidebar_bg))
+                            .rounded_t(px(10.))
                             .flex().flex_row().items_center()
                             .child(
                                 div().flex_1().flex().flex_col().gap(px(3.))

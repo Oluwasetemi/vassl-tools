@@ -78,6 +78,7 @@ impl Render for AuditLogPanel {
                         div()
                             .px(px(20.)).py(px(14.))
                             .bg(rgb(c.sidebar_bg))
+                            .rounded_t(px(10.))
                             .flex().flex_row().items_center()
                             .child(div().flex_1().text_size(rems(1.)).text_color(rgb(c.text_default)).child("Audit Log"))
                             .child(
@@ -144,6 +145,7 @@ impl Render for AuditLogPanel {
                             .border_t_1()
                             .border_color(rgb(c.surface_default))
                             .bg(rgb(c.sidebar_bg))
+                            .rounded_b(px(10.))
                             .flex().flex_row().items_center()
                             .child(div().flex_1().text_size(rems(0.846)).text_color(rgb(c.text_muted))
                                 .child(format!("{} entries", self.rows.len())))

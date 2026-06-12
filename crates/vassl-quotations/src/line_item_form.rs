@@ -147,6 +147,7 @@ impl Render for LineItemForm {
             .absolute().top_0().left_0().right_0().bottom_0()
             .flex().items_center().justify_center()
             .bg(rgba(0x00000099))
+            .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .key_context("LineItemForm")
             .on_action(cx.listener(|_, _: &EscapeForm, window, cx| {
                 let root = cx.global::<vassl_ui::RootFocusHandle>().0.clone();

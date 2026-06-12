@@ -372,6 +372,7 @@ impl Render for ProductForm {
             .absolute().top_0().left_0().right_0().bottom_0()
             .flex().items_center().justify_center()
             .bg(rgba(0x00000099))
+            .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .key_context("ProductForm")
             .on_action(cx.listener(|this, _: &EscapeForm, window, cx| {
                 // Close an open dropdown first; only cancel the form on the second Esc

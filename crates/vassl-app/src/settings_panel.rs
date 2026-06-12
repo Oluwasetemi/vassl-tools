@@ -932,17 +932,31 @@ impl SettingsPanel {
         let btn_bg      = if in_progress { c.surface_default } else { c.surface_active };
 
         div().flex().flex_col()
-            // DB location row — path wraps below the label on its own line
+            // DB location row
             .child(
                 div().flex().flex_col()
                     .child(
-                        div().flex().flex_col().py(px(14.)).px(px(32.)).gap(px(4.))
-                            .child(div().text_size(rems(1.)).text_color(rgb(c.text_default))
-                                .child("Database Location"))
-                            .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted))
-                                .child("Path to the live SQLite database file."))
-                            .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted))
-                                .child(SharedString::from(db_display)))
+                        div().flex().flex_row().items_center().py(px(14.)).px(px(32.)).gap(px(12.))
+                            .child(
+                                div().flex_1().min_w(px(0.)).flex().flex_col().gap(px(4.))
+                                    .child(div().text_size(rems(1.)).text_color(rgb(c.text_default))
+                                        .child("Database Location"))
+                                    .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted))
+                                        .child("Path to the live SQLite database file."))
+                                    .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted))
+                                        .child(SharedString::from(db_display)))
+                            )
+                            .child(
+                                div().id("settings-db-reveal")
+                                    .px(px(16.)).py(px(7.)).rounded(px(5.))
+                                    .bg(rgb(c.surface_active))
+                                    .text_size(rems(0.923)).text_color(rgb(c.text_default))
+                                    .cursor_pointer()
+                                    .on_mouse_down(MouseButton::Left, cx.listener(move |_, _: &MouseDownEvent, _, cx| {
+                                        cx.reveal_path(&db_path);
+                                    }))
+                                    .child("Open Now")
+                            )
                     )
                     .child(div().h(px(1.)).mx(px(32.)).bg(rgb(c.surface_default)))
             )

@@ -82,7 +82,7 @@ impl PriceBookPanel {
 
     fn open_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(fh) = self.create_form(cx) {
-            window.focus(&fh, cx);
+            window.defer(cx, move |window, cx| { window.focus(&fh, cx); });
         }
     }
 
@@ -424,8 +424,8 @@ impl Render for PriceBookPanel {
                                     cx.listener(move |this, _: &MouseDownEvent, window: &mut Window, cx| {
                                         this.store.update(cx, |s, cx| s.clear_context_menu(cx));
                                         this.open_form_for(pid, name_for_add.clone(), cx);
-                                        if let Some(form) = &this.form {
-                                            cx.focus_view(form, window);
+                                        if let Some(fh) = this.form.as_ref().map(|f| f.read(cx).focus_handle(cx)) {
+                                            window.defer(cx, move |window, cx| { window.focus(&fh, cx); });
                                         }
                                     }),
                                 )
@@ -450,8 +450,8 @@ impl Render for PriceBookPanel {
                                                 this.store.update(cx, |s, cx| s.clear_context_menu(cx));
                                                 if let Some(entry) = entry.clone() {
                                                     this.open_edit_form_for(pid, pname_clone.clone(), entry, cx);
-                                                    if let Some(form) = &this.form {
-                                                        cx.focus_view(form, window);
+                                                    if let Some(fh) = this.form.as_ref().map(|f| f.read(cx).focus_handle(cx)) {
+                                                        window.defer(cx, move |window, cx| { window.focus(&fh, cx); });
                                                     }
                                                 }
                                             }),

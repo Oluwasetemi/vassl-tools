@@ -92,7 +92,7 @@ impl InventoryPanel {
         };
 
         let form  = cx.new(|cx| StockEntryForm::new(self.store.clone(), product_id, product_name, cx));
-        cx.focus_view(&form, window);
+        let fh = form.read(cx).focus_handle(cx);
         let sub = cx.subscribe(&form, |this, _form, ev: &StockFormEvent, cx| {
             match ev {
                 StockFormEvent::Submitted | StockFormEvent::Cancelled => {
@@ -105,6 +105,7 @@ impl InventoryPanel {
         self.stock_form = Some(form);
         self._form_sub  = Some(sub);
         cx.notify();
+        window.defer(cx, move |window, cx| { window.focus(&fh, cx); });
     }
 
     pub fn create_product_form(&mut self, cx: &mut Context<Self>) -> Option<gpui::FocusHandle> {
@@ -128,7 +129,7 @@ impl InventoryPanel {
 
     pub fn open_product_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(fh) = self.create_product_form(cx) {
-            window.focus(&fh, cx);
+            window.defer(cx, move |window, cx| { window.focus(&fh, cx); });
         }
     }
 
@@ -139,7 +140,7 @@ impl InventoryPanel {
             .map(|p| p.current_stock)
             .unwrap_or(0.0);
         let form  = cx.new(|cx| ProductForm::new_edit(self.store.clone(), &product, current_stock, cx));
-        cx.focus_view(&form, window);
+        let fh = form.read(cx).focus_handle(cx);
         let sub  = cx.subscribe(&form, |this, _form, ev: &ProductFormEvent, cx| {
             match ev {
                 ProductFormEvent::Submitted | ProductFormEvent::Cancelled => {
@@ -152,6 +153,7 @@ impl InventoryPanel {
         self.product_form   = Some(form);
         self._prod_form_sub = Some(sub);
         cx.notify();
+        window.defer(cx, move |window, cx| { window.focus(&fh, cx); });
     }
 }
 

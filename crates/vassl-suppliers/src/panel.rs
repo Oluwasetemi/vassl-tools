@@ -50,7 +50,7 @@ impl SupplierPanel {
 
     pub fn open_new_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(fh) = self.create_new_form(cx) {
-            window.focus(&fh, cx);
+            window.defer(cx, move |window, cx| { window.focus(&fh, cx); });
         }
     }
 
@@ -63,8 +63,9 @@ impl SupplierPanel {
         };
         let Some(supplier) = supplier else { return; };
         let form  = cx.new(|cx| SupplierForm::edit(self.store.clone(), &supplier, cx));
-        cx.focus_view(&form, window);
+        let fh = form.read(cx).focus_handle(cx);
         self.wire_form_sub(form, cx);
+        window.defer(cx, move |window, cx| { window.focus(&fh, cx); });
     }
 
     fn wire_form_sub(&mut self, form: gpui::Entity<SupplierForm>, cx: &mut Context<Self>) {

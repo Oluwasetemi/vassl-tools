@@ -226,7 +226,9 @@ impl VasslRoot {
                         let fh = this.pricebook_panel.read(cx).form_focus_handle(cx);
                         let wh = cx.windows().into_iter().next();
                         if let (Some(fh), Some(wh)) = (fh, wh) {
-                            let _ = wh.update(&mut *cx, |_, window, cx| window.focus(&fh, cx));
+                            let _ = wh.update(&mut *cx, |_, window, cx| {
+                                window.defer(cx, move |window, cx| { window.focus(&fh, cx); });
+                            });
                         }
                     }
                     InventoryPanelEvent::ImportXlsxRequested => {
