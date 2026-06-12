@@ -15,21 +15,19 @@ env:
 
 jobs:
   # ─── macOS (arm64 + x86_64) ─────────────────────────────────────────────────
-  # Each arch uses its own NATIVE runner to avoid cross-compilation issues.
-  # cargo bundle does not reliably produce a full-sized binary when
-  # cross-compiling x86_64 on an arm64 host — native builds are the safe path.
+  # Both targets use macos-14 (Apple Silicon). Cross-compiling x86_64 on arm64
+  # is reliable now that autobins = false ensures cargo-bundle always picks the
+  # vassl binary. macos-13 Intel runners have chronic queue delays so we avoid them.
   build-macos:
     name: macOS (${{ matrix.target }})
-    runs-on: ${{ matrix.runner }}
+    runs-on: macos-14
     strategy:
       matrix:
         include:
           - target: aarch64-apple-darwin
             arch:   arm64
-            runner: macos-14   # Apple Silicon — native arm64
           - target: x86_64-apple-darwin
             arch:   x86_64
-            runner: macos-13   # Intel — native x86_64, no cross-compilation
 
     steps:
       - uses: actions/checkout@v4
