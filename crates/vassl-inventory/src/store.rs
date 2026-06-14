@@ -3,6 +3,8 @@ use vassl_core::{Product, StockEntry};
 
 use crate::db::InventoryDb;
 
+const LOW_STOCK_SETTING: &str = "inventory.low_stock_threshold";
+
 // ── View model types ──────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq)]
@@ -10,7 +12,7 @@ pub enum StockStatus {
     Healthy,         // current > min * 1.2
     Low,             // min < current <= min * 1.2
     Critical,        // current <= min (and min > 0)
-    NoAlert,         // min_stock_level == 0
+    NoAlert,         // min_stock_level == 0 and no global fallback threshold
 }
 
 impl StockStatus {
@@ -79,11 +81,23 @@ impl InventoryStore {
         cx.notify();
 
         let db = InventoryDb::global(&**cx);
+        let app_db = vassl_db::AppDatabase::global(&**cx);
+        let global_threshold: f64 = vassl_db::shared::get_setting(app_db, LOW_STOCK_SETTING)
+            .ok()
+            .flatten()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0.0);
+
         cx.spawn(async move |this, cx| {
             let result = cx.background_executor()
                 .spawn(async move {
                     db.list_products_with_stock()?.into_iter().map(|(p, current_stock)| {
-                        let status = StockStatus::from_levels(current_stock, p.min_stock_level);
+                        let effective_min = if p.min_stock_level > f64::EPSILON {
+                            p.min_stock_level
+                        } else {
+                            global_threshold
+                        };
+                        let status = StockStatus::from_levels(current_stock, effective_min);
                         Ok(ProductWithStock { product: p, current_stock, status })
                     }).collect::<anyhow::Result<Vec<_>>>()
                 })
@@ -255,6 +269,7 @@ mod tests {
             loading: false,
             search_query: String::new(),
             context_menu: None,
+            detail_requested: false,
         };
         assert_eq!(store.filtered_products().len(), 2);
     }
@@ -268,6 +283,7 @@ mod tests {
             loading: false,
             search_query: "camera".into(),
             context_menu: None,
+            detail_requested: false,
         };
         let results = store.filtered_products();
         assert_eq!(results.len(), 1);
@@ -283,6 +299,7 @@ mod tests {
             loading: false,
             search_query: "nvr-".into(),
             context_menu: None,
+            detail_requested: false,
         };
         assert_eq!(store.filtered_products().len(), 1);
         assert_eq!(store.filtered_products()[0].product.sku, "NVR-001");
@@ -297,6 +314,7 @@ mod tests {
             loading: false,
             search_query: "zzzzz".into(),
             context_menu: None,
+            detail_requested: false,
         };
         assert!(store.filtered_products().is_empty());
     }
