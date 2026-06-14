@@ -17,7 +17,6 @@ path = "src/bin/keygen.rs"
 name         = "VASSL"
 identifier   = "com.kamalu.vassl"
 icon         = ["../../assets/icons/vassl.icns"]
-version      = "0.1.0-alpha.18"
 copyright    = "Copyright © 2026 Video Access Security Solutions Ltd. All rights reserved."
 category     = "Business"
 short_description = "VASSL — internal tools for inventory, pricing, and quotations."
