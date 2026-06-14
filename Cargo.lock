@@ -6430,7 +6430,7 @@ dependencies = [
 
 [[package]]
 name = "vassl-app"
-version = "0.1.0-alpha.18"
+version = "0.1.0-beta.1"
 dependencies = [
  "anyhow",
  "argon2",
