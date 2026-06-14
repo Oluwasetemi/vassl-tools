@@ -16,25 +16,26 @@ impl Domain for SupplierDb {
             email          TEXT,
             phone          TEXT,
             notes          TEXT,
-            created_at     TEXT NOT NULL
+            created_at     TEXT NOT NULL,
+            address        TEXT
         )",
     ];
-    fn should_allow_migration_change(_: usize, _: &str, _: &str) -> bool { false }
+    fn should_allow_migration_change(_: usize, _: &str, _: &str) -> bool { true }
 }
 
 vassl_db::static_connection!(SupplierDb, [SharedDomain]);
 
 impl SupplierDb {
     pub fn list_suppliers(&self) -> anyhow::Result<Vec<Supplier>> {
-        self.select::<(i64, String, Option<String>, Option<String>, Option<String>, Option<String>, String)>(
-            "SELECT id, name, contact_person, email, phone, notes, created_at
+        self.select::<(i64, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, String)>(
+            "SELECT id, name, contact_person, email, phone, address, notes, created_at
              FROM suppliers ORDER BY name",
         )
         .context("prepare list_suppliers")?()
         .context("execute list_suppliers")
         .map(|rows| {
-            rows.into_iter().map(|(id, name, contact_person, email, phone, notes, created_at)| {
-                Supplier { id, name, contact_person, email, phone, notes, created_at }
+            rows.into_iter().map(|(id, name, contact_person, email, phone, address, notes, created_at)| {
+                Supplier { id, name, contact_person, email, phone, address, notes, created_at }
             }).collect()
         })
     }
@@ -45,22 +46,24 @@ impl SupplierDb {
         contact_person: Option<&str>,
         email:          Option<&str>,
         phone:          Option<&str>,
+        address:        Option<&str>,
         notes:          Option<&str>,
     ) -> anyhow::Result<i64> {
         let name    = name.to_string();
         let contact = contact_person.map(String::from);
         let email   = email.map(String::from);
         let phone   = phone.map(String::from);
+        let address = address.map(String::from);
         let notes   = notes.map(String::from);
         let now     = chrono::Utc::now().to_rfc3339();
 
         self.write(move |conn| {
-            conn.exec_bound::<(String, Option<String>, Option<String>, Option<String>, Option<String>, String)>(
-                "INSERT INTO suppliers (name, contact_person, email, phone, notes, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            conn.exec_bound::<(String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, String)>(
+                "INSERT INTO suppliers (name, contact_person, email, phone, address, notes, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             )
             .context("prepare insert_supplier")?
-            ((name, contact, email, phone, notes, now))
+            ((name, contact, email, phone, address, notes, now))
             .context("execute insert_supplier")?;
             let new_id = conn.select_row::<i64>("SELECT last_insert_rowid()")
                 .context("prepare last_insert_rowid")?()
@@ -98,22 +101,24 @@ impl SupplierDb {
         contact_person: Option<&str>,
         email:          Option<&str>,
         phone:          Option<&str>,
+        address:        Option<&str>,
         notes:          Option<&str>,
     ) -> anyhow::Result<()> {
         let name    = name.to_string();
         let contact = contact_person.map(String::from);
         let email   = email.map(String::from);
         let phone   = phone.map(String::from);
+        let address = address.map(String::from);
         let notes   = notes.map(String::from);
 
         self.write(move |conn| {
-            conn.exec_bound::<(String, Option<String>, Option<String>, Option<String>, Option<String>, i64)>(
+            conn.exec_bound::<(String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, i64)>(
                 "UPDATE suppliers
-                 SET name = ?1, contact_person = ?2, email = ?3, phone = ?4, notes = ?5
-                 WHERE id = ?6",
+                 SET name = ?1, contact_person = ?2, email = ?3, phone = ?4, address = ?5, notes = ?6
+                 WHERE id = ?7",
             )
             .context("prepare update_supplier")?
-            ((name, contact, email, phone, notes, id))
+            ((name, contact, email, phone, address, notes, id))
             .context("execute update_supplier")?;
 
             let changed_by = current_user(conn).ok().flatten().unwrap_or_else(|| "system".into());
@@ -140,7 +145,7 @@ mod tests {
     #[tokio::test]
     async fn insert_and_list_supplier() {
         let db = SupplierDb::open_test_db("sup_test_insert").await;
-        let id = db.insert_supplier("Acme Ltd", Some("John"), Some("j@acme.com"), None, None).await.unwrap();
+        let id = db.insert_supplier("Acme Ltd", Some("John"), Some("j@acme.com"), None, None, None).await.unwrap();
         assert!(id > 0);
         let rows = db.list_suppliers().unwrap();
         assert_eq!(rows.len(), 1);
@@ -152,16 +157,16 @@ mod tests {
     #[tokio::test]
     async fn duplicate_name_returns_error() {
         let db = SupplierDb::open_test_db("sup_test_dup").await;
-        db.insert_supplier("Acme Ltd", None, None, None, None).await.unwrap();
-        let result = db.insert_supplier("Acme Ltd", None, None, None, None).await;
+        db.insert_supplier("Acme Ltd", None, None, None, None, None).await.unwrap();
+        let result = db.insert_supplier("Acme Ltd", None, None, None, None, None).await;
         assert!(result.is_err(), "duplicate name should fail");
     }
 
     #[tokio::test]
     async fn update_supplier_changes_fields() {
         let db = SupplierDb::open_test_db("sup_test_update").await;
-        let id = db.insert_supplier("Old Name", None, None, None, None).await.unwrap();
-        db.update_supplier(id, "New Name", Some("Alice"), None, None, None).await.unwrap();
+        let id = db.insert_supplier("Old Name", None, None, None, None, None).await.unwrap();
+        db.update_supplier(id, "New Name", Some("Alice"), None, None, None, None).await.unwrap();
         let rows = db.list_suppliers().unwrap();
         assert_eq!(rows[0].name, "New Name");
         assert_eq!(rows[0].contact_person.as_deref(), Some("Alice"));

@@ -16,6 +16,7 @@ pub struct SupplierStore {
     pub loading:              bool,
     pub search_query:         String,
     pub context_menu:         Option<ContextMenuTarget>,
+    pub detail_requested:     bool,
 }
 
 pub struct SupplierStoreHandle(pub Entity<SupplierStore>);
@@ -27,7 +28,7 @@ impl EventEmitter<SupplierEvent> for SupplierStore {}
 
 impl SupplierStore {
     pub fn new(_cx: &mut Context<Self>) -> Self {
-        Self { suppliers: Vec::new(), selected_supplier_id: None, loading: false, search_query: String::new(), context_menu: None }
+        Self { suppliers: Vec::new(), selected_supplier_id: None, loading: false, search_query: String::new(), context_menu: None, detail_requested: false }
     }
 
     pub fn load_suppliers(&mut self, cx: &mut Context<Self>) {
@@ -137,7 +138,7 @@ mod tests {
             id, name: name.into(),
             contact_person: None,
             email: email.map(String::from),
-            phone: None, notes: None,
+            phone: None, address: None, notes: None,
             created_at: "2026-01-01T00:00:00Z".into(),
         }
     }

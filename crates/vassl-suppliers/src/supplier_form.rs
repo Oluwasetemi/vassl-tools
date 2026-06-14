@@ -19,6 +19,7 @@ pub struct SupplierForm {
     contact_person: Entity<TextInput>,
     email:          Entity<TextInput>,
     phone:          Entity<TextInput>,
+    address:        Entity<TextInput>,
     notes:          Entity<TextInput>,
     cancel_focus:   FocusHandle,
     save_focus:     FocusHandle,
@@ -41,6 +42,7 @@ impl SupplierForm {
             contact_person: cx.new(|cx| TextInput::with_placeholder("optional", cx)),
             email:          cx.new(|cx| TextInput::with_placeholder("optional", cx)),
             phone:          cx.new(|cx| TextInput::with_placeholder("optional", cx)),
+            address:        cx.new(|cx| TextInput::with_placeholder("optional", cx)),
             notes:          cx.new(|cx| TextInput::with_placeholder("optional", cx)),
             cancel_focus:   cx.focus_handle(),
             save_focus:     cx.focus_handle(),
@@ -54,6 +56,7 @@ impl SupplierForm {
         let contact_f = cx.new(|cx| TextInput::with_placeholder("optional", cx));
         let email_f   = cx.new(|cx| TextInput::with_placeholder("optional", cx));
         let phone_f   = cx.new(|cx| TextInput::with_placeholder("optional", cx));
+        let address_f = cx.new(|cx| TextInput::with_placeholder("optional", cx));
         let notes_f   = cx.new(|cx| TextInput::with_placeholder("optional", cx));
 
         name_f.update(cx, |t, cx| t.set_text(supplier.name.clone(), cx));
@@ -66,6 +69,9 @@ impl SupplierForm {
         if let Some(v) = &supplier.phone {
             phone_f.update(cx, |t, cx| t.set_text(v.clone(), cx));
         }
+        if let Some(v) = &supplier.address {
+            address_f.update(cx, |t, cx| t.set_text(v.clone(), cx));
+        }
         if let Some(v) = &supplier.notes {
             notes_f.update(cx, |t, cx| t.set_text(v.clone(), cx));
         }
@@ -77,6 +83,7 @@ impl SupplierForm {
             contact_person: contact_f,
             email:          email_f,
             phone:          phone_f,
+            address:        address_f,
             notes:          notes_f,
             cancel_focus:   cx.focus_handle(),
             save_focus:     cx.focus_handle(),
@@ -90,10 +97,12 @@ impl SupplierForm {
         let contact    = self.contact_person.read(cx).text().trim().to_string();
         let email      = self.email.read(cx).text().trim().to_string();
         let phone      = self.phone.read(cx).text().trim().to_string();
+        let address    = self.address.read(cx).text().trim().to_string();
         let notes      = self.notes.read(cx).text().trim().to_string();
         let contact_op = if contact.is_empty() { None } else { Some(contact) };
         let email_op   = if email.is_empty()   { None } else { Some(email) };
         let phone_op   = if phone.is_empty()   { None } else { Some(phone) };
+        let address_op = if address.is_empty() { None } else { Some(address) };
         let notes_op   = if notes.is_empty()   { None } else { Some(notes) };
 
         self.name_error = name_raw.trim().is_empty();
@@ -109,10 +118,10 @@ impl SupplierForm {
 
                 cx.spawn(async move |this, cx| {
                     let result = if let Some(id) = editing_id {
-                        db.update_supplier(id, &name, contact_op.as_deref(), email_op.as_deref(), phone_op.as_deref(), notes_op.as_deref()).await
+                        db.update_supplier(id, &name, contact_op.as_deref(), email_op.as_deref(), phone_op.as_deref(), address_op.as_deref(), notes_op.as_deref()).await
                             .map(|_| ())
                     } else {
-                        db.insert_supplier(&name, contact_op.as_deref(), email_op.as_deref(), phone_op.as_deref(), notes_op.as_deref()).await
+                        db.insert_supplier(&name, contact_op.as_deref(), email_op.as_deref(), phone_op.as_deref(), address_op.as_deref(), notes_op.as_deref()).await
                             .map(|_| ())
                     };
 
@@ -148,6 +157,7 @@ impl Render for SupplierForm {
         let contact_f  = self.contact_person.read(cx).focus_handle.is_focused(window);
         let email_f    = self.email.read(cx).focus_handle.is_focused(window);
         let phone_f    = self.phone.read(cx).focus_handle.is_focused(window);
+        let address_f  = self.address.read(cx).focus_handle.is_focused(window);
         let notes_f    = self.notes.read(cx).focus_handle.is_focused(window);
         let cancel_f   = self.cancel_focus.is_focused(window);
         let save_f     = self.save_focus.is_focused(window);
@@ -171,6 +181,7 @@ impl Render for SupplierForm {
                     this.contact_person.read(cx).focus_handle.clone(),
                     this.email.read(cx).focus_handle.clone(),
                     this.phone.read(cx).focus_handle.clone(),
+                    this.address.read(cx).focus_handle.clone(),
                     this.notes.read(cx).focus_handle.clone(),
                     this.cancel_focus.clone(),
                     this.save_focus.clone(),
@@ -185,6 +196,7 @@ impl Render for SupplierForm {
                     this.contact_person.read(cx).focus_handle.clone(),
                     this.email.read(cx).focus_handle.clone(),
                     this.phone.read(cx).focus_handle.clone(),
+                    this.address.read(cx).focus_handle.clone(),
                     this.notes.read(cx).focus_handle.clone(),
                     this.cancel_focus.clone(),
                     this.save_focus.clone(),
@@ -234,6 +246,12 @@ impl Render for SupplierForm {
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child("Phone"))
                                     .child(div().flex_1().child(text_field("", self.phone.clone(), phone_f, false, cx)))
+                            )
+                            .child(div().h(px(1.)).bg(rgb(c.surface_default)))
+                            .child(
+                                div().flex().flex_row().items_center().py(px(10.))
+                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child("Address"))
+                                    .child(div().flex_1().child(text_field("", self.address.clone(), address_f, false, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(

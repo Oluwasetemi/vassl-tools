@@ -4,13 +4,13 @@ use gpui::{Context, Entity, FocusHandle, Focusable, IntoElement, PathPromptOptio
 use gpui::{MouseButton, MouseDownEvent, OwnedMenuItem, deferred};
 #[cfg(not(target_os = "macos"))]
 use vassl_ui::tooltip;
-use vassl_ui::{ThemeColors, ThemeHandle, RootFocusHandle};
+use vassl_ui::{TextContextMenuHandle, TextContextMenuState, ThemeColors, ThemeHandle, RootFocusHandle};
 
 use crate::about_dialog::{AboutDialog, AboutEvent};
 use crate::actions::{About, CheckForUpdates, DecreaseFontSize, EscapeModal, FocusSearch,
-                     IncreaseFontSize, InstallUpdate, Minimize, OpenAuditLog, OpenChangelog,
-                     OpenGlobalSearch, OpenInventory, OpenPriceBook, OpenQuotations, OpenSuppliers,
-                     OpenSettings, SelectNext, SelectPrev, Zoom};
+                     IncreaseFontSize, InstallUpdate, Logout, Minimize, OpenAuditLog, OpenChangelog,
+                     OpenGlobalSearch, OpenInventory, OpenPriceBook, OpenProjects, OpenQuotations,
+                     OpenSuppliers, OpenSettings, SelectNext, SelectPrev, Zoom};
 use crate::changelog::{ChangelogPanel, ChangelogEvent};
 use crate::license_dialog::{LicenseDialog, LicenseDialogEvent};
 use crate::auto_update::{AutoUpdateEvent, AutoUpdater, UpdateStatus};
@@ -19,14 +19,14 @@ use crate::global_search::{GlobalSearch, GlobalSearchEvent, SearchResultKind};
 use crate::settings_panel::{SettingsPanel, SettingsPanelEvent};
 use crate::audit_log::AuditLogPanel;
 use crate::command_palette::{CommandPalette, PaletteEvent, PaletteCommand};
-use crate::first_run::{FirstRunEvent, FirstRunPrompt};
+use crate::login_panel::{LoginPanel, LoginPanelEvent};
 use crate::sidebar::{ActiveModule, Sidebar};
 use crate::status_bar::StatusBar;
 use vassl_inventory::panel::{InventoryPanel, InventoryPanelEvent};
 use vassl_inventory::store::InventoryStoreHandle;
 use vassl_pricebook::panel::{PriceBookPanel, PriceBookPanelEvent};
 use vassl_pricebook::price_history::{PriceHistoryEvent, PriceHistoryPanel};
-use vassl_quotations::panel::QuotationPanel;
+use vassl_quotations::{panel::QuotationPanel, ProjectPanel};
 use vassl_suppliers::{panel::SupplierPanel, store::SupplierStoreHandle};
 
 pub struct VasslRoot {
@@ -36,9 +36,11 @@ pub struct VasslRoot {
     pricebook_panel:  Entity<PriceBookPanel>,
     quotation_panel:  Entity<QuotationPanel>,
     suppliers_panel:  Entity<SupplierPanel>,
+    projects_panel:   Entity<ProjectPanel>,
     settings_panel:   Entity<SettingsPanel>,
-    first_run:             Option<Entity<FirstRunPrompt>>,
-    _first_run_sub:        Option<Subscription>,
+    login_panel:           Entity<LoginPanel>,
+    _login_sub:            Subscription,
+    authenticated:         bool,
     audit_log:             Option<Entity<AuditLogPanel>>,
     palette:               Option<Entity<CommandPalette>>,
     _palette_sub:          Option<Subscription>,
@@ -70,38 +72,42 @@ impl Focusable for VasslRoot {
 
 impl VasslRoot {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        // Check whether a current_user has been set in the DB.
-        let needs_first_run = {
-            let db = vassl_db::AppDatabase::global(&**cx);
-            match vassl_db::shared::current_user(db) {
-                Ok(Some(_)) => false,
-                _           => true,
-            }
-        };
-
-        let (first_run, _first_run_sub) = if needs_first_run {
-            let form = cx.new(|cx| FirstRunPrompt::new(cx));
-            let sub  = cx.subscribe(&form, |this, _form, ev: &FirstRunEvent, cx| {
-                match ev {
-                    FirstRunEvent::Saved => {
-                        this._first_run_sub = None;
-                        this.first_run      = None;
-                        // Reload username into the already-constructed SettingsPanel,
-                        // which was built before the first-run form saved its value.
-                        let db   = vassl_db::AppDatabase::global(&**cx);
-                        let name = vassl_db::shared::current_user(db)
-                            .ok().flatten()
-                            .unwrap_or_default();
-                        let input = this.settings_panel.read(cx).user_name.clone();
-                        input.update(cx, |inp, cx| inp.set_text(name, cx));
-                        cx.notify();
-                    }
+        let login_panel = cx.new(LoginPanel::new);
+        let _login_sub  = cx.subscribe(&login_panel, |this, _panel, ev: &LoginPanelEvent, cx| {
+            match ev {
+                LoginPanelEvent::Authenticated(user) => {
+                    this.authenticated = true;
+                    // Sync the login username into the settings panel display name field.
+                    let name  = user.username.clone();
+                    let input = this.settings_panel.read(cx).user_name.clone();
+                    input.update(cx, |inp, cx| inp.set_text(name.clone(), cx));
+                    // Persist as current_user so audit log changed_by is correct.
+                    let db = vassl_db::AppDatabase::global(&**cx).clone();
+                    let name_for_db = name.clone();
+                    cx.spawn(async move |_, _cx| {
+                        let _ = db.write(move |conn| vassl_db::shared::set_current_user(conn, &name_for_db)).await;
+                        Ok::<(), anyhow::Error>(())
+                    }).detach();
+                    cx.set_global(vassl_ui::AppSettings {
+                        logged_in_user_id: user.id,
+                        username:          user.username.clone(),
+                        is_admin:          user.is_admin,
+                        can_inventory:     user.can_inventory,
+                        can_pricebook:     user.can_pricebook,
+                        can_quotations:    user.can_quotations,
+                        allow_delete:      user.allow_delete,
+                        allow_price_edit:  user.allow_price_edit,
+                    });
+                    // Default sidebar to first accessible module.
+                    let first = if user.can_inventory || user.is_admin { ActiveModule::Inventory }
+                        else if user.can_quotations  { ActiveModule::Quotations }
+                        else if user.can_pricebook   { ActiveModule::PriceBook }
+                        else                         { ActiveModule::Settings };
+                    this.sidebar.update(cx, |s, cx| { s.active = first; cx.notify(); });
+                    cx.notify();
                 }
-            });
-            (Some(form), Some(sub))
-        } else {
-            (None, None)
-        };
+            }
+        });
 
         // Apply persisted font size, font family, and theme before first render
         {
@@ -132,23 +138,16 @@ impl VasslRoot {
         // Publish the root focus handle as a global so any form can restore focus
         // after dismissal without threading the handle through every constructor.
         cx.set_global(RootFocusHandle(focus_handle.clone()));
+        // Register the TextInput context menu entity. VasslRoot observes it so a
+        // right-click immediately triggers a re-render without needing a second event.
+        let tcm_entity = cx.new(|_| TextContextMenuState::default());
+        cx.set_global(TextContextMenuHandle(tcm_entity.clone()));
+        cx.observe(&tcm_entity, |_, _, cx| cx.notify()).detach();
 
-        let settings_panel   = cx.new(SettingsPanel::new);
+        let settings_panel = cx.new(SettingsPanel::new);
         settings_panel.update(cx, |panel, cx| panel.wire_observers(cx));
-        {
-            let sp = settings_panel.read(cx);
-            cx.set_global(vassl_ui::AppSettings {
-                allow_delete:     sp.allow_delete,
-                allow_price_edit: sp.allow_price_edit,
-            });
-        }
-        cx.observe(&settings_panel, |_, settings_entity, cx| {
-            let sp = settings_entity.read(cx);
-            cx.set_global(vassl_ui::AppSettings {
-                allow_delete:     sp.allow_delete,
-                allow_price_edit: sp.allow_price_edit,
-            });
-        }).detach();
+        // AppSettings is set after login; start with empty defaults.
+        cx.set_global(vassl_ui::AppSettings::default());
         let _settings_panel_sub = cx.subscribe(
             &settings_panel,
             |_this, panel, ev: &SettingsPanelEvent, cx| {
@@ -288,6 +287,7 @@ impl VasslRoot {
 
         let supplier_store  = cx.global::<SupplierStoreHandle>().0.clone();
         let suppliers_panel = cx.new(|cx| SupplierPanel::new(supplier_store, cx));
+        let projects_panel  = cx.new(ProjectPanel::new);
 
         // Auto-updater — kick off a background check on startup.
         let updater = cx.new(|_| AutoUpdater::new());
@@ -306,10 +306,12 @@ impl VasslRoot {
             pricebook_panel,
             quotation_panel:  cx.new(QuotationPanel::new),
             suppliers_panel,
+            projects_panel,
             settings_panel,
-            first_run,
-            _first_run_sub,
-            audit_log:            None,
+            login_panel,
+            _login_sub,
+            authenticated:    false,
+            audit_log:        None,
             palette:              None,
             _palette_sub:         None,
             price_history:        None,
@@ -359,7 +361,11 @@ impl VasslRoot {
                             cx.global::<SupplierStoreHandle>().0.clone()
                                 .update(cx, |s, cx| s.select_supplier(sid, cx));
                         }
-                        SearchResultKind::Project { .. } => {}
+                        SearchResultKind::Project { id, .. } => {
+                            let pid = *id;
+                            cx.global::<vassl_quotations::QuotationStoreHandle>().0.clone()
+                                .update(cx, |s, cx| s.select_project(pid, cx));
+                        }
                     }
                     this._global_search_sub = None;
                     this.global_search      = None;
@@ -413,7 +419,7 @@ impl VasslRoot {
                         PaletteCommand::OpenPriceBook =>
                             this.sidebar.update(cx, |s, cx| { s.active = ActiveModule::PriceBook; cx.notify(); }),
                         PaletteCommand::OpenAuditLog => {
-                            if this.audit_log.is_none() {
+                            if cx.global::<vassl_ui::AppSettings>().is_admin && this.audit_log.is_none() {
                                 this.audit_log = Some(cx.new(|cx| AuditLogPanel::new(cx)));
                             }
                         }
@@ -615,8 +621,17 @@ impl VasslRoot {
 }
 
 impl Render for VasslRoot {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = cx.global::<ThemeHandle>().0.clone();
+
+        // Not authenticated — render the login/setup screen.
+        if !self.authenticated {
+            return div()
+                .relative().flex().flex_col().w_full().h_full()
+                .font_family(gpui::SharedString::from(c.font_family.clone()))
+                .bg(rgb(c.canvas_bg))
+                .child(self.login_panel.clone());
+        }
 
         // Build expiry blocks the entire app — render a static dead-end screen.
         if self.build_expired {
@@ -644,6 +659,7 @@ impl Render for VasslRoot {
             ActiveModule::Quotations => content.child(self.quotation_panel.clone()),
             ActiveModule::PriceBook  => content.child(self.pricebook_panel.clone()),
             ActiveModule::Suppliers  => content.child(self.suppliers_panel.clone()),
+            ActiveModule::Projects   => content.child(self.projects_panel.clone()),
             ActiveModule::Settings   => content.child(self.settings_panel.clone()),
         };
 
@@ -662,6 +678,9 @@ impl Render for VasslRoot {
             .on_action(cx.listener(|this, _: &OpenSuppliers, _w, cx| {
                 this.sidebar.update(cx, |s, cx| { s.active = ActiveModule::Suppliers; cx.notify(); });
             }))
+            .on_action(cx.listener(|this, _: &OpenProjects, _w, cx| {
+                this.sidebar.update(cx, |s, cx| { s.active = ActiveModule::Projects; cx.notify(); });
+            }))
             .on_action(cx.listener(|this, _: &NewRecord, window, cx| {
                 let active = this.sidebar.read(cx).active;
                 let fh = match active {
@@ -669,11 +688,31 @@ impl Render for VasslRoot {
                     ActiveModule::Suppliers  => this.suppliers_panel.update(cx, |p, cx| p.create_new_form(cx)),
                     ActiveModule::Quotations => this.quotation_panel.update(cx, |p, cx| p.create_form(cx)),
                     ActiveModule::PriceBook  => this.pricebook_panel.update(cx, |p, cx| p.create_form(cx)),
+                    ActiveModule::Projects   => None,
                     ActiveModule::Settings   => None,
                 };
                 if let Some(fh) = fh { window.focus(&fh, cx); }
             }))
+            .on_action(cx.listener(|this, _: &Logout, w, cx| {
+                let username = cx.global::<vassl_ui::AppSettings>().username.clone();
+                let uid      = cx.global::<vassl_ui::AppSettings>().logged_in_user_id;
+                if !username.is_empty() {
+                    let db = crate::users_db::UsersDb::global(&**cx);
+                    cx.spawn(async move |_, _cx| {
+                        let _ = db.log_auth_event(uid, "LOGOUT", &username).await;
+                        Ok::<(), anyhow::Error>(())
+                    }).detach();
+                }
+                this.authenticated = false;
+                this.audit_log     = None;
+                cx.set_global(vassl_ui::AppSettings::default());
+                // Reset login panel inputs
+                this.login_panel.update(cx, |p, cx| p.reset(cx));
+                w.focus(&this.login_panel.read(cx).focus_handle(cx), cx);
+                cx.notify();
+            }))
             .on_action(cx.listener(|this, _: &OpenAuditLog, _w, cx| {
+                if !cx.global::<vassl_ui::AppSettings>().is_admin { return; }
                 if this.audit_log.is_some() {
                     this.audit_log = None;
                 } else {
@@ -751,6 +790,7 @@ impl Render for VasslRoot {
                     ActiveModule::PriceBook  => { this.pricebook_panel.update(cx, |p, cx| p.select_next(cx)); }
                     ActiveModule::Suppliers  => { this.suppliers_panel.update(cx, |p, cx| p.select_next(cx)); }
                     ActiveModule::Quotations => { this.quotation_panel.update(cx, |p, cx| p.select_next(cx)); }
+                    ActiveModule::Projects   => { this.projects_panel.update(cx, |p, cx| p.select_next(cx)); }
                     ActiveModule::Settings   => {}
                 }
             }))
@@ -761,6 +801,7 @@ impl Render for VasslRoot {
                     ActiveModule::PriceBook  => { this.pricebook_panel.update(cx, |p, cx| p.select_prev(cx)); }
                     ActiveModule::Suppliers  => { this.suppliers_panel.update(cx, |p, cx| p.select_prev(cx)); }
                     ActiveModule::Quotations => { this.quotation_panel.update(cx, |p, cx| p.select_prev(cx)); }
+                    ActiveModule::Projects   => { this.projects_panel.update(cx, |p, cx| p.select_prev(cx)); }
                     ActiveModule::Settings   => {}
                 }
             }))
@@ -825,7 +866,7 @@ impl Render for VasslRoot {
 
         // Windows/Linux: render menus as a custom bar; macOS uses the native system menu bar.
         #[cfg(not(target_os = "macos"))]
-        let mut root = root.child(self.render_menu_bar(_window, cx));
+        let mut root = root.child(self.render_menu_bar(window, cx));
 
         let mut root = root
             .child(
@@ -851,9 +892,6 @@ impl Render for VasslRoot {
             );
         }
 
-        if let Some(form) = &self.first_run {
-            root = root.child(form.clone());
-        }
         if let Some(panel) = &self.audit_log {
             root = root.child(panel.clone());
         }
@@ -874,6 +912,98 @@ impl Render for VasslRoot {
         }
         if let Some(dialog) = &self.license_dialog {
             root = root.child(dialog.clone());
+        }
+
+        // TextInput right-click context menu overlay
+        // Read all state upfront before the borrow is held across listener captures.
+        let tcm_handle = cx.try_global::<TextContextMenuHandle>().map(|h| h.0.clone());
+        let tcm_pos    = tcm_handle.as_ref().and_then(|h| h.read(cx).position);
+        let tcm_input  = tcm_handle.as_ref().and_then(|h| h.read(cx).input.clone());
+        let tcm_sel    = tcm_handle.as_ref().map(|h| h.read(cx).has_selection).unwrap_or(false);
+
+        if let (Some(pos), Some(input_entity)) = (tcm_pos, tcm_input) {
+            let vp    = window.viewport_size();
+            const MENU_W: f32 = 160.0;
+            const ITEM_H: f32 = 28.0;
+            const MENU_H: f32 = ITEM_H * 3.0 + 8.0;
+            let menu_x = pos.x.as_f32().min((vp.width.as_f32()  - MENU_W).max(0.0));
+            let menu_y = pos.y.as_f32().min((vp.height.as_f32() - MENU_H).max(0.0));
+
+            let has_clipboard = cx.read_from_clipboard().and_then(|i| i.text()).is_some();
+
+            let h_dismiss = tcm_handle.clone();
+            let h_copy    = tcm_handle.clone();
+            let h_cut     = tcm_handle.clone();
+            let h_paste   = tcm_handle.clone();
+            let input_copy  = input_entity.clone();
+            let input_cut   = input_entity.clone();
+            let input_paste = input_entity.clone();
+
+            let hover_bg = rgb(c.surface_hover);
+
+            fn clear_menu(h: &Option<gpui::Entity<TextContextMenuState>>, cx: &mut gpui::App) {
+                if let Some(h) = h {
+                    h.update(cx, |s, cx| { s.position = None; s.input = None; cx.notify(); });
+                }
+            }
+
+            root = root
+                .child(
+                    gpui::div()
+                        .absolute().inset_0()
+                        .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |_, _: &gpui::MouseDownEvent, _, cx| {
+                            clear_menu(&h_dismiss, cx);
+                        }))
+                )
+                .child(
+                    gpui::div()
+                        .absolute().left(px(menu_x)).top(px(menu_y))
+                        .w(px(MENU_W))
+                        .bg(rgb(c.surface_default))
+                        .rounded(px(6.)).shadow_md().py(px(4.))
+                        .child({
+                            let mut item = gpui::div()
+                                .id("ctx-ti-copy").px(px(12.)).h(px(ITEM_H))
+                                .flex().items_center().text_size(rems(0.923))
+                                .text_color(rgb(if tcm_sel { c.text_default } else { c.text_muted }));
+                            if tcm_sel {
+                                item = item.cursor_pointer().hover(move |s| s.bg(hover_bg))
+                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |_, _: &gpui::MouseDownEvent, _, cx| {
+                                        input_copy.update(cx, |t, cx| t.do_copy(cx));
+                                        clear_menu(&h_copy, cx);
+                                    }));
+                            }
+                            item.child("Copy")
+                        })
+                        .child({
+                            let mut item = gpui::div()
+                                .id("ctx-ti-cut").px(px(12.)).h(px(ITEM_H))
+                                .flex().items_center().text_size(rems(0.923))
+                                .text_color(rgb(if tcm_sel { c.text_default } else { c.text_muted }));
+                            if tcm_sel {
+                                item = item.cursor_pointer().hover(move |s| s.bg(hover_bg))
+                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |_, _: &gpui::MouseDownEvent, _, cx| {
+                                        input_cut.update(cx, |t, cx| t.do_cut(cx));
+                                        clear_menu(&h_cut, cx);
+                                    }));
+                            }
+                            item.child("Cut")
+                        })
+                        .child({
+                            let mut item = gpui::div()
+                                .id("ctx-ti-paste").px(px(12.)).h(px(ITEM_H))
+                                .flex().items_center().text_size(rems(0.923))
+                                .text_color(rgb(if has_clipboard { c.text_default } else { c.text_muted }));
+                            if has_clipboard {
+                                item = item.cursor_pointer().hover(move |s| s.bg(hover_bg))
+                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |_, _: &gpui::MouseDownEvent, _, cx| {
+                                        input_paste.update(cx, |t, cx| t.do_paste(cx));
+                                        clear_menu(&h_paste, cx);
+                                    }));
+                            }
+                            item.child("Paste")
+                        })
+                );
         }
 
         root

@@ -20,13 +20,15 @@ The main panel shows the **current** (most recent) price for each product:
   <tbody>
     <tr><td>Product</td><td>Product name</td></tr>
     <tr><td>SKU</td><td>Product code</td></tr>
-    <tr><td>Cost Price</td><td>Your cost in USD or JMD</td></tr>
-    <tr><td>Duty Cost</td><td>Import duty in USD (derived from Cost × Duty %)</td></tr>
+    <tr><td>Cost Price</td><td>Your cost in the currency used when the entry was created (USD or JMD)</td></tr>
+    <tr><td>Duty Cost</td><td>Import duty (derived from Cost × Duty %)</td></tr>
     <tr><td>Markup %</td><td>Percentage added on top of landed cost</td></tr>
     <tr><td>Selling Price</td><td>Calculated final price used in quotations</td></tr>
     <tr><td>Qty</td><td>Quantity associated with this price entry</td></tr>
   </tbody>
 </table>
+
+Prices are displayed in the currency they were entered in: **$** for USD entries and **J$** for JMD entries. No automatic conversion is shown in the price table — what you entered is what you see.
 
 ### Selling price formula
 
@@ -84,7 +86,9 @@ The Cost Price field supports two currencies:
 - **USD** — US dollars (default)
 - **JMD** — Jamaican dollars
 
-The currency selection and the exchange rate are persisted in Settings (`pricebook.currency` and `pricebook.exchange_rate`, default 156.00 JMD/USD). When JMD is entered, it is stored converted to USD.
+Choose the currency that matches your supplier's invoice. The entry is stored in whichever currency you select, and that same currency symbol is shown in the price table when you view the entry later.
+
+To convert between currencies in quotation totals, set the current exchange rate in **Settings → Price Book**.
 
 ## Price history
 

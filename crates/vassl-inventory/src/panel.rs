@@ -33,6 +33,7 @@ pub struct InventoryPanel {
     product_form:   Option<Entity<ProductForm>>,
     _prod_form_sub: Option<Subscription>,
     search_input:   Entity<TextInput>,
+    detail_open:    bool,
 }
 
 impl InventoryPanel {
@@ -49,6 +50,14 @@ impl InventoryPanel {
             this.store.update(cx, |s, cx| s.set_search_query(q, cx));
         }).detach();
 
+        cx.observe(&store, |this, _, cx| {
+            if this.store.read(cx).detail_requested {
+                this.detail_open = true;
+                this.store.update(cx, |s, _| s.detail_requested = false);
+                cx.notify();
+            }
+        }).detach();
+
         Self {
             store,
             product_list,
@@ -59,7 +68,18 @@ impl InventoryPanel {
             product_form:   None,
             _prod_form_sub: None,
             search_input,
+            detail_open:    false,
         }
+    }
+
+    pub fn show_detail(&mut self, cx: &mut Context<Self>) {
+        self.detail_open = true;
+        cx.notify();
+    }
+
+    pub fn hide_detail(&mut self, cx: &mut Context<Self>) {
+        self.detail_open = false;
+        cx.notify();
     }
 
     pub fn select_next(&mut self, cx: &mut Context<Self>) {
@@ -171,11 +191,97 @@ impl Render for InventoryPanel {
 
         let has_query = !self.search_input.read(cx).text().is_empty();
 
-        let content = div().flex_1().h_full().flex().flex_col();
-        let content = match active_tab {
-            Tab::Products => content.child(self.product_list.clone()),
-            Tab::Restock  => content.child(self.restock_alerts.clone()),
+        let detail_open = self.detail_open;
+
+        // Build content area (list or restock)
+        let list_content = div().flex_1().h_full().flex().flex_col();
+        let list_content = match active_tab {
+            Tab::Products => list_content.child(self.product_list.clone()),
+            Tab::Restock  => list_content.child(self.restock_alerts.clone()),
         };
+
+        // When detail open, wrap in a flex_row with the sidebar on the right
+        let selected_product = if detail_open {
+            let store = self.store.read(cx);
+            store.selected_product_id.and_then(|pid| {
+                store.products.iter().find(|p| p.product.id == pid).cloned()
+            })
+        } else {
+            None
+        };
+
+        let content_area = if detail_open {
+            let detail_sidebar = {
+                let border_col = rgb(c.surface_default);
+                let mut sidebar = div()
+                    .w(px(300.))
+                    .flex_shrink_0()
+                    .border_l_1()
+                    .border_color(border_col)
+                    .flex().flex_col()
+                    .bg(rgb(c.canvas_bg))
+                    // header
+                    .child(
+                        div()
+                            .flex().flex_row().items_center()
+                            .px(px(12.)).py(px(10.))
+                            .bg(rgb(c.sidebar_bg))
+                            .border_b_1().border_color(rgb(c.surface_default))
+                            .child(div().flex_1().text_size(rems(0.923)).text_color(rgb(c.text_default))
+                                .font_weight(gpui::FontWeight::BOLD).child("Product Details"))
+                            .child(
+                                div()
+                                    .id("inv-detail-close")
+                                    .px(px(8.)).py(px(4.)).rounded(px(4.))
+                                    .cursor_pointer()
+                                    .hover(|s| s.bg(rgb(c.surface_hover)))
+                                    .text_size(rems(0.923)).text_color(rgb(c.text_muted))
+                                    .child("×")
+                                    .on_mouse_down(MouseButton::Left, cx.listener(|this, _: &MouseDownEvent, _, cx| {
+                                        this.hide_detail(cx);
+                                    }))
+                            )
+                    );
+
+                if let Some(pw) = selected_product {
+                    let p = &pw.product;
+                    sidebar = sidebar.child(
+                        div().id("inv-detail-scroll").flex_1().min_h(px(0.)).overflow_y_scroll().pb(px(64.))
+                            .flex().flex_col().gap(px(0.))
+                            .child(detail_field("SKU", p.sku.clone(), &c))
+                            .child(detail_field("Name", p.name.clone(), &c))
+                            .child(detail_field("Category", p.category.clone().unwrap_or_else(|| "—".into()), &c))
+                            .child(detail_field("Unit", p.unit.clone(), &c))
+                            .child(detail_field("Min Stock", format!("{:.1}", p.min_stock_level), &c))
+                            .child(detail_field("Current Stock", format!("{:.1}", pw.current_stock), &c))
+                            .child(detail_field("Duty %", format!("{:.1}%", p.duty_percent), &c))
+                            .child(detail_field("Model No.", p.model_number.clone().unwrap_or_else(|| "—".into()), &c))
+                            .child(detail_field("Part No.", p.part_number.clone().unwrap_or_else(|| "—".into()), &c))
+                            .child(detail_field("End of Life", if p.end_of_life { "Yes" } else { "No" }, &c))
+                            .child(detail_field("Replacement", p.replacement.clone().unwrap_or_else(|| "—".into()), &c))
+                            .child(detail_field("Description", p.description.clone().unwrap_or_else(|| "—".into()), &c))
+                            .child(detail_field("Notes", p.notes.clone().unwrap_or_else(|| "—".into()), &c))
+                    );
+                } else {
+                    sidebar = sidebar.child(
+                        div().flex_1().flex().items_center().justify_center()
+                            .text_color(rgb(c.text_muted)).text_size(rems(0.923))
+                            .child("Select a product to view details")
+                    );
+                }
+
+                sidebar
+            };
+
+            div().flex_1().h_full().flex().flex_row()
+                .child(list_content)
+                .child(detail_sidebar)
+        } else {
+            div().flex_1().h_full().flex().flex_row()
+                .child(list_content)
+        };
+
+        let content = content_area;
 
         let mut root = div()
             .key_context("InventoryPanel")
@@ -374,6 +480,25 @@ impl Render for InventoryPanel {
                                 .bg(rgb(c.surface_default))
                         )
                         .child({
+                            let hover_bg = rgb(c.surface_hover);
+                            div()
+                                .id("ctx-inv-view-details")
+                                .px(px(12.)).py(px(8.))
+                                .cursor_pointer()
+                                .hover(move |s| s.bg(hover_bg))
+                                .text_size(rems(1.))
+                                .text_color(rgb(c.text_default))
+                                .child("View Details")
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(move |this, _: &MouseDownEvent, _, cx| {
+                                        this.store.update(cx, |s, cx| s.select_product(pid, cx));
+                                        this.store.update(cx, |s, cx| s.clear_context_menu(cx));
+                                        this.show_detail(cx);
+                                    }),
+                                )
+                        })
+                        .child({
                             let product_for_edit = {
                                 let store = self.store.read(cx);
                                 store.products.iter().find(|p| p.product.id == pid).map(|p| p.product.clone())
@@ -468,6 +593,20 @@ impl Render for InventoryPanel {
 
         root
     }
+}
+
+fn detail_field(label: impl Into<String>, value: impl Into<String>, c: &vassl_ui::ThemeColors) -> impl gpui::IntoElement {
+    div()
+        .flex().flex_col().px(px(12.)).py(px(8.))
+        .border_b_1().border_color(rgb(c.surface_default))
+        .child(
+            div().text_size(rems(0.769)).text_color(rgb(c.text_muted)).mb(px(2.))
+                .child(label.into())
+        )
+        .child(
+            div().text_size(rems(0.923)).text_color(rgb(c.text_default))
+                .child(value.into())
+        )
 }
 
 #[cfg(test)]

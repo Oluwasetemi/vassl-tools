@@ -48,6 +48,7 @@ pub struct InventoryStore {
     pub loading: bool,
     pub context_menu: Option<ContextMenuTarget>,
     pub search_query: String,
+    pub detail_requested: bool,
 }
 
 #[derive(Debug)]
@@ -67,6 +68,7 @@ impl InventoryStore {
             loading: false,
             context_menu: None,
             search_query: String::new(),
+            detail_requested: false,
         }
     }
 
@@ -233,9 +235,11 @@ mod tests {
                 description: None, notes: None,
                 preferred_supplier_id: None,
                 created_at: "2026-01-01T00:00:00Z".into(),
-                model_number: Some(format!("MODEL-{id}")).into(),
-                part_number: Some(format!("PART-{id}")).into(),
+                model_number: Some(format!("MODEL-{id}")),
+                part_number: Some(format!("PART-{id}")),
                 duty_percent: 42.5,
+                end_of_life: false,
+                replacement: None,
             },
             current_stock: 10.0,
             status: StockStatus::Healthy,

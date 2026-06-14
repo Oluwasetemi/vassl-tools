@@ -14,6 +14,7 @@ impl EventEmitter<QuotationFormEvent> for QuotationForm {}
 
 pub struct QuotationForm {
     store:             Entity<QuotationStore>,
+    editing_id:        Option<i64>,
     reference_number:  String,
     project_dropdown:  Entity<Dropdown>,
     pub notes:         Entity<TextInput>,
@@ -50,7 +51,7 @@ impl QuotationForm {
                 let s = store.read(cx);
                 (projects_to_items(&s.projects), s.loading)
             };
-            project_dropdown.update(cx, |d, _| { d.items = items; d.loading = loading; });
+            project_dropdown.update(cx, |d, cx| d.set_items(items, loading, cx));
         }
 
         let _store_sub = cx.observe(&store, |this, store_entity, cx| {
@@ -62,12 +63,13 @@ impl QuotationForm {
         });
 
         let db = vassl_db::AppDatabase::global(&**cx);
-        let rate_default  = vassl_db::shared::get_setting(db, "pricebook.usd_to_jmd_rate").ok().flatten().unwrap_or_else(|| "156.00".into());
+        let rate_default  = vassl_db::shared::get_setting(db, "pricebook.usd_to_jmd_rate").ok().flatten().unwrap_or_else(|| "157.50".into());
         let gct_default   = vassl_db::shared::get_setting(db, "quotations.tax_rate").ok().flatten().unwrap_or_else(|| "15.0".into());
         let notes_default = vassl_db::shared::get_setting(db, "quotations.notes_template").ok().flatten().unwrap_or_default();
 
         Self {
             store,
+            editing_id:       None,
             reference_number,
             project_dropdown,
             notes:            cx.new(move |cx| {
@@ -86,48 +88,146 @@ impl QuotationForm {
         }
     }
 
+    pub fn edit_for(
+        store:      Entity<QuotationStore>,
+        id:         i64,
+        ref_num:    String,
+        extras:     &vassl_core::QuotationExtras,
+        notes:      Option<String>,
+        project_id: Option<i64>,
+        cx:         &mut Context<Self>,
+    ) -> Self {
+        let project_dropdown = cx.new(|cx| {
+            Dropdown::new("Select a project…", "No projects yet — create one first.", cx)
+        });
+
+        {
+            let (items, loading) = {
+                let s = store.read(cx);
+                (projects_to_items(&s.projects), s.loading)
+            };
+            project_dropdown.update(cx, |d, cx| {
+                d.set_items(items, loading, cx);
+                if let Some(pid) = project_id { d.selected_id = Some(pid); cx.notify(); }
+            });
+        }
+
+        let _store_sub = cx.observe(&store, |this, store_entity, cx| {
+            let (items, loading) = {
+                let s = store_entity.read(cx);
+                (projects_to_items(&s.projects), s.loading)
+            };
+            this.project_dropdown.update(cx, |d, cx| d.set_items(items, loading, cx));
+        });
+
+        let db = vassl_db::AppDatabase::global(&**cx);
+        let settings_rate: f64 = vassl_db::shared::get_setting(db, "pricebook.usd_to_jmd_rate")
+            .ok().flatten().and_then(|s| s.parse().ok()).unwrap_or(157.50);
+        let effective_rate = if extras.exchange_rate_jmd > 0.0 && (extras.exchange_rate_jmd - 156.0).abs() > 0.01 {
+            extras.exchange_rate_jmd
+        } else {
+            settings_rate
+        };
+
+        let rate_str    = format!("{effective_rate:.2}");
+        let disc_str    = format!("{:.1}", extras.discount_percent);
+        let gct_str     = format!("{:.1}", extras.gct_percent);
+        let days_str    = format!("{}", extras.validity_days);
+        let notes_text  = notes.unwrap_or_default();
+
+        Self {
+            store,
+            editing_id:       Some(id),
+            reference_number: ref_num,
+            project_dropdown,
+            notes:            cx.new(move |cx| {
+                let mut f = TextInput::with_placeholder("optional", cx);
+                if !notes_text.is_empty() { f.set_text(&notes_text, cx); }
+                f
+            }),
+            exchange_rate:    cx.new(move |cx| TextInput::with_text(&rate_str, cx)),
+            discount_percent: cx.new(move |cx| TextInput::with_text(&disc_str, cx)),
+            gct_percent:      cx.new(move |cx| TextInput::with_text(&gct_str, cx)),
+            validity_days:    cx.new(move |cx| TextInput::with_text(&days_str, cx)),
+            cancel_focus:     cx.focus_handle(),
+            save_focus:       cx.focus_handle(),
+            error:            None,
+            _store_sub,
+        }
+    }
+
     fn submit(&mut self, cx: &mut Context<Self>) {
         let selected = self.project_dropdown.read(cx).selected_id;
         match validate_form(selected) {
             Some(msg) => { self.error = Some(msg); cx.notify(); }
             None => {
-                let pid    = selected.unwrap();
+                let pid     = selected.unwrap();
                 let ref_num = self.reference_number.clone();
                 let notes_s = self.notes.read(cx).text().trim().to_string();
                 let notes   = if notes_s.is_empty() { None } else { Some(notes_s) };
 
-                let rate: f64  = self.exchange_rate.read(cx).text().trim().parse().unwrap_or(156.0);
-                let disc: f64  = self.discount_percent.read(cx).text().trim().parse().unwrap_or(0.0);
-                let gct: f64   = self.gct_percent.read(cx).text().trim().parse().unwrap_or(15.0);
-                let days: i64  = self.validity_days.read(cx).text().trim().parse().unwrap_or(30);
+                let rate_str = self.exchange_rate.read(cx).text().trim().to_string();
+                let rate: f64 = rate_str.parse().ok().or_else(|| {
+                    let db = vassl_db::AppDatabase::global(&**cx);
+                    vassl_db::shared::get_setting(db, "pricebook.usd_to_jmd_rate")
+                        .ok().flatten().and_then(|s| s.parse().ok())
+                }).unwrap_or(157.50);
+                let disc: f64 = self.discount_percent.read(cx).text().trim().parse().unwrap_or(0.0);
+                let gct: f64  = self.gct_percent.read(cx).text().trim().parse().unwrap_or(15.0);
+                let days: i64 = self.validity_days.read(cx).text().trim().parse().unwrap_or(30);
 
-                let store  = self.store.clone();
-                let db     = QuotationDb::global(&**cx);
-                let app_db = vassl_db::AppDatabase::global(&**cx).clone();
+                let store      = self.store.clone();
+                let db         = QuotationDb::global(&**cx);
+                let editing_id = self.editing_id;
 
-                cx.spawn(async move |this, cx| {
-                    let created_by = vassl_db::shared::current_user(&app_db)
-                        .ok().flatten().unwrap_or_else(|| "unknown".into());
-                    let _ = ref_num;
-                    let result = db.insert_quotation_atomic(
-                        pid, &created_by, notes.as_deref(),
-                        rate, disc, gct, days, None,
-                    ).await;
-                    let _ = this.update(cx, |form, cx| {
-                        match result {
-                            Err(e) => {
-                                tracing::error!("insert_quotation failed: {e:?}");
-                                form.error = Some(format!("Save failed: {e}"));
-                                cx.notify();
+                if let Some(qid) = editing_id {
+                    cx.spawn(async move |this, cx| {
+                        let result = db.update_quotation_financials(
+                            qid, pid, notes, rate, disc, gct, days,
+                        ).await;
+                        let _ = this.update(cx, |form, cx| {
+                            match result {
+                                Err(e) => {
+                                    tracing::error!("update_quotation failed: {e:?}");
+                                    form.error = Some(format!("Save failed: {e}"));
+                                    cx.notify();
+                                }
+                                Ok(_) => {
+                                    let _ = store.update(cx, |s, cx| {
+                                        s.load_quotations(cx);
+                                        s.select_quotation(qid, cx);
+                                    });
+                                    cx.emit(QuotationFormEvent::Submitted);
+                                }
                             }
-                            Ok(_) => {
-                                let _ = store.update(cx, |s, cx| s.load_quotations(cx));
-                                cx.emit(QuotationFormEvent::Submitted);
+                        });
+                        Ok::<(), anyhow::Error>(())
+                    }).detach();
+                } else {
+                    let app_db = vassl_db::AppDatabase::global(&**cx).clone();
+                    cx.spawn(async move |this, cx| {
+                        let created_by = vassl_db::shared::current_user(&app_db)
+                            .ok().flatten().unwrap_or_else(|| "unknown".into());
+                        let _ = ref_num;
+                        let result = db.insert_quotation_atomic(
+                            pid, &created_by, notes.as_deref(), rate, disc, gct, days, None,
+                        ).await;
+                        let _ = this.update(cx, |form, cx| {
+                            match result {
+                                Err(e) => {
+                                    tracing::error!("insert_quotation failed: {e:?}");
+                                    form.error = Some(format!("Save failed: {e}"));
+                                    cx.notify();
+                                }
+                                Ok(_) => {
+                                    let _ = store.update(cx, |s, cx| s.load_quotations(cx));
+                                    cx.emit(QuotationFormEvent::Submitted);
+                                }
                             }
-                        }
-                    });
-                    Ok::<(), anyhow::Error>(())
-                }).detach();
+                        });
+                        Ok::<(), anyhow::Error>(())
+                    }).detach();
+                }
             }
         }
     }
@@ -206,7 +306,7 @@ impl Render for QuotationForm {
                             .flex().flex_row().items_center()
                             .child(div().flex_1()
                                 .text_size(rems(1.)).text_color(rgb(c.text_default))
-                                .child("New Quotation"))
+                                .child(if self.editing_id.is_some() { "Edit Quotation" } else { "New Quotation" }))
                             .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted)).child("Esc to cancel"))
                     )
                     // ── fields ──────────────────────────────────────────
@@ -302,7 +402,7 @@ impl Render for QuotationForm {
                                     .when(save_f, |d| d.border_2().border_color(rgb(c.text_default)))
                                     .when(!save_f, |d| d.border_1().border_color(rgb(c.surface_active)))
                                     .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| { this.submit(cx); }))
-                                    .child("Create Quotation")
+                                    .child(if self.editing_id.is_some() { "Save Changes" } else { "Create Quotation" })
                             )
                     )
             )
@@ -330,6 +430,8 @@ mod tests {
             client_address: None, client_attn: None, client_tel: None,
             description: None, status: ProjectStatus::Active,
             created_at: "2026-01-01".into(),
+            date_started: None, date_completed: None, technicians: None,
+            client_contact: None, vassl_contact: None, signedoff_date: None,
         }];
         let items = projects_to_items(&projects);
         assert_eq!(items.len(), 1);

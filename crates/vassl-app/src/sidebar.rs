@@ -1,7 +1,8 @@
 use gpui::{
     Context, IntoElement, MouseButton, Render, Window, div, prelude::*, px, rgb,
 };
-use vassl_ui::{ThemeHandle, tooltip_keyed, tooltip};
+use vassl_ui::{AppSettings, ThemeHandle, tooltip_keyed, tooltip};
+use crate::actions::{Logout, OpenAuditLog};
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum ActiveModule {
@@ -9,6 +10,7 @@ pub enum ActiveModule {
     Quotations,
     PriceBook,
     Suppliers,
+    Projects,
     Settings,
 }
 
@@ -24,16 +26,15 @@ impl Sidebar {
 
 impl Render for Sidebar {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let c = cx.global::<ThemeHandle>().0.clone();
+        let c      = cx.global::<ThemeHandle>().0.clone();
+        let perms  = cx.global::<AppSettings>().clone();
         let active = self.active;
 
-        // Platform modifier prefix shown in keybinding badges.
         #[cfg(target_os = "macos")]
         let mod_key = "⌘";
         #[cfg(not(target_os = "macos"))]
         let mod_key = "Ctrl+";
 
-        // Returns a sidebar icon button, optionally carrying a tooltip with a keybinding badge.
         let make_btn = |module: ActiveModule,
                         label:   &'static str,
                         id:      &'static str,
@@ -64,18 +65,61 @@ impl Render for Sidebar {
             }
         };
 
+        let show_inventory  = perms.is_admin || perms.can_inventory;
+        let show_quotations = perms.is_admin || perms.can_quotations;
+        let show_pricebook  = perms.is_admin || perms.can_pricebook;
+        // Suppliers are tied to inventory access.
+        let show_suppliers  = show_inventory;
+
         div()
             .w(px(48.)).h_full()
             .bg(rgb(c.sidebar_bg))
             .flex().flex_col().justify_between()
             .child(
                 div().flex().flex_col()
-                    .child(make_btn(ActiveModule::Inventory,  "I", "btn-inventory",  "Inventory",  Some("1")))
-                    .child(make_btn(ActiveModule::Quotations, "Q", "btn-quotations", "Quotations", Some("2")))
-                    .child(make_btn(ActiveModule::PriceBook,  "P", "btn-pricebook",  "Price Book", Some("3")))
-                    .child(make_btn(ActiveModule::Suppliers,  "S", "btn-suppliers",  "Suppliers",  Some("4"))),
+                    .when(show_inventory,  |d| d.child(make_btn(ActiveModule::Inventory,  "I", "btn-inventory",  "Inventory",  Some("1"))))
+                    .when(show_quotations, |d| d.child(make_btn(ActiveModule::Quotations, "Q", "btn-quotations", "Quotations", Some("2"))))
+                    .when(show_pricebook,  |d| d.child(make_btn(ActiveModule::PriceBook,  "P", "btn-pricebook",  "Price Book", Some("3"))))
+                    .when(show_suppliers,  |d| d.child(make_btn(ActiveModule::Suppliers,  "S", "btn-suppliers",  "Suppliers",  Some("4"))))
             )
-            .child(make_btn(ActiveModule::Settings, "⚙", "btn-settings", "Settings", Some(",")))
+            .child(
+                div().flex().flex_col()
+                    .when(perms.is_admin, |d| {
+                        let hover_bg = rgb(c.surface_hover);
+                        d.child(
+                            div()
+                                .id("btn-auditlog")
+                                .w(px(36.)).h(px(36.)).m(px(6.))
+                                .rounded(px(6.))
+                                .bg(rgb(c.surface_default)).text_color(rgb(c.text_muted))
+                                .flex().items_center().justify_center()
+                                .cursor_pointer()
+                                .hover(move |s| s.bg(hover_bg))
+                                .child("A")
+                                .tooltip(tooltip_keyed("Audit Log", format!("{mod_key}⇧A")))
+                                .on_mouse_down(MouseButton::Left, cx.listener(|_this, _, window, cx| {
+                                    window.dispatch_action(Box::new(OpenAuditLog), cx);
+                                }))
+                        )
+                    })
+                    .child(make_btn(ActiveModule::Settings, "⚙", "btn-settings", "Settings", Some(",")))
+                    .child({
+                        let hover_bg = rgb(c.surface_hover);
+                        div()
+                            .id("btn-logout")
+                            .w(px(36.)).h(px(36.)).m(px(6.))
+                            .rounded(px(6.))
+                            .bg(rgb(c.surface_default)).text_color(rgb(c.text_muted))
+                            .flex().items_center().justify_center()
+                            .cursor_pointer()
+                            .hover(move |s| s.bg(hover_bg))
+                            .child("↩")
+                            .tooltip(tooltip("Sign Out"))
+                            .on_mouse_down(MouseButton::Left, cx.listener(|_this, _, window, cx| {
+                                window.dispatch_action(Box::new(Logout), cx);
+                            }))
+                    })
+            )
     }
 }
 

@@ -95,6 +95,8 @@ mod tests {
             model_number: Some(format!("MODEL-{id}")),
             part_number: Some(format!("PART-{id}")),
             duty_percent: 42.5,
+            end_of_life: false,
+            replacement: None,
         }
     }
 

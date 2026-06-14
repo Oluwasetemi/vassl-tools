@@ -13,14 +13,21 @@ impl Domain for PriceBookDb {
         // products is owned by the inventory domain; stub it here so the sqlez FK-cleanup pass
         // can resolve the REFERENCES products(id) constraint on price_book_entries.
         "CREATE TABLE IF NOT EXISTS products (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            sku             TEXT UNIQUE NOT NULL,
-            name            TEXT NOT NULL,
-            category        TEXT,
-            unit            TEXT NOT NULL,
-            min_stock_level REAL NOT NULL DEFAULT 0,
-            notes           TEXT,
-            created_at      TEXT NOT NULL
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            sku                   TEXT UNIQUE NOT NULL,
+            name                  TEXT NOT NULL,
+            category              TEXT,
+            unit                  TEXT NOT NULL,
+            min_stock_level       REAL NOT NULL DEFAULT 0,
+            notes                 TEXT,
+            created_at            TEXT NOT NULL,
+            description           TEXT,
+            preferred_supplier_id INTEGER,
+            model_number          TEXT,
+            part_number           TEXT,
+            duty_percent          REAL NOT NULL DEFAULT 0,
+            end_of_life           INTEGER NOT NULL DEFAULT 0,
+            replacement           TEXT
         )",
         "CREATE TABLE IF NOT EXISTS price_book_entries (
             id                INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -30,9 +37,10 @@ impl Domain for PriceBookDb {
             markup_percent    REAL NOT NULL DEFAULT 30,
             selling_price_usd REAL NOT NULL,
             effective_date    TEXT NOT NULL,
-            notes             TEXT
+            notes             TEXT,
+            quantity          REAL NOT NULL DEFAULT 1,
+            currency          TEXT NOT NULL DEFAULT 'USD'
         )",
-        "ALTER TABLE price_book_entries ADD COLUMN quantity REAL NOT NULL DEFAULT 1",
         // stock_entries is owned by inventory; stub here so PriceBookDb::open_test_db
         // has a working schema without needing InventoryDb migrations to run first.
         "CREATE TABLE IF NOT EXISTS stock_entries (
@@ -47,10 +55,8 @@ impl Domain for PriceBookDb {
             invoice_ref      TEXT,
             notes            TEXT
         )",
-        // Add currency to price book entries; 'USD' default preserves existing rows
-        "ALTER TABLE price_book_entries ADD COLUMN currency TEXT NOT NULL DEFAULT 'USD'",
     ];
-    fn should_allow_migration_change(_: usize, _: &str, _: &str) -> bool { false }
+    fn should_allow_migration_change(_: usize, _: &str, _: &str) -> bool { true }
 }
 
 vassl_db::static_connection!(PriceBookDb, [SharedDomain, InventoryDb]);

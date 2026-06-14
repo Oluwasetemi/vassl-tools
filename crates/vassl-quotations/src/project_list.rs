@@ -1,58 +1,63 @@
 use gpui::{App, Context, Entity, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent,
            MouseUpEvent, Render, Window,
            div, prelude::*, px, rems, rgb, uniform_list, UniformListScrollHandle};
+use vassl_core::{Project, ProjectStatus};
 use vassl_ui::{ScrollDragState, ThemeColors, ThemeHandle, scrollbar_geometry};
 
-use crate::db::QuotationRow;
-use crate::store::{QuotationStore, status_badge_color};
+use crate::store::{ProjectContextMenu, QuotationStore};
 
 const TRACK_W: f32 = 14.0;
 
-pub struct QuotationList {
-    store: Entity<QuotationStore>,
+pub struct ProjectList {
+    store:         Entity<QuotationStore>,
     pub scroll_handle: UniformListScrollHandle,
-    drag: Option<ScrollDragState>,
+    drag:          Option<ScrollDragState>,
 }
 
-impl QuotationList {
+impl ProjectList {
     pub fn new(store: Entity<QuotationStore>, _cx: &mut Context<Self>) -> Self {
         Self { store, scroll_handle: UniformListScrollHandle::default(), drag: None }
     }
 }
 
-pub fn format_total(usd: f64) -> String {
-    format!("${usd:.2}")
+fn project_status_color(status: &ProjectStatus, c: &ThemeColors) -> u32 {
+    match status {
+        ProjectStatus::Active    => c.status_green,
+        ProjectStatus::Completed => c.status_amber,
+        ProjectStatus::Archived  => c.status_grey,
+    }
 }
 
-impl Render for QuotationList {
+fn project_status_label(status: &ProjectStatus) -> &'static str {
+    match status {
+        ProjectStatus::Active    => "Active",
+        ProjectStatus::Completed => "Completed",
+        ProjectStatus::Archived  => "Archived",
+    }
+}
+
+impl Render for ProjectList {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = cx.global::<ThemeHandle>().0.clone();
         let store = self.store.read(cx);
 
-        if store.loading {
-            return div()
-                .flex_1().flex().items_center().justify_center()
-                .text_color(rgb(c.text_muted))
-                .child("Loading…")
-                .into_any_element();
-        }
-
-        if store.quotations.is_empty() {
+        if store.projects.is_empty() {
             return div()
                 .flex_1().flex().items_center().justify_center()
                 .text_color(rgb(c.text_default))
-                .child("No quotations yet — click \"+ New Quotation\" to create one.")
+                .child("No projects yet — click \"+ New Project\" to create one.")
                 .into_any_element();
         }
 
-        let count = store.quotations.len();
+        let count       = store.projects.len();
+        let _selected_id = store.selected_project_id;
         let store_entity = self.store.clone();
 
         let geom = scrollbar_geometry(&self.scroll_handle);
         let is_dragging = self.drag.is_some();
 
         let mut track = div()
-            .id("quot-sb-track")
+            .id("proj-list-sb-track")
             .flex_shrink_0()
             .w(px(TRACK_W))
             .h_full()
@@ -64,7 +69,7 @@ impl Render for QuotationList {
             let (viewport_h, thumb_h, max_scroll) = (g.viewport_h, g.thumb_h, g.max_scroll);
             track = track.child(
                 div()
-                    .id("quot-sb-thumb")
+                    .id("proj-list-sb-thumb")
                     .absolute()
                     .top(px(g.thumb_top))
                     .left(px(2.))
@@ -90,15 +95,15 @@ impl Render for QuotationList {
             .flex_1().flex().flex_row().min_h(px(0.))
             .child(
                 uniform_list(
-                    "quotation-list",
+                    "project-list",
                     count,
                     cx.processor(move |this, range: std::ops::Range<usize>, _window, cx| {
                         let store = this.store.read(cx);
+                        let sel   = store.selected_project_id;
                         let c = cx.global::<ThemeHandle>().0.clone();
-                        let selected = store.selected_id;
                         range.map(|ix| {
-                            let q = &store.quotations[ix];
-                            quotation_row(q, selected == Some(q.id), store_entity.clone(), &c)
+                            let p = &store.projects[ix];
+                            project_row(p, store_entity.clone(), sel, &c)
                         }).collect()
                     }),
                 )
@@ -110,7 +115,7 @@ impl Render for QuotationList {
         if is_dragging {
             root = root.child(
                 div()
-                    .id("quot-sb-overlay")
+                    .id("proj-list-sb-overlay")
                     .absolute().inset_0()
                     .cursor_pointer()
                     .on_mouse_move(cx.listener(|this, ev: &MouseMoveEvent, _, cx| {
@@ -133,88 +138,82 @@ impl Render for QuotationList {
     }
 }
 
-fn quotation_row(q: &QuotationRow, selected: bool, store: Entity<QuotationStore>, c: &ThemeColors) -> impl IntoElement {
-    let id        = q.id;
-    let row_bg    = if selected { c.surface_active } else { c.canvas_bg };
-    let hover_bg  = rgb(c.surface_hover);
-    let badge_col = status_badge_color(q.status.clone());
-    let date_str  = q.created_at.get(..10).unwrap_or("").to_string();
+fn project_row(p: &Project, store: Entity<QuotationStore>, selected_id: Option<i64>, c: &ThemeColors) -> impl IntoElement {
+    let id           = p.id;
+    let badge_col    = project_status_color(&p.status, c);
+    let status_label = project_status_label(&p.status).to_string();
+    let date_str     = p.created_at.get(..10).unwrap_or("").to_string();
+    let is_selected  = selected_id == Some(id);
+    let row_bg       = if is_selected { c.surface_active } else { c.canvas_bg };
+    let hover_bg     = rgb(c.surface_hover);
+    let name         = p.name.clone();
+    let client_name  = p.client_name.clone();
+    let name_for_menu = name.clone();
+    let store_left   = store.clone();
 
     div()
-        .id(format!("quot-row-{id}"))
+        .id(format!("proj-row-{id}"))
         .flex().flex_row().items_center().w_full()
         .px(px(12.)).py(px(6.))
         .bg(rgb(row_bg))
-        .when(!selected, |d| d.hover(move |s| s.bg(hover_bg)))
+        .when(!is_selected, |d| d.hover(move |s| s.bg(hover_bg)))
         .cursor_pointer()
         .on_mouse_down(
             MouseButton::Left,
-            move |event: &MouseDownEvent, _: &mut Window, cx: &mut App| {
-                store.update(cx, |s, cx| s.select_quotation(id, cx));
-                if event.click_count == 2 {
-                    store.update(cx, |s, cx| { s.detail_requested = true; cx.notify(); });
+            move |ev: &MouseDownEvent, _: &mut Window, cx: &mut App| {
+                if ev.click_count >= 2 {
+                    store_left.update(cx, |s, cx| s.select_project(id, cx));
+                } else {
+                    store_left.update(cx, |s, cx| {
+                        s.selected_project_id = Some(id);
+                        cx.notify();
+                    });
                 }
             },
         )
-        // Status badge dot
-        .child(div().w(px(8.)).h(px(8.)).rounded_full().bg(rgb(badge_col)).mr(px(8.)))
-        // Reference number
-        .child(
-            div().w(px(130.)).text_size(rems(0.923)).text_color(rgb(c.text_default))
-                .child(q.reference_number.clone())
+        .on_mouse_down(
+            MouseButton::Right,
+            {
+                let store2 = store.clone();
+                move |ev: &MouseDownEvent, _: &mut Window, cx: &mut App| {
+                    store2.update(cx, |s, cx| s.set_project_context_menu(
+                        ProjectContextMenu {
+                            project_id:   id,
+                            project_name: name_for_menu.clone(),
+                            x:            ev.position.x.as_f32(),
+                            y:            ev.position.y.as_f32(),
+                        },
+                        cx,
+                    ));
+                }
+            },
         )
-        // Project + client
+        // Status badge
+        .child(div().w(px(8.)).h(px(8.)).rounded_full().bg(rgb(badge_col)).mr(px(8.)))
+        // Project name
         .child(
-            div().flex_1().text_size(rems(0.923)).text_color(rgb(c.text_muted))
+            div().flex_1().text_size(rems(0.923)).text_color(rgb(c.text_default))
                 .overflow_hidden()
                 .whitespace_nowrap()
                 .text_ellipsis()
-                .child(format!("{} / {}", q.project_name, q.client_name))
+                .child(name)
         )
-        // Total
+        // Client name
         .child(
-            div().w(px(90.)).text_size(rems(0.923)).text_color(rgb(c.text_default))
-                .child(format_total(q.total_usd))
+            div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_muted))
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
+                .child(client_name)
+        )
+        // Status label
+        .child(
+            div().w(px(80.)).text_size(rems(0.846)).text_color(rgb(badge_col))
+                .child(status_label)
         )
         // Date
         .child(
             div().w(px(90.)).text_size(rems(0.846)).text_color(rgb(c.text_muted))
                 .child(date_str)
         )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use vassl_core::QuotationStatus;
-    use crate::db::QuotationRow;
-
-    fn make_row(id: i64, ref_num: &str, total: f64) -> QuotationRow {
-        QuotationRow {
-            id,
-            reference_number: ref_num.to_string(),
-            status:       QuotationStatus::Draft,
-            project_id:   1,
-            project_name: "Test Project".to_string(),
-            client_name:  "Client A".to_string(),
-            total_usd:    total,
-            created_at:   "2026-01-01T00:00:00Z".to_string(),
-            notes:        None,
-        }
-    }
-
-    #[test]
-    fn format_total_two_decimal_places() {
-        let row = make_row(1, "VASSL-2026-0001", 1234.5);
-        let formatted = format_total(row.total_usd);
-        assert_eq!(formatted, "$1234.50");
-    }
-
-    #[test]
-    fn format_date_trims_to_10_chars() {
-        let row = make_row(1, "VASSL-2026-0001", 0.0);
-        let date = &row.created_at[..10];
-        assert_eq!(date.len(), 10);
-        assert_eq!(date, "2026-01-01");
-    }
 }

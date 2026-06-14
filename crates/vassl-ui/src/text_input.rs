@@ -9,7 +9,7 @@ use gpui::{
 };
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::{ThemeColors, ThemeHandle};
+use crate::{TextContextMenuHandle, ThemeColors, ThemeHandle};
 
 actions!(
     text_input,
@@ -22,6 +22,11 @@ pub struct TextInput {
     pub content:             SharedString,
     pub placeholder:         SharedString,
     pub suppress_placeholder: bool,
+    /// Mask the displayed text with bullet characters (for password fields).
+    pub is_password:         bool,
+    // When true, the cursor is rendered even if this handle is not the focused one.
+    // Used by the Dropdown search box to show a cursor while popup_focus is focused.
+    pub show_cursor:         bool,
     pub scroll_x:            Pixels,
     selected_range:          Range<usize>,
     selection_reversed:      bool,
@@ -29,6 +34,7 @@ pub struct TextInput {
     last_layout:             Option<ShapedLine>,
     last_bounds:             Option<Bounds<Pixels>>,
     is_selecting:            bool,
+    pub context_menu_pos:    Option<Point<Pixels>>,
 }
 
 impl TextInput {
@@ -44,6 +50,8 @@ impl TextInput {
             content:              text,
             placeholder:          "".into(),
             suppress_placeholder: false,
+            is_password:          false,
+            show_cursor:          false,
             scroll_x:             px(0.),
             selected_range:       len..len,
             selection_reversed:   false,
@@ -51,6 +59,7 @@ impl TextInput {
             last_layout:          None,
             last_bounds:          None,
             is_selecting:         false,
+            context_menu_pos:     None,
         }
     }
 
@@ -60,6 +69,8 @@ impl TextInput {
             content:              "".into(),
             placeholder:          placeholder.into(),
             suppress_placeholder: false,
+            is_password:          false,
+            show_cursor:          false,
             scroll_x:             px(0.),
             selected_range:       0..0,
             selection_reversed:   false,
@@ -67,6 +78,7 @@ impl TextInput {
             last_layout:          None,
             last_bounds:          None,
             is_selecting:         false,
+            context_menu_pos:     None,
         }
     }
 
@@ -264,6 +276,41 @@ impl TextInput {
     fn show_character_palette(&mut self, _: &ShowCharacterPalette, window: &mut Window, _: &mut Context<Self>) {
         window.show_character_palette();
     }
+
+    /// Copy selected text to clipboard (no Window needed — safe to call from context menu).
+    pub fn do_copy(&mut self, cx: &mut Context<Self>) {
+        if !self.selected_range.is_empty() {
+            cx.write_to_clipboard(ClipboardItem::new_string(
+                self.content[self.selected_range.clone()].to_string(),
+            ));
+        }
+    }
+
+    /// Cut selected text to clipboard (no Window needed).
+    pub fn do_cut(&mut self, cx: &mut Context<Self>) {
+        if !self.selected_range.is_empty() {
+            cx.write_to_clipboard(ClipboardItem::new_string(
+                self.content[self.selected_range.clone()].to_string(),
+            ));
+            let r = self.selected_range.clone();
+            self.content = (self.content[..r.start].to_owned() + &self.content[r.end..]).into();
+            self.selected_range = r.start..r.start;
+            self.marked_range.take();
+            cx.notify();
+        }
+    }
+
+    /// Paste clipboard text at cursor (no Window needed).
+    pub fn do_paste(&mut self, cx: &mut Context<Self>) {
+        if let Some(text) = cx.read_from_clipboard().and_then(|i| i.text()) {
+            let t = text.replace('\n', " ");
+            let r = self.selected_range.clone();
+            self.content = (self.content[..r.start].to_owned() + &t + &self.content[r.end..]).into();
+            self.selected_range = r.start + t.len()..r.start + t.len();
+            self.marked_range.take();
+            cx.notify();
+        }
+    }
 }
 
 impl EntityInputHandler for TextInput {
@@ -349,6 +396,22 @@ impl Render for TextInput {
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
+            .on_mouse_down(MouseButton::Right, cx.listener(|this, event: &MouseDownEvent, _window, cx| {
+                this.context_menu_pos = Some(event.position);
+                let entity    = cx.entity();
+                let pos       = event.position;
+                let has_sel   = !this.selected_range.is_empty();
+                let menu_hdl  = cx.try_global::<TextContextMenuHandle>().map(|h| h.0.clone());
+                if let Some(h) = menu_hdl {
+                    h.update(cx, |state, cx| {
+                        state.position      = Some(pos);
+                        state.input         = Some(entity);
+                        state.has_selection = has_sel;
+                        cx.notify();
+                    });
+                }
+                cx.stop_propagation();
+            }))
             .child(TextElement { input: cx.entity() })
     }
 }
@@ -390,6 +453,7 @@ impl gpui::Element for TextElement {
     fn prepaint(&mut self, _: Option<&GlobalElementId>, _: Option<&gpui::InspectorElementId>, bounds: Bounds<Pixels>, _: &mut (), window: &mut Window, cx: &mut App) -> PrepaintState {
         let input          = self.input.read(cx);
         let content        = input.content.clone();
+        let is_password    = input.is_password;
         let sel            = input.selected_range.clone();
         let cursor         = input.cursor_offset();
         let scroll_x       = input.scroll_x;
@@ -403,6 +467,9 @@ impl gpui::Element for TextElement {
             } else {
                 (input.placeholder.clone(), rgba(((c.text_muted << 8) | 0x99) as u32).into())
             }
+        } else if is_password {
+            let n = content.chars().count();
+            (SharedString::from("•".repeat(n)), style.color)
         } else {
             (content.clone(), style.color)
         };
@@ -467,7 +534,8 @@ impl gpui::Element for TextElement {
             });
         }
 
-        if focus_handle.is_focused(window) {
+        let show_cursor = self.input.read(cx).show_cursor;
+        if focus_handle.is_focused(window) || show_cursor {
             if let Some(cur) = prepaint.cursor.take() {
                 window.paint_quad(cur);
             }

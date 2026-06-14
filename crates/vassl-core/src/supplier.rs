@@ -7,6 +7,7 @@ pub struct Supplier {
     pub contact_person: Option<String>,
     pub email:          Option<String>,
     pub phone:          Option<String>,
+    pub address:        Option<String>,
     pub notes:          Option<String>,
     pub created_at:     String,
 }
@@ -17,6 +18,7 @@ pub struct NewSupplier {
     pub contact_person: Option<String>,
     pub email:          Option<String>,
     pub phone:          Option<String>,
+    pub address:        Option<String>,
     pub notes:          Option<String>,
 }
 
@@ -32,6 +34,7 @@ mod tests {
             contact_person: None,
             email:          None,
             phone:          None,
+            address:        None,
             notes:          None,
             created_at:     "2026-01-01T00:00:00Z".to_string(),
         };
@@ -47,6 +50,7 @@ mod tests {
             contact_person: Some("Jane Doe".to_string()),
             email:          Some("jane@sony.com".to_string()),
             phone:          Some("+1 555 0100".to_string()),
+            address:        Some("123 Main St".to_string()),
             notes:          Some("Primary camera supplier".to_string()),
         };
         assert_eq!(ns.name, "Sony Electronics");

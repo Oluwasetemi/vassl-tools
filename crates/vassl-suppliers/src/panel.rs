@@ -12,6 +12,7 @@ pub struct SupplierPanel {
     form:         Option<Entity<SupplierForm>>,
     _form_sub:    Option<Subscription>,
     search_input: Entity<TextInput>,
+    detail_open:  bool,
 }
 
 impl SupplierPanel {
@@ -25,8 +26,19 @@ impl SupplierPanel {
             this.store.update(cx, |s, cx| s.set_search_query(q, cx));
         }).detach();
 
-        Self { store, list, form: None, _form_sub: None, search_input }
+        cx.observe(&store, |this, _, cx| {
+            if this.store.read(cx).detail_requested {
+                this.detail_open = true;
+                this.store.update(cx, |s, _| s.detail_requested = false);
+                cx.notify();
+            }
+        }).detach();
+
+        Self { store, list, form: None, _form_sub: None, search_input, detail_open: false }
     }
+
+    pub fn show_detail(&mut self, cx: &mut Context<Self>) { self.detail_open = true; cx.notify(); }
+    pub fn hide_detail(&mut self, cx: &mut Context<Self>) { self.detail_open = false; cx.notify(); }
 
     pub fn select_next(&mut self, cx: &mut Context<Self>) {
         if let Some(idx) = self.store.update(cx, |s, cx| s.select_next(cx)) {
@@ -169,7 +181,78 @@ impl Render for SupplierPanel {
                         btn
                     })
             )
-            .child(self.list.clone());
+            .child({
+                // Detail sidebar layout when open
+                let detail_open = self.detail_open;
+                let selected_supplier = if detail_open {
+                    let store = self.store.read(cx);
+                    store.selected_supplier_id.and_then(|sid| {
+                        store.suppliers.iter().find(|s| s.id == sid).cloned()
+                    })
+                } else {
+                    None
+                };
+
+                if detail_open {
+                    let detail_sidebar = {
+                        let mut sidebar = div()
+                            .w(px(280.))
+                            .flex_shrink_0()
+                            .border_l_1()
+                            .border_color(rgb(c.surface_default))
+                            .flex().flex_col()
+                            .bg(rgb(c.canvas_bg))
+                            .child(
+                                div()
+                                    .flex().flex_row().items_center()
+                                    .px(px(12.)).py(px(10.))
+                                    .bg(rgb(c.sidebar_bg))
+                                    .border_b_1().border_color(rgb(c.surface_default))
+                                    .child(div().flex_1().text_size(rems(0.923)).text_color(rgb(c.text_default))
+                                        .font_weight(gpui::FontWeight::BOLD).child("Supplier Details"))
+                                    .child(
+                                        div()
+                                            .id("sup-detail-close")
+                                            .px(px(8.)).py(px(4.)).rounded(px(4.))
+                                            .cursor_pointer()
+                                            .hover(|s| s.bg(rgb(c.surface_hover)))
+                                            .text_size(rems(0.923)).text_color(rgb(c.text_muted))
+                                            .child("×")
+                                            .on_mouse_down(MouseButton::Left, cx.listener(|this, _: &MouseDownEvent, _, cx| {
+                                                this.hide_detail(cx);
+                                            }))
+                                    )
+                            );
+
+                        if let Some(sup) = selected_supplier {
+                            sidebar = sidebar.child(
+                                div().id("sup-detail-scroll").flex_1().min_h(px(0.)).overflow_y_scroll().pb(px(64.))
+                                    .flex().flex_col()
+                                    .child(sup_detail_field("Name", sup.name.clone(), &c))
+                                    .child(sup_detail_field("Contact", sup.contact_person.clone().unwrap_or_else(|| "—".into()), &c))
+                                    .child(sup_detail_field("Email", sup.email.clone().unwrap_or_else(|| "—".into()), &c))
+                                    .child(sup_detail_field("Phone", sup.phone.clone().unwrap_or_else(|| "—".into()), &c))
+                                    .child(sup_detail_field("Address", sup.address.clone().unwrap_or_else(|| "—".into()), &c))
+                                    .child(sup_detail_field("Notes", sup.notes.clone().unwrap_or_else(|| "—".into()), &c))
+                            );
+                        } else {
+                            sidebar = sidebar.child(
+                                div().flex_1().flex().items_center().justify_center()
+                                    .text_color(rgb(c.text_muted)).text_size(rems(0.923))
+                                    .child("Select a supplier to view details")
+                            );
+                        }
+                        sidebar
+                    };
+
+                    div().flex_1().h_full().flex().flex_row()
+                        .child(self.list.clone())
+                        .child(detail_sidebar)
+                } else {
+                    div().flex_1().h_full().flex().flex_row()
+                        .child(self.list.clone())
+                }
+            });
 
         if let Some(form) = &self.form {
             root = root.child(form.clone());
@@ -214,6 +297,27 @@ impl Render for SupplierPanel {
                                 .font_weight(gpui::FontWeight::BOLD)
                                 .child(target.supplier_name.clone())
                         )
+                        .child({
+                            let hover_bg = rgb(c.surface_hover);
+                            div()
+                                .id("ctx-sup-view-details")
+                                .px(px(12.)).py(px(8.))
+                                .cursor_pointer()
+                                .hover(move |s| s.bg(hover_bg))
+                                .text_size(rems(1.))
+                                .text_color(rgb(c.text_default))
+                                .child("View Details")
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(move |this, _: &MouseDownEvent, _, cx| {
+                                        this.store.update(cx, |s, cx| {
+                                            s.select_supplier(sid, cx);
+                                            s.clear_context_menu(cx);
+                                        });
+                                        this.show_detail(cx);
+                                    }),
+                                )
+                        })
                         .when(allow_delete, |menu| {
                             let hover_bg = rgb(c.surface_hover);
                             menu.child(div().h(px(1.)).bg(rgb(c.surface_default)))
@@ -242,4 +346,18 @@ impl Render for SupplierPanel {
 
         root
     }
+}
+
+fn sup_detail_field(label: impl Into<String>, value: impl Into<String>, c: &vassl_ui::ThemeColors) -> impl gpui::IntoElement {
+    div()
+        .flex().flex_col().px(px(12.)).py(px(8.))
+        .border_b_1().border_color(rgb(c.surface_default))
+        .child(
+            div().text_size(rems(0.769)).text_color(rgb(c.text_muted)).mb(px(2.))
+                .child(label.into())
+        )
+        .child(
+            div().text_size(rems(0.923)).text_color(rgb(c.text_default))
+                .child(value.into())
+        )
 }

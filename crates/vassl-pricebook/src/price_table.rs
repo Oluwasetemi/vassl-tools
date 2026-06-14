@@ -22,10 +22,13 @@ impl PriceTable {
 pub fn price_display(pp: &ProductPrice) -> String {
     match &pp.latest {
         None => "—".to_string(),
-        Some(e) => format!(
-            "${:.2}  +${:.2}  →  {:.0}%  →  ${:.2}",
-            e.cost_price_usd, e.duty_cost_usd, e.markup_percent, e.selling_price_usd
-        ),
+        Some(e) => {
+            let sym = if e.currency == "JMD" { "J$" } else { "$" };
+            format!(
+                "{sym}{:.2}  +{sym}{:.2}  →  {:.0}%  →  {sym}{:.2}",
+                e.cost_price_usd, e.duty_cost_usd, e.markup_percent, e.selling_price_usd
+            )
+        }
     }
 }
 
@@ -167,9 +170,13 @@ fn price_row(pp: &ProductPrice, ix: usize, selected: bool, store: Entity<PriceBo
         .cursor_pointer()
         .on_mouse_down(
             MouseButton::Left,
-            move |_event: &MouseDownEvent, _window: &mut Window, cx: &mut App| {
+            move |event: &MouseDownEvent, _window: &mut Window, cx: &mut App| {
                 scroll_handle.scroll_to_item(ix, gpui::ScrollStrategy::Nearest);
-                store.update(cx, |s, cx| s.select_product(product_id, cx));
+                if event.click_count >= 2 {
+                    store.update(cx, |s, cx| s.select_product_and_detail(product_id, cx));
+                } else {
+                    store.update(cx, |s, cx| s.select_product(product_id, cx));
+                }
             },
         )
         .on_mouse_down(
@@ -250,5 +257,15 @@ mod tests {
         let pp = make_pp(2, "NVR", None);
         let display = price_display(&pp);
         assert_eq!(display, "—");
+    }
+
+    #[test]
+    fn format_price_jmd_entry_uses_jmd_symbol() {
+        let mut pp = make_pp(3, "Camera JMD", Some(15000.0));
+        if let Some(ref mut e) = pp.latest {
+            e.currency = "JMD".to_owned();
+        }
+        let display = price_display(&pp);
+        assert!(display.starts_with("J$"), "JMD entries use J$ prefix");
     }
 }

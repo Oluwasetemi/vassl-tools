@@ -1,10 +1,12 @@
 use gpui::actions;
 
 actions!(vassl, [
+    Logout,
     OpenInventory,
     OpenQuotations,
     OpenPriceBook,
     OpenSuppliers,
+    OpenProjects,
     OpenAuditLog,
     OpenSettings,
     FocusSearch,

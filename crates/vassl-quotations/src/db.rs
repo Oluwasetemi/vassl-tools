@@ -9,24 +9,40 @@ pub struct QuotationDb(pub sqlez::thread_safe_connection::ThreadSafeConnection);
 impl Domain for QuotationDb {
     const NAME: &'static str = "quotations";
     const MIGRATIONS: &'static [&'static str] = &[
-        // ── v1 base tables ───────────────────────────────────────────────────
         "CREATE TABLE IF NOT EXISTS projects (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            name        TEXT NOT NULL,
-            client_name TEXT NOT NULL,
-            description TEXT,
-            status      TEXT NOT NULL DEFAULT 'active',
-            created_at  TEXT NOT NULL
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            name           TEXT NOT NULL,
+            client_name    TEXT NOT NULL,
+            description    TEXT,
+            status         TEXT NOT NULL DEFAULT 'active',
+            created_at     TEXT NOT NULL,
+            client_address TEXT,
+            client_attn    TEXT,
+            client_tel     TEXT,
+            date_started   TEXT,
+            date_completed TEXT,
+            technicians    TEXT,
+            client_contact TEXT,
+            vassl_contact  TEXT,
+            signedoff_date TEXT
         )",
+        // products is owned by inventory; stub here so FK constraints resolve.
         "CREATE TABLE IF NOT EXISTS products (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            sku             TEXT UNIQUE NOT NULL,
-            name            TEXT NOT NULL,
-            category        TEXT,
-            unit            TEXT NOT NULL,
-            min_stock_level REAL NOT NULL DEFAULT 0,
-            notes           TEXT,
-            created_at      TEXT NOT NULL
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            sku                   TEXT UNIQUE NOT NULL,
+            name                  TEXT NOT NULL,
+            category              TEXT,
+            unit                  TEXT NOT NULL,
+            min_stock_level       REAL NOT NULL DEFAULT 0,
+            notes                 TEXT,
+            created_at            TEXT NOT NULL,
+            description           TEXT,
+            preferred_supplier_id INTEGER,
+            model_number          TEXT,
+            part_number           TEXT,
+            duty_percent          REAL NOT NULL DEFAULT 0,
+            end_of_life           INTEGER NOT NULL DEFAULT 0,
+            replacement           TEXT
         )",
         "CREATE TABLE IF NOT EXISTS quotations (
             id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,32 +52,26 @@ impl Domain for QuotationDb {
             notes            TEXT,
             created_by       TEXT NOT NULL,
             created_at       TEXT NOT NULL,
-            updated_at       TEXT NOT NULL
+            updated_at       TEXT NOT NULL,
+            quotation_date   TEXT,
+            exchange_rate_jmd REAL NOT NULL DEFAULT 0.0,
+            discount_percent  REAL NOT NULL DEFAULT 0.0,
+            gct_percent       REAL NOT NULL DEFAULT 15.0,
+            validity_days     INTEGER NOT NULL DEFAULT 30
         )",
         "CREATE TABLE IF NOT EXISTS quotation_items (
-            id             INTEGER PRIMARY KEY AUTOINCREMENT,
-            quotation_id   INTEGER NOT NULL REFERENCES quotations(id),
-            product_id     INTEGER REFERENCES products(id),
-            description    TEXT NOT NULL,
-            quantity       REAL NOT NULL,
-            unit_price_usd REAL NOT NULL,
-            total_usd      REAL NOT NULL
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            quotation_id     INTEGER NOT NULL REFERENCES quotations(id),
+            product_id       INTEGER REFERENCES products(id),
+            description      TEXT NOT NULL,
+            quantity         REAL NOT NULL,
+            unit_price_usd   REAL NOT NULL,
+            total_usd        REAL NOT NULL,
+            unit             TEXT,
+            discount_percent REAL NOT NULL DEFAULT 0.0
         )",
-        // ── v2 project client details ────────────────────────────────────────
-        "ALTER TABLE projects ADD COLUMN client_address TEXT",
-        "ALTER TABLE projects ADD COLUMN client_attn    TEXT",
-        "ALTER TABLE projects ADD COLUMN client_tel     TEXT",
-        // ── v3 quotation financial fields ────────────────────────────────────
-        "ALTER TABLE quotations ADD COLUMN quotation_date    TEXT",
-        "ALTER TABLE quotations ADD COLUMN exchange_rate_jmd REAL NOT NULL DEFAULT 156.0",
-        "ALTER TABLE quotations ADD COLUMN discount_percent  REAL NOT NULL DEFAULT 0.0",
-        "ALTER TABLE quotations ADD COLUMN gct_percent       REAL NOT NULL DEFAULT 15.0",
-        "ALTER TABLE quotations ADD COLUMN validity_days     INTEGER NOT NULL DEFAULT 30",
-        // ── v4 line item unit and discount ───────────────────────────────────
-        "ALTER TABLE quotation_items ADD COLUMN unit             TEXT",
-        "ALTER TABLE quotation_items ADD COLUMN discount_percent REAL NOT NULL DEFAULT 0.0",
     ];
-    fn should_allow_migration_change(_: usize, _: &str, _: &str) -> bool { false }
+    fn should_allow_migration_change(_: usize, _: &str, _: &str) -> bool { true }
 }
 
 vassl_db::static_connection!(QuotationDb, [SharedDomain, InventoryDb]);
@@ -197,24 +207,28 @@ impl QuotationDb {
     }
 
     pub fn list_projects(&self) -> anyhow::Result<Vec<Project>> {
-        type Row = (i64, String, String, Option<String>, Option<String>, Option<String>, Option<String>, String, String);
+        type Row = (i64, String, String, Option<String>, Option<String>, Option<String>, Option<String>, String, String,
+                    Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>);
         self.select::<Row>(
             "SELECT id, name, client_name, client_address, client_attn, client_tel,
-                    description, status, created_at
+                    description, status, created_at,
+                    date_started, date_completed, technicians, client_contact, vassl_contact, signedoff_date
              FROM projects ORDER BY name",
         )
         .context("prepare list_projects")?()
         .context("execute list_projects")
         .map(|rows| {
             rows.into_iter().map(|(id, name, client_name, client_address, client_attn,
-                                   client_tel, description, status_str, created_at)| {
+                                   client_tel, description, status_str, created_at,
+                                   date_started, date_completed, technicians, client_contact, vassl_contact, signedoff_date)| {
                 let status = match status_str.as_str() {
                     "completed" => ProjectStatus::Completed,
                     "archived"  => ProjectStatus::Archived,
                     _           => ProjectStatus::Active,
                 };
                 Project { id, name, client_name, client_address, client_attn, client_tel,
-                          description, status, created_at }
+                          description, status, created_at,
+                          date_started, date_completed, technicians, client_contact, vassl_contact, signedoff_date }
             }).collect()
         })
     }
@@ -316,20 +330,60 @@ impl QuotationDb {
         client_address: Option<String>,
         client_attn:    Option<String>,
         client_tel:     Option<String>,
+        date_started:   Option<String>,
+        date_completed: Option<String>,
+        technicians:    Option<String>,
+        client_contact: Option<String>,
+        vassl_contact:  Option<String>,
+        signedoff_date: Option<String>,
     ) -> anyhow::Result<i64> {
         let now = chrono::Utc::now().to_rfc3339();
         self.write(move |conn| {
-            conn.exec_bound::<(String, String, Option<String>, Option<String>, Option<String>, String)>(
-                "INSERT INTO projects (name, client_name, client_address, client_attn, client_tel, status, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, 'active', ?6)",
+            conn.exec_bound::<(String, String, Option<String>, Option<String>, Option<String>, String,
+                               Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>)>(
+                "INSERT INTO projects (name, client_name, client_address, client_attn, client_tel, status, created_at,
+                                       date_started, date_completed, technicians, client_contact, vassl_contact, signedoff_date)
+                 VALUES (?1, ?2, ?3, ?4, ?5, 'active', ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             )
             .context("prepare insert_project")?
-            ((name, client_name, client_address, client_attn, client_tel, now))
+            ((name, client_name, client_address, client_attn, client_tel, now,
+              date_started, date_completed, technicians, client_contact, vassl_contact, signedoff_date))
             .context("execute insert_project")?;
             conn.select_row::<i64>("SELECT last_insert_rowid()")
                 .context("prepare last_insert_rowid")?()
                 .context("execute last_insert_rowid")?
                 .context("rowid was None")
+        })
+        .await
+    }
+
+    pub async fn update_project(
+        &self,
+        id:             i64,
+        name:           String,
+        client_name:    String,
+        client_address: Option<String>,
+        client_attn:    Option<String>,
+        client_tel:     Option<String>,
+        date_started:   Option<String>,
+        date_completed: Option<String>,
+        technicians:    Option<String>,
+        client_contact: Option<String>,
+        vassl_contact:  Option<String>,
+        signedoff_date: Option<String>,
+    ) -> anyhow::Result<()> {
+        self.write(move |conn| {
+            conn.exec_bound::<(String, String, Option<String>, Option<String>, Option<String>,
+                               Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, i64)>(
+                "UPDATE projects SET name=?1, client_name=?2, client_address=?3, client_attn=?4, client_tel=?5,
+                                     date_started=?6, date_completed=?7, technicians=?8,
+                                     client_contact=?9, vassl_contact=?10, signedoff_date=?11
+                 WHERE id=?12"
+            )
+            .context("prepare update_project")?
+            ((name, client_name, client_address, client_attn, client_tel,
+              date_started, date_completed, technicians, client_contact, vassl_contact, signedoff_date, id))
+            .context("execute update_project")
         })
         .await
     }
@@ -358,6 +412,37 @@ impl QuotationDb {
                 .context("prepare rowid")?()
                 .context("execute rowid")?
                 .context("rowid was None")
+        })
+        .await
+    }
+
+    pub async fn update_quotation_financials(
+        &self,
+        id:                i64,
+        project_id:        i64,
+        notes:             Option<String>,
+        exchange_rate_jmd: f64,
+        discount_percent:  f64,
+        gct_percent:       f64,
+        validity_days:     i64,
+    ) -> anyhow::Result<()> {
+        let now = chrono::Utc::now().to_rfc3339();
+        self.write(move |conn| {
+            conn.exec_bound::<(i64, Option<String>, String, i64)>(
+                "UPDATE quotations SET project_id = ?1, notes = ?2, updated_at = ?3 WHERE id = ?4",
+            )
+            .context("prepare update_quotation project/notes")?
+            ((project_id, notes, now, id))
+            .context("execute update_quotation project/notes")?;
+
+            conn.exec_bound::<(f64, f64, f64, i64, i64)>(
+                "UPDATE quotations
+                 SET exchange_rate_jmd = ?1, discount_percent = ?2, gct_percent = ?3, validity_days = ?4
+                 WHERE id = ?5",
+            )
+            .context("prepare update_quotation financials")?
+            ((exchange_rate_jmd, discount_percent, gct_percent, validity_days, id))
+            .context("execute update_quotation financials")
         })
         .await
     }

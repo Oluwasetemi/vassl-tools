@@ -19,11 +19,18 @@ pub struct ProjectForm {
     client_address:    Entity<TextInput>,
     client_attn:       Entity<TextInput>,
     client_tel:        Entity<TextInput>,
+    date_started:      Entity<TextInput>,
+    date_completed:    Entity<TextInput>,
+    technicians:       Entity<TextInput>,
+    client_contact:    Entity<TextInput>,
+    vassl_contact:     Entity<TextInput>,
+    signedoff_date:    Entity<TextInput>,
     cancel_focus:      FocusHandle,
     save_focus:        FocusHandle,
     error:             Option<String>,
     name_error:        bool,
     client_name_error: bool,
+    editing_id:        Option<i64>,
 }
 
 pub fn validate_project(name: &str, client_name: &str) -> Result<(String, String), String> {
@@ -48,20 +55,71 @@ impl ProjectForm {
             client_address: cx.new(|cx| TextInput::with_placeholder("e.g. 12 Main St, Kingston (optional)", cx)),
             client_attn:    cx.new(|cx| TextInput::with_placeholder("e.g. Jane Smith (optional)", cx)),
             client_tel:     cx.new(|cx| TextInput::with_placeholder("e.g. 876-555-0100 (optional)", cx)),
+            date_started:   cx.new(|cx| TextInput::with_placeholder("e.g. 2026-01-15 (optional)", cx)),
+            date_completed: cx.new(|cx| TextInput::with_placeholder("e.g. 2026-06-30 (optional)", cx)),
+            technicians:    cx.new(|cx| TextInput::with_placeholder("e.g. John, Maria, Bob (optional)", cx)),
+            client_contact: cx.new(|cx| TextInput::with_placeholder("client-side contact (optional)", cx)),
+            vassl_contact:  cx.new(|cx| TextInput::with_placeholder("VASSL-side contact (optional)", cx)),
+            signedoff_date: cx.new(|cx| TextInput::with_placeholder("e.g. 2026-07-01 (optional)", cx)),
             cancel_focus:      cx.focus_handle(),
             save_focus:        cx.focus_handle(),
             error:             None,
             name_error:        false,
             client_name_error: false,
+            editing_id:        None,
+        }
+    }
+
+    pub fn edit(store: Entity<QuotationStore>, project: &vassl_core::Project, cx: &mut Context<Self>) -> Self {
+        let date_started   = cx.new(|cx| TextInput::with_placeholder("e.g. 2026-01-15 (optional)", cx));
+        let date_completed = cx.new(|cx| TextInput::with_placeholder("e.g. 2026-06-30 (optional)", cx));
+        let technicians    = cx.new(|cx| TextInput::with_placeholder("e.g. John, Maria, Bob (optional)", cx));
+        let client_contact = cx.new(|cx| TextInput::with_placeholder("client-side contact (optional)", cx));
+        let vassl_contact  = cx.new(|cx| TextInput::with_placeholder("VASSL-side contact (optional)", cx));
+        let signedoff_date = cx.new(|cx| TextInput::with_placeholder("e.g. 2026-07-01 (optional)", cx));
+
+        if let Some(v) = &project.date_started   { date_started.update(cx, |t, cx| t.set_text(v.clone(), cx)); }
+        if let Some(v) = &project.date_completed  { date_completed.update(cx, |t, cx| t.set_text(v.clone(), cx)); }
+        if let Some(v) = &project.technicians     { technicians.update(cx, |t, cx| t.set_text(v.clone(), cx)); }
+        if let Some(v) = &project.client_contact  { client_contact.update(cx, |t, cx| t.set_text(v.clone(), cx)); }
+        if let Some(v) = &project.vassl_contact   { vassl_contact.update(cx, |t, cx| t.set_text(v.clone(), cx)); }
+        if let Some(v) = &project.signedoff_date  { signedoff_date.update(cx, |t, cx| t.set_text(v.clone(), cx)); }
+
+        Self {
+            store,
+            editing_id:        Some(project.id),
+            name:           cx.new(|cx| TextInput::with_text(project.name.clone(), cx)),
+            client_name:    cx.new(|cx| TextInput::with_text(project.client_name.clone(), cx)),
+            client_address: cx.new(|cx| TextInput::with_text(project.client_address.clone().unwrap_or_default(), cx)),
+            client_attn:    cx.new(|cx| TextInput::with_text(project.client_attn.clone().unwrap_or_default(), cx)),
+            client_tel:     cx.new(|cx| TextInput::with_text(project.client_tel.clone().unwrap_or_default(), cx)),
+            date_started,
+            date_completed,
+            technicians,
+            client_contact,
+            vassl_contact,
+            signedoff_date,
+            cancel_focus:   cx.focus_handle(),
+            save_focus:     cx.focus_handle(),
+            error:          None,
+            name_error:     false,
+            client_name_error: false,
         }
     }
 
     fn submit(&mut self, cx: &mut Context<Self>) {
-        let n   = self.name.read(cx).text().to_string();
-        let cl  = self.client_name.read(cx).text().to_string();
-        let adr = self.client_address.read(cx).text().to_string();
-        let att = self.client_attn.read(cx).text().to_string();
-        let tel = self.client_tel.read(cx).text().to_string();
+        let n    = self.name.read(cx).text().to_string();
+        let cl   = self.client_name.read(cx).text().to_string();
+        let adr  = self.client_address.read(cx).text().to_string();
+        let att  = self.client_attn.read(cx).text().to_string();
+        let tel  = self.client_tel.read(cx).text().to_string();
+        let ds   = self.date_started.read(cx).text().to_string();
+        let dc   = self.date_completed.read(cx).text().to_string();
+        let tech = self.technicians.read(cx).text().to_string();
+        let cc   = self.client_contact.read(cx).text().to_string();
+        let vc   = self.vassl_contact.read(cx).text().to_string();
+        let sod  = self.signedoff_date.read(cx).text().to_string();
+
         self.name_error        = n.trim().is_empty();
         self.client_name_error = cl.trim().is_empty();
         match validate_project(&n, &cl) {
@@ -69,12 +127,30 @@ impl ProjectForm {
             Ok((name, client)) => {
                 let db    = QuotationDb::global(&**cx);
                 let store = self.store.clone();
-                cx.spawn(async move |this, cx| {
-                    let result = db.insert_project(name, client, opt(&adr), opt(&att), opt(&tel)).await;
-                    if let Err(e) = result { tracing::error!("insert_project failed: {e:?}"); return Ok(()); }
-                    let _ = store.update(cx, |s, cx| s.load_quotations(cx));
-                    this.update(cx, |_, cx| cx.emit(ProjectFormEvent::Submitted))
-                }).detach();
+                match self.editing_id {
+                    None => {
+                        cx.spawn(async move |this, cx| {
+                            let result = db.insert_project(
+                                name, client, opt(&adr), opt(&att), opt(&tel),
+                                opt(&ds), opt(&dc), opt(&tech), opt(&cc), opt(&vc), opt(&sod),
+                            ).await;
+                            if let Err(e) = result { tracing::error!("insert_project failed: {e:?}"); return Ok(()); }
+                            let _ = store.update(cx, |s, cx| s.load_quotations(cx));
+                            this.update(cx, |_, cx| cx.emit(ProjectFormEvent::Submitted))
+                        }).detach();
+                    }
+                    Some(id) => {
+                        cx.spawn(async move |this, cx| {
+                            let result = db.update_project(
+                                id, name, client, opt(&adr), opt(&att), opt(&tel),
+                                opt(&ds), opt(&dc), opt(&tech), opt(&cc), opt(&vc), opt(&sod),
+                            ).await;
+                            if let Err(e) = result { tracing::error!("update_project failed: {e:?}"); return Ok(()); }
+                            let _ = store.update(cx, |s, cx| s.load_quotations(cx));
+                            this.update(cx, |_, cx| cx.emit(ProjectFormEvent::Submitted))
+                        }).detach();
+                    }
+                }
             }
         }
     }
@@ -86,12 +162,18 @@ impl Focusable for ProjectForm {
 
 impl Render for ProjectForm {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let c       = cx.global::<ThemeHandle>().0.clone();
-        let name_f  = self.name.read(cx).focus_handle.is_focused(window);
-        let cli_f   = self.client_name.read(cx).focus_handle.is_focused(window);
-        let adr_f   = self.client_address.read(cx).focus_handle.is_focused(window);
-        let att_f   = self.client_attn.read(cx).focus_handle.is_focused(window);
-        let tel_f   = self.client_tel.read(cx).focus_handle.is_focused(window);
+        let c        = cx.global::<ThemeHandle>().0.clone();
+        let name_f   = self.name.read(cx).focus_handle.is_focused(window);
+        let cli_f    = self.client_name.read(cx).focus_handle.is_focused(window);
+        let adr_f    = self.client_address.read(cx).focus_handle.is_focused(window);
+        let att_f    = self.client_attn.read(cx).focus_handle.is_focused(window);
+        let tel_f    = self.client_tel.read(cx).focus_handle.is_focused(window);
+        let ds_f     = self.date_started.read(cx).focus_handle.is_focused(window);
+        let dc_f     = self.date_completed.read(cx).focus_handle.is_focused(window);
+        let tech_f   = self.technicians.read(cx).focus_handle.is_focused(window);
+        let cc_f     = self.client_contact.read(cx).focus_handle.is_focused(window);
+        let vc_f     = self.vassl_contact.read(cx).focus_handle.is_focused(window);
+        let sod_f    = self.signedoff_date.read(cx).focus_handle.is_focused(window);
         let cancel_f = self.cancel_focus.is_focused(window);
         let save_f   = self.save_focus.is_focused(window);
 
@@ -113,6 +195,12 @@ impl Render for ProjectForm {
                     this.client_address.read(cx).focus_handle.clone(),
                     this.client_attn.read(cx).focus_handle.clone(),
                     this.client_tel.read(cx).focus_handle.clone(),
+                    this.client_contact.read(cx).focus_handle.clone(),
+                    this.vassl_contact.read(cx).focus_handle.clone(),
+                    this.date_started.read(cx).focus_handle.clone(),
+                    this.date_completed.read(cx).focus_handle.clone(),
+                    this.signedoff_date.read(cx).focus_handle.clone(),
+                    this.technicians.read(cx).focus_handle.clone(),
                     this.cancel_focus.clone(),
                     this.save_focus.clone(),
                 ];
@@ -127,6 +215,12 @@ impl Render for ProjectForm {
                     this.client_address.read(cx).focus_handle.clone(),
                     this.client_attn.read(cx).focus_handle.clone(),
                     this.client_tel.read(cx).focus_handle.clone(),
+                    this.client_contact.read(cx).focus_handle.clone(),
+                    this.vassl_contact.read(cx).focus_handle.clone(),
+                    this.date_started.read(cx).focus_handle.clone(),
+                    this.date_completed.read(cx).focus_handle.clone(),
+                    this.signedoff_date.read(cx).focus_handle.clone(),
+                    this.technicians.read(cx).focus_handle.clone(),
                     this.cancel_focus.clone(),
                     this.save_focus.clone(),
                 ];
@@ -136,7 +230,8 @@ impl Render for ProjectForm {
             }))
             .child(
                 div()
-                    .w(px(560.))
+                    .w(px(580.))
+                    .max_h(px(700.))
                     .bg(rgb(c.canvas_bg))
                     .rounded(px(10.))
                     .border_1()
@@ -149,27 +244,46 @@ impl Render for ProjectForm {
                             .rounded_t(px(10.))
                             .bg(rgb(c.sidebar_bg))
                             .flex().flex_row().items_center()
+                            .flex_shrink_0()
                             .child(div().flex_1()
                                 .text_size(rems(1.)).text_color(rgb(c.text_default))
-                                .child("New Project"))
+                                .child(if self.editing_id.is_some() { "Edit Project" } else { "New Project" }))
                             .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted)).child("Esc to cancel"))
                     )
-                    // ── fields ──────────────────────────────────────────
+                    // ── fields (scrollable) ──────────────────────────────
                     .child(
-                        div().flex().flex_col().px(px(20.)).pt(px(8.)).pb(px(4.))
-                            .child(field_row("Project Name", self.name.clone(), name_f, self.name_error, cx, &c))
-                            .child(divider(&c))
-                            .child(field_row("Client Name", self.client_name.clone(), cli_f, self.client_name_error, cx, &c))
-                            .child(divider(&c))
-                            .child(field_row("Address", self.client_address.clone(), adr_f, false, cx, &c))
-                            .child(divider(&c))
-                            .child(field_row("Attn", self.client_attn.clone(), att_f, false, cx, &c))
-                            .child(divider(&c))
-                            .child(field_row("Tel", self.client_tel.clone(), tel_f, false, cx, &c))
+                        div()
+                            .id("proj-form-scroll")
+                            .flex_1()
+                            .overflow_y_scroll()
                             .child(
-                                div().h(px(18.)).flex().items_center()
-                                    .child(div().text_size(rems(0.846)).text_color(rgb(c.status_red))
-                                        .child(self.error.as_deref().map(SharedString::from).unwrap_or_default()))
+                                div().flex().flex_col().px(px(20.)).pt(px(8.)).pb(px(4.))
+                                    .child(field_row("Project Name", self.name.clone(), name_f, self.name_error, cx, &c))
+                                    .child(divider(&c))
+                                    .child(field_row("Client Name", self.client_name.clone(), cli_f, self.client_name_error, cx, &c))
+                                    .child(divider(&c))
+                                    .child(field_row("Address", self.client_address.clone(), adr_f, false, cx, &c))
+                                    .child(divider(&c))
+                                    .child(field_row("Attn", self.client_attn.clone(), att_f, false, cx, &c))
+                                    .child(divider(&c))
+                                    .child(field_row("Tel", self.client_tel.clone(), tel_f, false, cx, &c))
+                                    .child(divider(&c))
+                                    .child(field_row("Client Contact", self.client_contact.clone(), cc_f, false, cx, &c))
+                                    .child(divider(&c))
+                                    .child(field_row("VASSL Contact", self.vassl_contact.clone(), vc_f, false, cx, &c))
+                                    .child(divider(&c))
+                                    .child(field_row("Date Started", self.date_started.clone(), ds_f, false, cx, &c))
+                                    .child(divider(&c))
+                                    .child(field_row("Date Completed", self.date_completed.clone(), dc_f, false, cx, &c))
+                                    .child(divider(&c))
+                                    .child(field_row("Signed-off Date", self.signedoff_date.clone(), sod_f, false, cx, &c))
+                                    .child(divider(&c))
+                                    .child(field_row("Technicians", self.technicians.clone(), tech_f, false, cx, &c))
+                                    .child(
+                                        div().h(px(18.)).flex().items_center()
+                                            .child(div().text_size(rems(0.846)).text_color(rgb(c.status_red))
+                                                .child(self.error.as_deref().map(SharedString::from).unwrap_or_default()))
+                                    )
                             )
                     )
                     // ── footer ──────────────────────────────────────────
@@ -179,6 +293,7 @@ impl Render for ProjectForm {
                             .border_t_1()
                             .border_color(rgb(c.surface_default))
                             .flex().flex_row().justify_end().gap(px(8.))
+                            .flex_shrink_0()
                             .child(
                                 div().id("proj-btn-cancel")
                                     .track_focus(&self.cancel_focus)
@@ -203,7 +318,7 @@ impl Render for ProjectForm {
                                     .when(save_f, |d| d.border_2().border_color(rgb(c.text_default)))
                                     .when(!save_f, |d| d.border_1().border_color(rgb(c.surface_active)))
                                     .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| { this.submit(cx); }))
-                                    .child("Create Project")
+                                    .child(if self.editing_id.is_some() { "Save Changes" } else { "Create Project" })
                             )
                     )
             )

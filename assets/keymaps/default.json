@@ -6,6 +6,7 @@
       "secondary-2":       "vassl::OpenQuotations",
       "secondary-3":       "vassl::OpenPriceBook",
       "secondary-4":       "vassl::OpenSuppliers",
+      "secondary-5":       "vassl::OpenProjects",
       "secondary-shift-a": "vassl::OpenAuditLog",
       "secondary-,":       "vassl::OpenSettings",
       "secondary-shift-f": "vassl::OpenGlobalSearch",

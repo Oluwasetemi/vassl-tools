@@ -19,12 +19,14 @@ impl EventEmitter<PriceBookPanelEvent> for PriceBookPanel {}
 enum Tab { PriceBook, History }
 
 pub struct PriceBookPanel {
-    pub store:    Entity<PriceBookStore>,
-    price_table:  Entity<PriceTable>,
-    active_tab:   Tab,
-    form:         Option<Entity<PriceEntryForm>>,
-    _form_sub:    Option<Subscription>,
-    search_input: Entity<TextInput>,
+    pub store:      Entity<PriceBookStore>,
+    price_table:    Entity<PriceTable>,
+    active_tab:     Tab,
+    form:           Option<Entity<PriceEntryForm>>,
+    _form_sub:      Option<Subscription>,
+    search_input:   Entity<TextInput>,
+    detail_open:    bool,
+    last_detail_gen: u32,
 }
 
 impl PriceBookPanel {
@@ -39,13 +41,24 @@ impl PriceBookPanel {
             this.store.update(cx, |s, cx| s.set_search_query(q, cx));
         }).detach();
 
+        cx.observe(&store, |this, _, cx| {
+            let gen = this.store.read(cx).detail_generation;
+            if gen > this.last_detail_gen {
+                this.last_detail_gen = gen;
+                this.detail_open     = true;
+                cx.notify();
+            }
+        }).detach();
+
         Self {
             store,
             price_table,
-            active_tab:   Tab::PriceBook,
-            form:         None,
-            _form_sub:    None,
+            active_tab:      Tab::PriceBook,
+            form:            None,
+            _form_sub:       None,
             search_input,
+            detail_open:     false,
+            last_detail_gen: 0,
         }
     }
 
@@ -173,10 +186,21 @@ impl Render for PriceBookPanel {
                     e.duty_cost_usd,
                     e.markup_percent,
                     e.selling_price_usd,
+                    e.currency.clone(),
                 )
             }).collect()
         };
         let history_is_empty = history_rows.is_empty();
+
+        let detail_open = self.detail_open;
+        let selected_product = if detail_open {
+            let store = self.store.read(cx);
+            store.selected_product_id.and_then(|pid| {
+                store.product_prices.iter().find(|pp| pp.product_id == pid).cloned()
+            })
+        } else {
+            None
+        };
 
         let content = div().flex_1().h_full().flex().flex_col();
         let content = match active_tab {
@@ -197,15 +221,16 @@ impl Render for PriceBookPanel {
                             .child("No price history for this product.")
                     )
                 } else {
-                    let rows: Vec<_> = history_rows.iter().map(|(date, cost, duty, markup, sell)| {
+                    let rows: Vec<_> = history_rows.iter().map(|(date, cost, duty, markup, sell, currency)| {
+                        let sym = if currency == "JMD" { "J$" } else { "$" };
                         div()
                             .flex().flex_row().items_center().w_full()
                             .px(px(12.)).py(px(6.))
                             .child(div().w(px(100.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child(date.clone()))
-                            .child(div().w(px(90.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child(format!("${cost:.2}")))
-                            .child(div().w(px(80.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child(format!("+${duty:.2}")))
+                            .child(div().w(px(90.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child(format!("{sym}{cost:.2}")))
+                            .child(div().w(px(80.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child(format!("+{sym}{duty:.2}")))
                             .child(div().w(px(70.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child(format!("{markup:.0}%")))
-                            .child(div().flex_1().text_size(rems(1.)).text_color(rgb(c.status_green)).child(format!("${sell:.2}")))
+                            .child(div().flex_1().text_size(rems(1.)).text_color(rgb(c.status_green)).child(format!("{sym}{sell:.2}")))
                     }).collect();
 
                     content.child(
@@ -306,7 +331,81 @@ impl Render for PriceBookPanel {
                         btn
                     })
             )
-            .child(content);
+            .child({
+                let content_area = if detail_open {
+                    let detail_sidebar = {
+                        let mut sidebar = div()
+                            .w(px(300.))
+                            .flex_shrink_0()
+                            .border_l_1()
+                            .border_color(rgb(c.surface_default))
+                            .flex().flex_col()
+                            .bg(rgb(c.canvas_bg))
+                            .child(
+                                div()
+                                    .flex().flex_row().items_center()
+                                    .px(px(12.)).py(px(10.))
+                                    .bg(rgb(c.sidebar_bg))
+                                    .border_b_1().border_color(rgb(c.surface_default))
+                                    .child(div().flex_1().text_size(rems(0.923)).text_color(rgb(c.text_default))
+                                        .font_weight(gpui::FontWeight::BOLD).child("Product Details"))
+                                    .child(
+                                        div()
+                                            .id("pb-detail-close")
+                                            .px(px(8.)).py(px(4.)).rounded(px(4.))
+                                            .cursor_pointer()
+                                            .hover(|s| s.bg(rgb(c.surface_hover)))
+                                            .text_size(rems(0.923)).text_color(rgb(c.text_muted))
+                                            .child("×")
+                                            .on_mouse_down(MouseButton::Left, cx.listener(|this, _: &MouseDownEvent, _, cx| {
+                                                this.detail_open = false;
+                                                cx.notify();
+                                            }))
+                                    )
+                            );
+
+                        if let Some(pp) = selected_product {
+                            let sym          = if pp.latest.as_ref().map(|e| e.currency == "JMD").unwrap_or(false) { "J$" } else { "$" };
+                            let cost_str     = pp.latest.as_ref().map(|e| format!("{sym}{:.2}", e.cost_price_usd)).unwrap_or_else(|| "—".into());
+                            let duty_str     = pp.latest.as_ref().map(|e| format!("{sym}{:.2}", e.duty_cost_usd)).unwrap_or_else(|| "—".into());
+                            let markup_str   = pp.latest.as_ref().map(|e| format!("{:.0}%", e.markup_percent)).unwrap_or_else(|| "—".into());
+                            let sell_str     = pp.latest.as_ref().map(|e| format!("{sym}{:.2}", e.selling_price_usd)).unwrap_or_else(|| "—".into());
+                            let date_str     = pp.latest.as_ref().map(|e| e.effective_date.get(..10).unwrap_or("").to_string()).unwrap_or_else(|| "—".into());
+                            let currency_str = pp.latest.as_ref().map(|e| e.currency.clone()).unwrap_or_else(|| "—".into());
+                            let duty_pct     = format!("{:.1}%", pp.duty_percent);
+
+                            sidebar = sidebar.child(
+                                div().id("pb-detail-scroll").flex_1().min_h(px(0.)).overflow_y_scroll().pb(px(64.))
+                                    .flex().flex_col()
+                                    .child(pb_detail_field("Name",           pp.name.clone(), &c))
+                                    .child(pb_detail_field("SKU",            pp.sku.clone(), &c))
+                                    .child(pb_detail_field("Currency",       currency_str, &c))
+                                    .child(pb_detail_field("Duty %",         duty_pct, &c))
+                                    .child(pb_detail_field("Cost Price",     cost_str, &c))
+                                    .child(pb_detail_field("Duty Cost",      duty_str, &c))
+                                    .child(pb_detail_field("Markup %",       markup_str, &c))
+                                    .child(pb_detail_field("Selling Price",  sell_str, &c))
+                                    .child(pb_detail_field("Effective Date", date_str, &c))
+                            );
+                        } else {
+                            sidebar = sidebar.child(
+                                div().flex_1().flex().items_center().justify_center()
+                                    .text_color(rgb(c.text_muted)).text_size(rems(0.923))
+                                    .child("Select a product to view details")
+                            );
+                        }
+                        sidebar
+                    };
+
+                    div().flex_1().h_full().flex().flex_row()
+                        .child(content)
+                        .child(detail_sidebar)
+                } else {
+                    div().flex_1().h_full().flex().flex_row()
+                        .child(content)
+                };
+                content_area
+            });
 
         if let Some(form) = &self.form {
             root = root.child(form.clone());
@@ -319,7 +418,7 @@ impl Render for PriceBookPanel {
         if let Some(target) = ctx_menu {
             let viewport = window.viewport_size();
             const MENU_W: f32 = 220.0;
-            const MENU_H: f32 = 260.0;
+            const MENU_H: f32 = 300.0;
             let menu_x = target.x.min((viewport.width.as_f32()  - MENU_W).max(0.0));
             let menu_y = target.y.min((viewport.height.as_f32() - MENU_H).max(0.0));
             let info_line = {
@@ -330,10 +429,13 @@ impl Render for PriceBookPanel {
                     .map(|pp| {
                         match &pp.latest {
                             None    => "No price set".to_string(),
-                            Some(e) => format!(
-                                "${:.2} + ${:.2} → {:.0}% → ${:.2}",
-                                e.cost_price_usd, e.duty_cost_usd, e.markup_percent, e.selling_price_usd
-                            ),
+                            Some(e) => {
+                                let sym = if e.currency == "JMD" { "J$" } else { "$" };
+                                format!(
+                                    "{sym}{:.2} + {sym}{:.2} → {:.0}% → {sym}{:.2}",
+                                    e.cost_price_usd, e.duty_cost_usd, e.markup_percent, e.selling_price_usd
+                                )
+                            }
                         }
                     })
                     .unwrap_or_default()
@@ -385,6 +487,28 @@ impl Render for PriceBookPanel {
                                 .text_color(rgb(c.text_muted))
                                 .child(info_line)
                         )
+                        .child({
+                            let hover_bg = rgb(c.surface_hover);
+                            div()
+                                .id("ctx-pb-view-details")
+                                .px(px(12.)).py(px(8.))
+                                .cursor_pointer()
+                                .hover(move |s| s.bg(hover_bg))
+                                .text_size(rems(1.))
+                                .text_color(rgb(c.text_default))
+                                .child("View Details")
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(move |this, _: &MouseDownEvent, _, cx| {
+                                        this.store.update(cx, |s, cx| {
+                                            s.select_product(pid, cx);
+                                            s.clear_context_menu(cx);
+                                        });
+                                        this.detail_open = true;
+                                        cx.notify();
+                                    }),
+                                )
+                        })
                         .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                         .child({
                             let n = name.clone();
@@ -487,6 +611,20 @@ impl Render for PriceBookPanel {
 
         root
     }
+}
+
+fn pb_detail_field(label: impl Into<String>, value: impl Into<String>, c: &vassl_ui::ThemeColors) -> impl gpui::IntoElement {
+    div()
+        .flex().flex_col().px(px(12.)).py(px(8.))
+        .border_b_1().border_color(rgb(c.surface_default))
+        .child(
+            div().text_size(rems(0.769)).text_color(rgb(c.text_muted)).mb(px(2.))
+                .child(label.into())
+        )
+        .child(
+            div().text_size(rems(0.923)).text_color(rgb(c.text_default))
+                .child(value.into())
+        )
 }
 
 #[cfg(test)]

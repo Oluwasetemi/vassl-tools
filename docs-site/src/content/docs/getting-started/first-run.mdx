@@ -5,29 +5,63 @@ description: What to expect when you launch VASSL for the first time.
 
 import { Steps, Aside } from '@astrojs/starlight/components';
 
-## Setup prompt
+## Creating the administrator account
 
-When you launch VASSL for the first time, a setup prompt will appear asking for your name. This sets the **current user** recorded against all changes in the audit log.
+When VASSL is launched for the very first time, the database is empty and there are no user accounts. A setup screen will appear asking you to create the **administrator account**. This is a one-time step.
 
 <Steps>
-1. Enter your full name in the setup prompt.
-2. Press **Enter** or click **Save**.
-3. VASSL will open to the **Inventory** module.
+1. Enter a **username** for the administrator account.
+2. Enter and confirm a **password**.
+3. Click **Create Account**.
+4. VASSL will open the login screen.
 </Steps>
 
 <Aside type="tip">
-Your name is stored locally in the database. It is used to identify who made changes in the Audit Log. You can change it later via **Settings → Appearance**.
+Choose a strong password for the administrator account — it has full access to every module and can manage all other user accounts.
 </Aside>
+
+## Logging in
+
+Every time VASSL opens, you will be presented with the login screen.
+
+<Steps>
+1. Enter your **username**.
+2. Enter your **password**.
+3. Press **Enter** or click **Log In**.
+</Steps>
+
+If your credentials are correct and your account is active, VASSL will open to the Inventory module.
+
+<Aside type="note">
+If you enter the wrong password, the login form will show an error. There is no account lockout — you can try again immediately.
+</Aside>
+
+## Logging out
+
+To switch users or leave the machine unattended, log out from the session:
+
+- Press **Cmd+Shift+L** (macOS) / **Ctrl+Shift+L** (Windows), or
+- Open **Settings** and click **Log Out** at the bottom of the Security section.
+
+Logging out returns you to the login screen. The application stays open.
 
 ## Recommended first steps
 
-1. **Add your suppliers** — go to the Suppliers module (`Cmd/Ctrl+4` or the sidebar) and add the suppliers you procure from. This allows you to assign preferred suppliers to products later.
+Once you are logged in as administrator, do these things before anyone else starts using VASSL:
 
-2. **Add your products** — go to the Inventory module (`Cmd/Ctrl+1`) and add your product catalogue. Set SKU, category, unit, and minimum stock level for each.
+<Steps>
+1. **Set the USD → JMD exchange rate** — open **Settings** (`Cmd/Ctrl+,`) and enter the current rate in the **Price Book** section. This rate is used as the default for new quotations and for displaying JMD equivalents.
 
-3. **Set up your price book** — go to the Price Book module (`Cmd/Ctrl+3`) and add cost prices and markups for each product.
+2. **Create accounts for your team** — in **Settings → Admin**, add a user account for each person who will use VASSL. Assign each person only the modules and permissions they need.
 
-4. **Create your first quotation** — go to Quotations (`Cmd/Ctrl+2`), create a project, and build a quotation from your price book.
+3. **Add your suppliers** — go to the Suppliers module (`Cmd/Ctrl+4`) and add the suppliers you procure from. This allows you to assign preferred suppliers to products.
+
+4. **Add your products** — go to the Inventory module (`Cmd/Ctrl+1`) and add your product catalogue. Set SKU, category, unit, and minimum stock level for each.
+
+5. **Set up your price book** — go to the Price Book module (`Cmd/Ctrl+3`) and add cost prices and markups for each product.
+
+6. **Create your first quotation** — go to Quotations (`Cmd/Ctrl+2`), create a project, and build a quotation from your price book.
+</Steps>
 
 ## Application layout
 
@@ -45,4 +79,4 @@ Your name is stored locally in the database. It is used to identify who made cha
 └──────────────────────────────────────────────┘
 ```
 
-The **status bar** at the bottom shows the active module name and current user.
+The **status bar** at the bottom shows the active module name and the currently logged-in user.

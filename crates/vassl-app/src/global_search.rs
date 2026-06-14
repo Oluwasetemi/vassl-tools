@@ -242,6 +242,7 @@ mod tests {
                 preferred_supplier_id: None,
                 created_at: "2026-01-01T00:00:00Z".into(),
                 model_number: None, part_number: None, duty_percent: 0.0,
+                end_of_life: false, replacement: None,
             },
             current_stock: 5.0,
             status: StockStatus::Healthy,
@@ -250,7 +251,7 @@ mod tests {
 
     fn make_supplier(id: i64, name: &str, email: Option<&str>) -> Supplier {
         Supplier { id, name: name.into(), contact_person: None,
-            email: email.map(String::from), phone: None, notes: None,
+            email: email.map(String::from), phone: None, address: None, notes: None,
             created_at: "2026-01-01T00:00:00Z".into() }
     }
 
@@ -260,7 +261,10 @@ mod tests {
                   created_at: "2026-01-01T00:00:00Z".into(),
             client_address: Some("no1, address test".into()),
             client_attn: Some("client atten".into()),
-            client_tel: Some("123456789".into()) }
+            client_tel: Some("123456789".into()),
+            date_started: None, date_completed: None, technicians: None,
+            client_contact: None, vassl_contact: None, signedoff_date: None,
+        }
     }
 
     #[test]

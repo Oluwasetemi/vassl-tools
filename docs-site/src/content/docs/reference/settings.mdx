@@ -1,6 +1,6 @@
 ---
 title: Settings
-description: Configuring VASSL appearance and preferences.
+description: Configuring VASSL appearance, security, and preferences.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -37,6 +37,83 @@ VASSL automatically follows your OS appearance setting (light or dark mode). Whe
 
 You can also toggle the theme manually from the Settings panel.
 
-## Diagrams
+## Security
 
-{/* TODO: Add screenshot of the Settings panel showing font controls and theme toggle */}
+The Security section allows you to change your own password.
+
+### Changing your password
+
+<table>
+  <thead><tr><th>Field</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>Current Password</td><td>Enter your existing password to confirm your identity</td></tr>
+    <tr><td>New Password</td><td>Your new password</td></tr>
+    <tr><td>Confirm Password</td><td>Must match the new password exactly</td></tr>
+  </tbody>
+</table>
+
+Click **Change Password** to save. If the current password is wrong, an error is shown and the password is not changed.
+
+### Logging out
+
+Click **Log Out** at the bottom of the Security section to end your session and return to the login screen. You can also press **Cmd+Shift+L** (macOS) / **Ctrl+Shift+L** (Windows) at any time.
+
+## Admin
+
+The Admin section is only visible to **administrator** accounts. It allows administrators to manage user accounts for the whole team.
+
+### User list
+
+The user list shows every account: their username, which modules they can access, and whether their account is active or deactivated.
+
+### Adding a user
+
+Click **+ New User** to create an account for a team member. Fill in:
+
+<table>
+  <thead><tr><th>Field</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>Username</td><td>The name the person will use to log in</td></tr>
+    <tr><td>Password</td><td>A temporary password — the person should change this on first login</td></tr>
+    <tr><td>Inventory</td><td>Allow access to the Inventory module</td></tr>
+    <tr><td>Price Book</td><td>Allow access to the Price Book module</td></tr>
+    <tr><td>Quotations</td><td>Allow access to the Quotations module</td></tr>
+    <tr><td>Allow Delete</td><td>Allow the user to delete records across modules</td></tr>
+    <tr><td>Allow Price Edit</td><td>Allow the user to add or change price book entries</td></tr>
+  </tbody>
+</table>
+
+<Aside type="tip">
+Give each person only the permissions they actually need. For example, a staff member who only enters stock receipts needs Inventory access but does not need Price Book or Quotations.
+</Aside>
+
+### Editing permissions
+
+Click **Edit** next to any non-administrator account to update their module access and permissions. Administrators cannot have their permissions changed through this form — they always have full access.
+
+### Resetting a password
+
+Click **Reset Password** next to a user account to set a new temporary password for them. The person will need to log in with this temporary password and should change it immediately via Settings → Security.
+
+### Deactivating and reactivating accounts
+
+- **Deactivate** — the account remains in the system but the person can no longer log in. Use this when someone leaves the team rather than deleting their account, so their history in the audit log is preserved.
+- **Reactivate** — restores access for a previously deactivated account.
+
+<Aside type="note">
+Administrator accounts cannot be deactivated through the user management panel. There must always be at least one active administrator to manage the system.
+</Aside>
+
+## Price Book
+
+### USD → JMD exchange rate
+
+Set the current exchange rate between US dollars and Jamaican dollars. This rate is used as the **default rate** whenever a new quotation is created, unless a different rate is entered on the quotation form.
+
+The rate is also used to display the JMD equivalent of totals in the Quotations module.
+
+Enter the rate as a plain number (for example, `157.50` means 1 USD = 157.50 JMD).
+
+<Aside type="tip">
+Update this rate whenever the exchange rate changes significantly. Quotations that have already been created keep their own rate — changing this setting only affects new quotations going forward.
+</Aside>

@@ -21,14 +21,20 @@ mod first_run;
 mod global_search;
 mod importer;
 mod keybindings;
+mod login_panel;
 mod platform;
 mod root;
 mod settings_panel;
 mod sidebar;
 mod status_bar;
+mod users_db;
 
-use actions::{CheckForUpdates, ConfirmSelection, DecreaseFontSize, EscapeModal, FocusSearch, Hide, HideOthers, IncreaseFontSize, InstallUpdate, Minimize, OpenAuditLog, OpenDocumentation, OpenGlobalSearch, OpenInventory, OpenPriceBook, OpenQuotations, OpenSuppliers, OpenSettings, Quit, SelectNext, SelectPrev, ShowAll};
-use vassl_ui::NewRecord;
+use actions::{CheckForUpdates, ConfirmSelection, DecreaseFontSize, EscapeModal, FocusSearch, Hide, HideOthers, IncreaseFontSize, InstallUpdate, Logout, Minimize, OpenAuditLog, OpenDocumentation, OpenGlobalSearch, OpenInventory, OpenPriceBook, OpenQuotations, OpenSuppliers, OpenSettings, Quit, SelectNext, SelectPrev, ShowAll};
+use login_panel::{EscapeForm as LoginEscapeForm, TabField as LoginTabField, BackTabField as LoginBackTabField};
+use settings_panel::{SecurityTabField, SecurityBackTabField, SecurityEscapeForm,
+                     AdminAddTabField, AdminAddBackTabField, AdminAddEscapeForm,
+                     AdminResetTabField, AdminResetBackTabField, AdminResetEscapeForm};
+use vassl_ui::{NewRecord, DropdownDown, DropdownUp, DropdownConfirm, DropdownClose};
 use vassl_ui::text_input::{BackTab, Backspace, Copy, Cut, Delete, End, Home, Left, Paste, Right, SelectAll, SelectLeft, SelectRight, ShowCharacterPalette, Tab as TextTab};
 use vassl_inventory::product_form::{EscapeForm as ProductEscapeForm, TabField as ProductTab, BackTabField as ProductBackTab};
 use vassl_inventory::stock_form::{EscapeForm as StockEscapeForm, TabField as StockTab, BackTabField as StockBackTab};
@@ -102,6 +108,23 @@ pub fn apply_keybindings(cx: &mut App, overrides: &HashMap<String, String>) {
         ),
         KeyBinding::new("secondary-shift-u", CheckForUpdates, Some("VasslRoot")),
         KeyBinding::new("secondary-shift-i", InstallUpdate,   Some("VasslRoot")),
+        KeyBinding::new("secondary-shift-l", Logout,          Some("VasslRoot")),
+        // Login panel
+        KeyBinding::new("escape",    LoginEscapeForm,    Some("LoginPanel")),
+        KeyBinding::new("tab",       LoginTabField,      Some("LoginPanel")),
+        KeyBinding::new("shift-tab", LoginBackTabField,  Some("LoginPanel")),
+        // Settings — Security (change password) form
+        KeyBinding::new("escape",    SecurityEscapeForm,    Some("SettingsSecurityForm")),
+        KeyBinding::new("tab",       SecurityTabField,      Some("SettingsSecurityForm")),
+        KeyBinding::new("shift-tab", SecurityBackTabField,  Some("SettingsSecurityForm")),
+        // Settings — Admin add-user form
+        KeyBinding::new("escape",    AdminAddEscapeForm,   Some("SettingsAdminAddForm")),
+        KeyBinding::new("tab",       AdminAddTabField,     Some("SettingsAdminAddForm")),
+        KeyBinding::new("shift-tab", AdminAddBackTabField, Some("SettingsAdminAddForm")),
+        // Settings — Admin reset-password form
+        KeyBinding::new("escape",    AdminResetEscapeForm,   Some("SettingsAdminResetForm")),
+        KeyBinding::new("tab",       AdminResetTabField,     Some("SettingsAdminResetForm")),
+        KeyBinding::new("shift-tab", AdminResetBackTabField, Some("SettingsAdminResetForm")),
         // TextInput editing keys (non-remappable)
         KeyBinding::new("backspace",        Backspace,   Some("TextInput")),
         KeyBinding::new("delete",           Delete,      Some("TextInput")),
@@ -130,6 +153,12 @@ pub fn apply_keybindings(cx: &mut App, overrides: &HashMap<String, String>) {
         KeyBinding::new("down",              SelectNext,       Some("GlobalSearch")),
         KeyBinding::new("up",                SelectPrev,       Some("GlobalSearch")),
         KeyBinding::new("enter",             ConfirmSelection, Some("GlobalSearch")),
+        // Dropdown keyboard navigation
+        KeyBinding::new("down",              DropdownDown,    Some("Dropdown")),
+        KeyBinding::new("up",                DropdownUp,      Some("Dropdown")),
+        KeyBinding::new("enter",             DropdownConfirm, Some("Dropdown")),
+        KeyBinding::new("escape",            DropdownClose,   Some("Dropdown")),
+        KeyBinding::new("tab",               DropdownClose,   Some("Dropdown")),
         // ProductForm escape + tab
         KeyBinding::new("escape",            ProductEscapeForm, Some("ProductForm")),
         KeyBinding::new("tab",               ProductTab,        Some("ProductForm")),

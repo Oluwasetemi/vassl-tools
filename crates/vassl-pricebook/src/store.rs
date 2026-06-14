@@ -3,6 +3,8 @@ use vassl_core::PriceEntry;
 
 use crate::db::PriceBookDb;
 
+const DEFAULT_RATE: f64 = 157.50;
+
 #[derive(Debug, Clone)]
 pub struct ProductPrice {
     pub product_id:   i64,
@@ -23,11 +25,13 @@ pub struct ContextMenuTarget {
 pub struct PriceBookStore {
     pub product_prices:      Vec<ProductPrice>,
     pub selected_product_id: Option<i64>,
+    pub detail_generation:   u32,
     pub history:             Vec<PriceEntry>,
     pub loading:             bool,
     pub context_menu:        Option<ContextMenuTarget>,
     pub search_query:        String,
     pub edit_target:         Option<vassl_core::PriceEntry>,
+    pub usd_to_jmd_rate:     f64,
 }
 
 pub struct PriceBookStoreHandle(pub Entity<PriceBookStore>);
@@ -46,17 +50,25 @@ impl PriceBookStore {
         Self {
             product_prices:      Vec::new(),
             selected_product_id: None,
+            detail_generation:   0,
             history:             Vec::new(),
             loading:             false,
             context_menu:        None,
             search_query:        String::new(),
             edit_target:         None,
+            usd_to_jmd_rate:     DEFAULT_RATE,
         }
     }
 
     pub fn load_products(&mut self, cx: &mut Context<Self>) {
         if self.loading { return; }
         self.loading = true;
+
+        let app_db = vassl_db::AppDatabase::global(&**cx);
+        if let Ok(Some(s)) = vassl_db::shared::get_setting(app_db, "pricebook.usd_to_jmd_rate") {
+            if let Ok(r) = s.parse::<f64>() { self.usd_to_jmd_rate = r; }
+        }
+
         cx.notify();
 
         let db = PriceBookDb::global(&**cx);
@@ -110,6 +122,12 @@ impl PriceBookStore {
             });
         })
         .detach();
+    }
+
+    pub fn select_product_and_detail(&mut self, product_id: i64, cx: &mut Context<Self>) {
+        self.select_product(product_id, cx);
+        self.detail_generation += 1;
+        cx.notify();
     }
 
     pub fn delete_price_entry(&mut self, entry_id: i64, product_id: i64, cx: &mut Context<Self>) {
@@ -218,11 +236,13 @@ mod tests {
                 ProductPrice { product_id: 2, sku: "NVR-001".into(), name: "NVR Unit".into(),  duty_percent: 0.0, latest: None },
             ],
             selected_product_id: None,
+            detail_generation: 0,
             history: vec![],
             loading: false,
             context_menu: None,
             search_query: String::new(),
             edit_target: None,
+            usd_to_jmd_rate: DEFAULT_RATE,
         };
         assert_eq!(store.filtered_product_prices().len(), 2);
     }
@@ -235,11 +255,13 @@ mod tests {
                 ProductPrice { product_id: 2, sku: "NVR-001".into(), name: "NVR Unit".into(),  duty_percent: 0.0, latest: None },
             ],
             selected_product_id: None,
+            detail_generation: 0,
             history: vec![],
             loading: false,
             context_menu: None,
             search_query: "camera".into(),
             edit_target: None,
+            usd_to_jmd_rate: DEFAULT_RATE,
         };
         let results = store.filtered_product_prices();
         assert_eq!(results.len(), 1);
@@ -253,11 +275,13 @@ mod tests {
                 ProductPrice { product_id: 1, sku: "CAM-001".into(), name: "IP Camera".into(), duty_percent: 0.0, latest: None },
             ],
             selected_product_id: None,
+            detail_generation: 0,
             history: vec![],
             loading: false,
             context_menu: None,
             search_query: "cam-".into(),
             edit_target: None,
+            usd_to_jmd_rate: DEFAULT_RATE,
         };
         assert_eq!(store.filtered_product_prices().len(), 1);
     }

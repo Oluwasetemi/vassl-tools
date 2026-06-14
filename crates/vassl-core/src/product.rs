@@ -15,6 +15,8 @@ pub struct Product {
     pub model_number: Option<String>,
     pub part_number: Option<String>,
     pub duty_percent: f64,
+    pub end_of_life: bool,
+    pub replacement: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,6 +32,8 @@ pub struct NewProduct {
     pub model_number: Option<String>,
     pub part_number: Option<String>,
     pub duty_percent: f64,
+    pub end_of_life: bool,
+    pub replacement: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,6 +91,8 @@ mod tests {
             model_number: None,
             part_number: None,
             duty_percent: 0.0,
+            end_of_life: false,
+            replacement: None,
         };
         assert_eq!(p.description.as_deref(), Some("Wide-angle, 24mm"));
     }
@@ -105,6 +111,8 @@ mod tests {
             model_number: None,
             part_number: None,
             duty_percent: 0.0,
+            end_of_life: false,
+            replacement: None,
         };
         assert!(np.description.is_none());
     }

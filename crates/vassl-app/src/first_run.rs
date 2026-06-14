@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use gpui::{Context, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Window,
            div, prelude::*, px, rems, rgb, rgba, SharedString};
 use vassl_ui::{TextInput, ThemeHandle, text_field};
@@ -11,6 +13,7 @@ impl EventEmitter<FirstRunEvent> for FirstRunPrompt {}
 pub struct FirstRunPrompt {
     name_input:   gpui::Entity<TextInput>,
     error:        Option<String>,
+    auto_focused: bool,
     focus_handle: FocusHandle,
 }
 
@@ -28,6 +31,7 @@ impl FirstRunPrompt {
         Self {
             name_input:   cx.new(|cx| TextInput::with_placeholder("e.g. John Doe", cx)),
             error:        None,
+            auto_focused: false,
             focus_handle: cx.focus_handle(),
         }
     }
@@ -60,6 +64,13 @@ impl Focusable for FirstRunPrompt {
 impl Render for FirstRunPrompt {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = cx.global::<ThemeHandle>().0.clone();
+
+        if !self.auto_focused {
+            self.auto_focused = true;
+            let h = self.name_input.read(cx).focus_handle.clone();
+            window.focus(&h, cx);
+        }
+
         let name_focused = self.name_input.read(cx).focus_handle.is_focused(window);
 
         div()

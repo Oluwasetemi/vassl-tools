@@ -10,14 +10,21 @@ impl Domain for InventoryDb {
     const NAME: &'static str = "inventory";
     const MIGRATIONS: &'static [&'static str] = &[
         "CREATE TABLE IF NOT EXISTS products (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            sku             TEXT UNIQUE NOT NULL,
-            name            TEXT NOT NULL,
-            category        TEXT,
-            unit            TEXT NOT NULL,
-            min_stock_level REAL NOT NULL DEFAULT 0,
-            notes           TEXT,
-            created_at      TEXT NOT NULL
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            sku                   TEXT UNIQUE NOT NULL,
+            name                  TEXT NOT NULL,
+            category              TEXT,
+            unit                  TEXT NOT NULL,
+            min_stock_level       REAL NOT NULL DEFAULT 0,
+            notes                 TEXT,
+            created_at            TEXT NOT NULL,
+            description           TEXT,
+            preferred_supplier_id INTEGER,
+            model_number          TEXT,
+            part_number           TEXT,
+            duty_percent          REAL NOT NULL DEFAULT 0,
+            end_of_life           INTEGER NOT NULL DEFAULT 0,
+            replacement           TEXT
         )",
         "CREATE TABLE IF NOT EXISTS stock_entries (
             id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,13 +38,8 @@ impl Domain for InventoryDb {
             invoice_ref      TEXT,
             notes            TEXT
         )",
-        "ALTER TABLE products ADD COLUMN description TEXT",
-        "ALTER TABLE products ADD COLUMN preferred_supplier_id INTEGER",
-        "ALTER TABLE products ADD COLUMN model_number TEXT",
-        "ALTER TABLE products ADD COLUMN part_number TEXT",
-        "ALTER TABLE products ADD COLUMN duty_percent REAL NOT NULL DEFAULT 0",
     ];
-    fn should_allow_migration_change(_: usize, _: &str, _: &str) -> bool { false }
+    fn should_allow_migration_change(_: usize, _: &str, _: &str) -> bool { true }
 }
 
 vassl_db::static_connection!(InventoryDb, [SharedDomain]);
@@ -45,16 +47,17 @@ vassl_db::static_connection!(InventoryDb, [SharedDomain]);
 impl InventoryDb {
     /// All products ordered by name.
     pub fn list_products(&self) -> anyhow::Result<Vec<Product>> {
-        self.select::<(i64, String, String, Option<String>, String, f64, Option<String>, Option<String>, Option<i64>, String, Option<String>, Option<String>, f64)>(
+        self.select::<(i64, String, String, Option<String>, String, f64, Option<String>, Option<String>, Option<i64>, String, Option<String>, Option<String>, f64, bool, Option<String>)>(
             "SELECT id, sku, name, category, unit, min_stock_level, description, notes,
-                    preferred_supplier_id, created_at, model_number, part_number, duty_percent
+                    preferred_supplier_id, created_at, model_number, part_number, duty_percent,
+                    end_of_life, replacement
              FROM products ORDER BY name",
         )
         .context("prepare list_products")?()
         .context("execute list_products")
         .map(|rows| {
-            rows.into_iter().map(|(id, sku, name, category, unit, min_stock_level, description, notes, preferred_supplier_id, created_at, model_number, part_number, duty_percent)| {
-                Product { id, sku, name, category, unit, min_stock_level, description, notes, preferred_supplier_id, created_at, model_number, part_number, duty_percent }
+            rows.into_iter().map(|(id, sku, name, category, unit, min_stock_level, description, notes, preferred_supplier_id, created_at, model_number, part_number, duty_percent, end_of_life, replacement)| {
+                Product { id, sku, name, category, unit, min_stock_level, description, notes, preferred_supplier_id, created_at, model_number, part_number, duty_percent, end_of_life, replacement }
             }).collect()
         })
     }
@@ -102,10 +105,11 @@ impl InventoryDb {
 
     /// All products with current stock level.
     pub fn list_products_with_stock(&self) -> anyhow::Result<Vec<(Product, f64)>> {
-        self.select::<(i64, String, String, Option<String>, String, f64, Option<String>, Option<String>, Option<i64>, String, Option<String>, Option<String>, f64, f64)>(
+        self.select::<(i64, String, String, Option<String>, String, f64, Option<String>, Option<String>, Option<i64>, String, Option<String>, Option<String>, f64, bool, Option<String>, f64)>(
             "SELECT p.id, p.sku, p.name, p.category, p.unit, p.min_stock_level,
                     p.description, p.notes, p.preferred_supplier_id, p.created_at,
                     p.model_number, p.part_number, p.duty_percent,
+                    p.end_of_life, p.replacement,
                     COALESCE(SUM(s.quantity), 0.0) AS current_stock
              FROM products p
              LEFT JOIN stock_entries s ON s.product_id = p.id
@@ -115,18 +119,19 @@ impl InventoryDb {
         .context("prepare list_products_with_stock")?()
         .context("execute list_products_with_stock")
         .map(|rows| {
-            rows.into_iter().map(|(id, sku, name, category, unit, min_stock_level, description, notes, preferred_supplier_id, created_at, model_number, part_number, duty_percent, current_stock)| {
-                (Product { id, sku, name, category, unit, min_stock_level, description, notes, preferred_supplier_id, created_at, model_number, part_number, duty_percent }, current_stock)
+            rows.into_iter().map(|(id, sku, name, category, unit, min_stock_level, description, notes, preferred_supplier_id, created_at, model_number, part_number, duty_percent, end_of_life, replacement, current_stock)| {
+                (Product { id, sku, name, category, unit, min_stock_level, description, notes, preferred_supplier_id, created_at, model_number, part_number, duty_percent, end_of_life, replacement }, current_stock)
             }).collect()
         })
     }
 
     /// Products at or below their min_stock_level.
     pub fn products_below_min_stock(&self) -> anyhow::Result<Vec<Product>> {
-        self.select::<(i64, String, String, Option<String>, String, f64, Option<String>, Option<String>, Option<i64>, String, Option<String>, Option<String>, f64)>(
+        self.select::<(i64, String, String, Option<String>, String, f64, Option<String>, Option<String>, Option<i64>, String, Option<String>, Option<String>, f64, bool, Option<String>)>(
             "SELECT p.id, p.sku, p.name, p.category, p.unit, p.min_stock_level,
                     p.description, p.notes, p.preferred_supplier_id, p.created_at,
-                    p.model_number, p.part_number, p.duty_percent
+                    p.model_number, p.part_number, p.duty_percent,
+                    p.end_of_life, p.replacement
              FROM products p
              LEFT JOIN stock_entries s ON s.product_id = p.id
              WHERE p.min_stock_level > 0
@@ -137,8 +142,8 @@ impl InventoryDb {
         .context("prepare products_below_min_stock")?()
         .context("execute products_below_min_stock")
         .map(|rows| {
-            rows.into_iter().map(|(id, sku, name, category, unit, min_stock_level, description, notes, preferred_supplier_id, created_at, model_number, part_number, duty_percent)| {
-                Product { id, sku, name, category, unit, min_stock_level, description, notes, preferred_supplier_id, created_at, model_number, part_number, duty_percent }
+            rows.into_iter().map(|(id, sku, name, category, unit, min_stock_level, description, notes, preferred_supplier_id, created_at, model_number, part_number, duty_percent, end_of_life, replacement)| {
+                Product { id, sku, name, category, unit, min_stock_level, description, notes, preferred_supplier_id, created_at, model_number, part_number, duty_percent, end_of_life, replacement }
             }).collect()
         })
     }
@@ -157,25 +162,29 @@ impl InventoryDb {
         model_number: Option<&str>,
         part_number: Option<&str>,
         duty_percent: f64,
+        end_of_life: bool,
+        replacement: Option<&str>,
     ) -> anyhow::Result<i64> {
-        let sku                  = sku.to_string();
-        let name                 = name.to_string();
-        let category             = category.map(String::from);
-        let unit                 = unit.to_string();
-        let description          = description.map(String::from);
-        let notes                = notes.map(String::from);
-        let model_number         = model_number.map(String::from);
-        let part_number          = part_number.map(String::from);
-        let now                  = chrono::Utc::now().to_rfc3339();
+        let sku          = sku.to_string();
+        let name         = name.to_string();
+        let category     = category.map(String::from);
+        let unit         = unit.to_string();
+        let description  = description.map(String::from);
+        let notes        = notes.map(String::from);
+        let model_number = model_number.map(String::from);
+        let part_number  = part_number.map(String::from);
+        let replacement  = replacement.map(String::from);
+        let now          = chrono::Utc::now().to_rfc3339();
 
         self.write(move |conn| {
-            conn.exec_bound::<(String, String, Option<String>, String, f64, Option<String>, Option<String>, Option<i64>, String, Option<String>, Option<String>, f64)>(
+            conn.exec_bound::<(String, String, Option<String>, String, f64, Option<String>, Option<String>, Option<i64>, String, Option<String>, Option<String>, f64, bool, Option<String>)>(
                 "INSERT INTO products (sku, name, category, unit, min_stock_level, description, notes,
-                                       preferred_supplier_id, created_at, model_number, part_number, duty_percent)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                                       preferred_supplier_id, created_at, model_number, part_number,
+                                       duty_percent, end_of_life, replacement)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             )
             .context("prepare insert_product")?
-            ((sku, name, category, unit, min_stock_level, description, notes, preferred_supplier_id, now, model_number, part_number, duty_percent))
+            ((sku, name, category, unit, min_stock_level, description, notes, preferred_supplier_id, now, model_number, part_number, duty_percent, end_of_life, replacement))
             .context("execute insert_product")?;
 
             let new_id = conn.select_row::<i64>("SELECT last_insert_rowid()")
@@ -206,6 +215,8 @@ impl InventoryDb {
         model_number: Option<&str>,
         part_number: Option<&str>,
         duty_percent: f64,
+        end_of_life: bool,
+        replacement: Option<&str>,
     ) -> anyhow::Result<()> {
         let name         = name.to_string();
         let category     = category.map(String::from);
@@ -213,17 +224,19 @@ impl InventoryDb {
         let description  = description.map(String::from);
         let model_number = model_number.map(String::from);
         let part_number  = part_number.map(String::from);
+        let replacement  = replacement.map(String::from);
 
         self.write(move |conn| {
-            conn.exec_bound::<(String, Option<String>, String, f64, Option<String>, Option<i64>, Option<String>, Option<String>, f64, i64)>(
+            conn.exec_bound::<(String, Option<String>, String, f64, Option<String>, Option<i64>, Option<String>, Option<String>, f64, bool, Option<String>, i64)>(
                 "UPDATE products
                  SET name=?1, category=?2, unit=?3, min_stock_level=?4,
                      description=?5, preferred_supplier_id=?6,
-                     model_number=?7, part_number=?8, duty_percent=?9
-                 WHERE id=?10",
+                     model_number=?7, part_number=?8, duty_percent=?9,
+                     end_of_life=?10, replacement=?11
+                 WHERE id=?12",
             )
             .context("prepare update_product")?
-            ((name, category, unit, min_stock_level, description, preferred_supplier_id, model_number, part_number, duty_percent, id))
+            ((name, category, unit, min_stock_level, description, preferred_supplier_id, model_number, part_number, duty_percent, end_of_life, replacement, id))
             .context("execute update_product")?;
 
             let changed_by = current_user(conn).ok().flatten().unwrap_or_else(|| "system".into());
@@ -329,7 +342,7 @@ mod tests {
     #[tokio::test]
     async fn insert_and_list_product() {
         let db = InventoryDb::open_test_db("inv_test_insert_list").await;
-        let id = db.insert_product("CAM-001", "IP Camera", Some("CCTV"), "pcs", 5.0, None, None, None, None, None, 0.0).await.unwrap();
+        let id = db.insert_product("CAM-001", "IP Camera", Some("CCTV"), "pcs", 5.0, None, None, None, None, None, 0.0, false, None).await.unwrap();
         assert!(id > 0);
         let products = db.list_products().unwrap();
         assert_eq!(products.len(), 1);
@@ -340,14 +353,14 @@ mod tests {
     #[tokio::test]
     async fn current_stock_zero_when_no_entries() {
         let db = InventoryDb::open_test_db("inv_test_stock_zero").await;
-        let id = db.insert_product("NVR-001", "NVR", None, "pcs", 2.0, None, None, None, None, None, 0.0).await.unwrap();
+        let id = db.insert_product("NVR-001", "NVR", None, "pcs", 2.0, None, None, None, None, None, 0.0, false, None).await.unwrap();
         assert_eq!(db.current_stock(id).unwrap(), 0.0);
     }
 
     #[tokio::test]
     async fn insert_stock_entry_updates_current_stock() {
         let db = InventoryDb::open_test_db("inv_test_stock_update").await;
-        let id = db.insert_product("CAB-001", "Cable", None, "meters", 100.0, None, None, None, None, None, 0.0).await.unwrap();
+        let id = db.insert_product("CAB-001", "Cable", None, "meters", 100.0, None, None, None, None, None, 0.0, false, None).await.unwrap();
         db.insert_stock_entry(id, 50.0, 2.5, Some("SupplierA"), AcquisitionType::Restock, None, None, None).await.unwrap();
         db.insert_stock_entry(id, 30.0, 2.8, None, AcquisitionType::Project, None, None, None).await.unwrap();
         assert_eq!(db.current_stock(id).unwrap(), 80.0);
@@ -356,7 +369,7 @@ mod tests {
     #[tokio::test]
     async fn products_below_min_stock_detected() {
         let db = InventoryDb::open_test_db("inv_test_below_min").await;
-        let id = db.insert_product("DVR-001", "DVR", None, "pcs", 5.0, None, None, None, None, None, 0.0).await.unwrap();
+        let id = db.insert_product("DVR-001", "DVR", None, "pcs", 5.0, None, None, None, None, None, 0.0, false, None).await.unwrap();
         db.insert_stock_entry(id, 3.0, 150.0, None, AcquisitionType::Restock, None, None, None).await.unwrap();
         let below = db.products_below_min_stock().unwrap();
         assert_eq!(below.len(), 1);
@@ -366,7 +379,7 @@ mod tests {
     #[tokio::test]
     async fn products_at_zero_min_not_alerted() {
         let db = InventoryDb::open_test_db("inv_test_zero_min_ok").await;
-        db.insert_product("MISC-001", "Misc", None, "pcs", 0.0, None, None, None, None, None, 0.0).await.unwrap();
+        db.insert_product("MISC-001", "Misc", None, "pcs", 0.0, None, None, None, None, None, 0.0, false, None).await.unwrap();
         let below = db.products_below_min_stock().unwrap();
         assert!(below.is_empty());
     }
@@ -374,7 +387,7 @@ mod tests {
     #[tokio::test]
     async fn list_products_with_stock_aggregates_correctly() {
         let db = InventoryDb::open_test_db("inv_test_list_with_stock_xyz").await;
-        let id = db.insert_product("PTZ-001", "PTZ Camera", None, "pcs", 2.0, None, None, None, None, None, 0.0).await.unwrap();
+        let id = db.insert_product("PTZ-001", "PTZ Camera", None, "pcs", 2.0, None, None, None, None, None, 0.0, false, None).await.unwrap();
         db.insert_stock_entry(id, 5.0, 100.0, None, AcquisitionType::Restock, None, None, None).await.unwrap();
         db.insert_stock_entry(id, 3.0, 95.0, None, AcquisitionType::Restock, None, None, None).await.unwrap();
         let results = db.list_products_with_stock().unwrap();
@@ -387,7 +400,7 @@ mod tests {
         let db = InventoryDb::open_test_db("inv_test_desc_roundtrip").await;
         let id = db.insert_product(
             "CAM-001", "IP Camera", Some("CCTV"), "pcs", 5.0,
-            Some("Wide-angle lens, 24mm"), None, None, None, None, 0.0,
+            Some("Wide-angle lens, 24mm"), None, None, None, None, 0.0, false, None,
         ).await.unwrap();
         assert!(id > 0);
         let products = db.list_products().unwrap();
@@ -397,7 +410,7 @@ mod tests {
     #[tokio::test]
     async fn description_none_does_not_break_insert() {
         let db = InventoryDb::open_test_db("inv_test_desc_none").await;
-        let id = db.insert_product("NVR-001", "NVR", None, "pcs", 2.0, None, None, None, None, None, 0.0).await.unwrap();
+        let id = db.insert_product("NVR-001", "NVR", None, "pcs", 2.0, None, None, None, None, None, 0.0, false, None).await.unwrap();
         assert!(id > 0);
         let products = db.list_products().unwrap();
         assert_eq!(products[0].description, None);
@@ -406,8 +419,8 @@ mod tests {
     #[tokio::test]
     async fn update_product_persists_changes() {
         let db = InventoryDb::open_test_db("inv_test_update_product").await;
-        let id = db.insert_product("CAM-001", "IP Camera", None, "pcs", 5.0, None, None, None, None, None, 0.0).await.unwrap();
-        db.update_product(id, "IP Camera HD", Some("CCTV"), "pcs", 10.0, Some("Updated"), None, None, None, 0.0).await.unwrap();
+        let id = db.insert_product("CAM-001", "IP Camera", None, "pcs", 5.0, None, None, None, None, None, 0.0, false, None).await.unwrap();
+        db.update_product(id, "IP Camera HD", Some("CCTV"), "pcs", 10.0, Some("Updated"), None, None, None, 0.0, false, None).await.unwrap();
         let products = db.list_products().unwrap();
         assert_eq!(products[0].name, "IP Camera HD");
         assert_eq!(products[0].min_stock_level, 10.0);
@@ -417,10 +430,10 @@ mod tests {
     #[tokio::test]
     async fn preferred_supplier_id_round_trips() {
         let db = InventoryDb::open_test_db("inv_test_supplier_id").await;
-        let id = db.insert_product("CAM-002", "Fisheye Camera", None, "pcs", 0.0, None, None, Some(42), None, None, 0.0).await.unwrap();
+        let id = db.insert_product("CAM-002", "Fisheye Camera", None, "pcs", 0.0, None, None, Some(42), None, None, 0.0, false, None).await.unwrap();
         let products = db.list_products().unwrap();
         assert_eq!(products[0].preferred_supplier_id, Some(42));
-        db.update_product(id, "Fisheye Camera", None, "pcs", 0.0, None, None, None, None, 0.0).await.unwrap();
+        db.update_product(id, "Fisheye Camera", None, "pcs", 0.0, None, None, None, None, 0.0, false, None).await.unwrap();
         let products = db.list_products().unwrap();
         assert_eq!(products[0].preferred_supplier_id, None);
     }

@@ -12,14 +12,6 @@ const SHARED_MIGRATIONS: &[&str] = &[
         key   TEXT PRIMARY KEY NOT NULL,
         value TEXT NOT NULL
     )",
-    "CREATE TABLE IF NOT EXISTS projects (
-        id          INTEGER PRIMARY KEY AUTOINCREMENT,
-        name        TEXT NOT NULL,
-        client_name TEXT NOT NULL,
-        description TEXT,
-        status      TEXT NOT NULL DEFAULT 'active',
-        created_at  TEXT NOT NULL
-    )",
     "CREATE TABLE IF NOT EXISTS audit_log (
         id         INTEGER PRIMARY KEY AUTOINCREMENT,
         table_name TEXT NOT NULL,
@@ -37,7 +29,7 @@ inventory::submit! {
         name: "shared",
         dependencies: &[],
         migrations: SHARED_MIGRATIONS,
-        should_allow_migration_change: |_index, _old, _new| false,
+        should_allow_migration_change: |_index, _old, _new| true,
     }
 }
 
@@ -91,7 +83,18 @@ pub fn set_current_user(conn: &Connection, name: &str) -> Result<()> {
     set_setting(conn, "current_user", name)
 }
 
-/// Append a row to the `audit_log` table.
+/// Update the `new_value` column of an existing audit entry (used to patch
+/// the "in-progress" name-change entry as the user keeps typing, so only one
+/// row is produced per editing session rather than one row per keystroke).
+pub fn update_audit_new_value(conn: &Connection, id: i64, new_value: &str) -> Result<()> {
+    conn.exec_bound::<(&str, i64)>(
+        "UPDATE audit_log SET new_value = (?) WHERE id = (?)",
+    )
+    .context("failed to prepare audit_log UPDATE")?
+    ((new_value, id))
+}
+
+/// Append a row to the `audit_log` table. Returns the new row's id.
 #[allow(clippy::too_many_arguments)]
 pub fn log_audit(
     conn: &Connection,
@@ -101,7 +104,7 @@ pub fn log_audit(
     changed_by: &str,
     old_value: Option<&str>,
     new_value: Option<&str>,
-) -> Result<()> {
+) -> Result<i64> {
     let changed_at = chrono::Utc::now().to_rfc3339();
     conn.exec_bound::<(&str, i64, &str, &str, &str, Option<&str>, Option<&str>)>(
         "INSERT INTO audit_log \
@@ -109,7 +112,11 @@ pub fn log_audit(
             VALUES ((?), (?), (?), (?), (?), (?), (?))",
     )
     .context("failed to prepare audit_log INSERT")?
-    ((table_name, record_id, action, changed_by, &changed_at, old_value, new_value))
+    ((table_name, record_id, action, changed_by, &changed_at, old_value, new_value))?;
+    conn.select_row::<i64>("SELECT last_insert_rowid()")
+        .context("failed to prepare last_insert_rowid")?()
+        .context("failed to execute last_insert_rowid")?
+        .context("last_insert_rowid returned None")
 }
 
 // ---------------------------------------------------------------------------

@@ -22,8 +22,8 @@ enum FormMode {
 pub struct ProductForm {
     mode:               FormMode,
     store:              Entity<InventoryStore>,
-    sku_display:        String,      // read-only in Edit mode
-    original_stock:     Option<f64>, // snapshot at open time; used to compute delta on save
+    sku_display:        String,
+    original_stock:     Option<f64>,
     pub sku:            Entity<TextInput>,
     name:               Entity<TextInput>,
     category:           Entity<TextInput>,
@@ -31,8 +31,10 @@ pub struct ProductForm {
     model_number:       Entity<TextInput>,
     part_number:        Entity<TextInput>,
     duty_percent:       Entity<TextInput>,
-    initial_qty:        Entity<TextInput>,  // create mode only
-    edit_stock:         Entity<TextInput>,  // edit mode only; pre-filled with current stock
+    end_of_life:        bool,
+    replacement:        Entity<TextInput>,
+    initial_qty:        Entity<TextInput>,
+    edit_stock:         Entity<TextInput>,
     min_stock:          Entity<TextInput>,
     description:        Entity<TextInput>,
     supplier_dropdown:  Entity<Dropdown>,
@@ -42,7 +44,6 @@ pub struct ProductForm {
     error:              Option<String>,
     sku_error:          bool,
     name_error:         bool,
-    unit_error:         bool,
 }
 
 fn validate_product(sku: &str, name: &str, unit: &str, min_stock: &str) -> Result<(String, String, String, f64), String> {
@@ -55,7 +56,6 @@ fn validate_product_fields(name: &str, unit: &str, min_stock: &str) -> Result<(S
     let name = name.trim().to_string();
     if name.is_empty() { return Err("Name is required.".to_string()); }
     let unit = unit.trim().to_string();
-    if unit.is_empty() { return Err("Unit is required (e.g. 'pcs', 'meters').".to_string()); }
     let min: f64 = min_stock.trim().parse().unwrap_or(0.0);
     if min < 0.0  { return Err("Min stock must be ≥ 0.".to_string()); }
     Ok((name, unit, min))
@@ -116,13 +116,15 @@ impl ProductForm {
             name:         cx.new(|cx| TextInput::with_placeholder("e.g. IP Camera 2MP", cx)),
             category:     cx.new(|cx| TextInput::with_placeholder("optional: Cameras, Cabling…", cx)),
             unit:         cx.new(move |cx| {
-                let mut f = TextInput::with_placeholder("pcs, meters, rolls…", cx);
+                let mut f = TextInput::with_placeholder("pcs, meters, rolls… (optional)", cx);
                 if !default_unit.is_empty() { f.set_text(&default_unit, cx); }
                 f
             }),
             model_number: cx.new(|cx| TextInput::with_placeholder("e.g. DS-2CD2143G2-I", cx)),
             part_number:  cx.new(|cx| TextInput::with_placeholder("e.g. PN-001", cx)),
             duty_percent: cx.new(|cx| TextInput::with_placeholder("e.g. 42.5", cx)),
+            end_of_life:  false,
+            replacement:  cx.new(|cx| TextInput::with_placeholder("e.g. CAM-IP-4MP", cx)),
             initial_qty:  cx.new(|cx| TextInput::with_placeholder("e.g. 10  (optional)", cx)),
             edit_stock:   cx.new(|cx| TextInput::with_placeholder("", cx)),
             min_stock:    cx.new(move |cx| {
@@ -138,7 +140,6 @@ impl ProductForm {
             error:        None,
             sku_error:    false,
             name_error:   false,
-            unit_error:   false,
         }
     }
 
@@ -192,6 +193,12 @@ impl ProductForm {
             }
             f
         });
+        let eol_value = product.end_of_life;
+        let repl_field = cx.new(|cx| {
+            let mut f = TextInput::with_placeholder("e.g. CAM-IP-4MP", cx);
+            if let Some(v) = &product.replacement { f.set_text(v, cx); }
+            f
+        });
         let preselect = product.preferred_supplier_id;
         let (supplier_dropdown, _supplier_sub) = Self::make_supplier_dropdown(preselect, cx);
         Self {
@@ -199,14 +206,16 @@ impl ProductForm {
             store,
             sku_display:    product.sku.clone(),
             original_stock: Some(current_stock),
-            sku:          cx.new(|cx| TextInput::with_placeholder("", cx)), // unused in edit
+            sku:          cx.new(|cx| TextInput::with_placeholder("", cx)),
             name:         name_field,
             category:     cat_field,
             unit:         unit_field,
             model_number: model_field,
             part_number:  part_field,
             duty_percent: duty_field,
-            initial_qty:  cx.new(|cx| TextInput::with_placeholder("", cx)), // unused in edit
+            end_of_life:  eol_value,
+            replacement:  repl_field,
+            initial_qty:  cx.new(|cx| TextInput::with_placeholder("", cx)),
             edit_stock:   stock_field,
             min_stock:    min_field,
             description:  desc_field,
@@ -217,7 +226,6 @@ impl ProductForm {
             error:        None,
             sku_error:    false,
             name_error:   false,
-            unit_error:   false,
         }
     }
 
@@ -234,11 +242,12 @@ impl ProductForm {
         let part      = self.part_number.read(cx).text().trim().to_string();
         let part_opt  = if part.is_empty() { None } else { Some(part) };
         let duty: f64 = self.duty_percent.read(cx).text().trim().parse::<f64>().unwrap_or(0.0).max(0.0);
-        // -1 is the sentinel "(None)" item; treat as no supplier
+        let eol       = self.end_of_life;
+        let repl      = self.replacement.read(cx).text().trim().to_string();
+        let repl_opt  = if repl.is_empty() { None } else { Some(repl) };
         let sup_id    = self.supplier_dropdown.read(cx).selected_id.filter(|&id| id > 0);
 
         self.name_error = name.trim().is_empty();
-        self.unit_error = unit.trim().is_empty();
 
         match &self.mode {
             FormMode::Create => {
@@ -264,6 +273,7 @@ impl ProductForm {
                                 &sku, &name, cat_opt.as_deref(), &unit, min,
                                 desc_opt.as_deref(), None, sup_id,
                                 model_opt.as_deref(), part_opt.as_deref(), duty,
+                                eol, repl_opt.as_deref(),
                             ).await;
                             match insert_result {
                                 Err(e) => {
@@ -312,6 +322,7 @@ impl ProductForm {
                                 pid, &name, cat_opt.as_deref(), &unit, min,
                                 desc_opt.as_deref(), sup_id,
                                 model_opt.as_deref(), part_opt.as_deref(), duty,
+                                eol, repl_opt.as_deref(),
                             ).await;
                             if let Err(e) = update_result {
                                 tracing::error!("update_product failed: {e:?}");
@@ -354,6 +365,8 @@ impl Render for ProductForm {
         let model_f     = self.model_number.read(cx).focus_handle.is_focused(window);
         let part_f      = self.part_number.read(cx).focus_handle.is_focused(window);
         let duty_f      = self.duty_percent.read(cx).focus_handle.is_focused(window);
+        let repl_f      = self.replacement.read(cx).focus_handle.is_focused(window);
+        let end_of_life = self.end_of_life;
         let qty_f       = self.initial_qty.read(cx).focus_handle.is_focused(window);
         let stock_f     = self.edit_stock.read(cx).focus_handle.is_focused(window);
         let min_f       = self.min_stock.read(cx).focus_handle.is_focused(window);
@@ -392,6 +405,7 @@ impl Render for ProductForm {
                     this.model_number.read(cx).focus_handle.clone(),
                     this.part_number.read(cx).focus_handle.clone(),
                     this.duty_percent.read(cx).focus_handle.clone(),
+                    this.replacement.read(cx).focus_handle.clone(),
                     this.min_stock.read(cx).focus_handle.clone(),
                     this.description.read(cx).focus_handle.clone(),
                     this.supplier_dropdown.read(cx).trigger_focus.clone(),
@@ -400,10 +414,8 @@ impl Render for ProductForm {
                 ];
                 if !is_edit {
                     handles.insert(0, this.sku.read(cx).focus_handle.clone());
-                    // initial_qty sits after duty_percent (index 6 after sku insert → insert at 7)
                     handles.insert(7, this.initial_qty.read(cx).focus_handle.clone());
                 } else {
-                    // edit_stock is the first focusable field (SKU is read-only in edit)
                     handles.insert(0, this.edit_stock.read(cx).focus_handle.clone());
                 }
                 let current = handles.iter().position(|h| h.is_focused(window));
@@ -418,6 +430,7 @@ impl Render for ProductForm {
                     this.model_number.read(cx).focus_handle.clone(),
                     this.part_number.read(cx).focus_handle.clone(),
                     this.duty_percent.read(cx).focus_handle.clone(),
+                    this.replacement.read(cx).focus_handle.clone(),
                     this.min_stock.read(cx).focus_handle.clone(),
                     this.description.read(cx).focus_handle.clone(),
                     this.supplier_dropdown.read(cx).trigger_focus.clone(),
@@ -501,8 +514,8 @@ impl Render for ProductForm {
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
                                 div().flex().flex_row().items_center().py(px(10.))
-                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Unit"))
-                                    .child(div().flex_1().child(text_field("", self.unit.clone(), unit_f, self.unit_error, cx)))
+                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child("Unit"))
+                                    .child(div().flex_1().child(text_field("", self.unit.clone(), unit_f, false, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .child(
@@ -521,6 +534,34 @@ impl Render for ProductForm {
                                 div().flex().flex_row().items_center().py(px(10.))
                                     .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Duty %"))
                                     .child(div().flex_1().child(text_field("", self.duty_percent.clone(), duty_f, false, cx)))
+                            )
+                            .child(div().h(px(1.)).bg(rgb(c.surface_default)))
+                            .child(
+                                div().flex().flex_row().items_center().py(px(10.))
+                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child("End of Life"))
+                                    .child(
+                                        div()
+                                            .id("eol-checkbox")
+                                            .w(px(18.)).h(px(18.))
+                                            .rounded(px(3.))
+                                            .border_1().border_color(rgb(c.surface_active))
+                                            .bg(rgb(if end_of_life { c.surface_active } else { c.canvas_bg }))
+                                            .cursor_pointer()
+                                            .flex().items_center().justify_center()
+                                            .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
+                                                this.end_of_life = !this.end_of_life;
+                                                cx.notify();
+                                            }))
+                                            .when(end_of_life, |d| d.child(
+                                                div().text_size(rems(0.769)).text_color(rgb(c.text_default)).child("✓")
+                                            ))
+                                    )
+                            )
+                            .child(div().h(px(1.)).bg(rgb(c.surface_default)))
+                            .child(
+                                div().flex().flex_row().items_center().py(px(10.))
+                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child("Replacement"))
+                                    .child(div().flex_1().child(text_field("", self.replacement.clone(), repl_f, false, cx)))
                             )
                             .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                             .when(!is_edit, |d| d
@@ -621,9 +662,9 @@ impl Render for ProductForm {
 #[cfg(test)]
 mod tests {
     use super::validate_product;
-    #[test] fn rejects_empty_sku()  { assert!(validate_product("", "Camera", "pcs", "5").is_err()); }
-    #[test] fn rejects_empty_name() { assert!(validate_product("CAM-001", "", "pcs", "5").is_err()); }
-    #[test] fn rejects_empty_unit() { assert!(validate_product("CAM-001", "Camera", "", "5").is_err()); }
-    #[test] fn accepts_zero_min()   { assert!(validate_product("CAM-001", "Camera", "pcs", "0").is_ok()); }
-    #[test] fn accepts_valid()      { assert!(validate_product("CAM-001", "IP Camera", "pcs", "5.0").is_ok()); }
+    #[test] fn rejects_empty_sku()    { assert!(validate_product("", "Camera", "pcs", "5").is_err()); }
+    #[test] fn rejects_empty_name()  { assert!(validate_product("CAM-001", "", "pcs", "5").is_err()); }
+    #[test] fn accepts_empty_unit()  { assert!(validate_product("CAM-001", "Camera", "", "5").is_ok()); }
+    #[test] fn accepts_zero_min()    { assert!(validate_product("CAM-001", "Camera", "pcs", "0").is_ok()); }
+    #[test] fn accepts_valid()       { assert!(validate_product("CAM-001", "IP Camera", "pcs", "5.0").is_ok()); }
 }

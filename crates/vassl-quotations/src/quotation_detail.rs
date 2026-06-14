@@ -2,6 +2,8 @@ use gpui::{Context, Entity, IntoElement, Render, Window, div, prelude::*, px, re
 use vassl_core::{QuotationExtras, QuotationStatus};
 use vassl_ui::{ThemeColors, ThemeHandle};
 
+const LEGACY_DEFAULT_RATE: f64 = 156.0;
+
 fn fmt_jmd(v: f64) -> String {
     let cents = (v * 100.0).round() as i64;
     let whole = cents / 100;
@@ -66,6 +68,19 @@ impl Render for QuotationDetail {
                 .map(|q| q.status.clone());
             let extras = store.selected_extras.clone().unwrap_or_default();
             (sid, status, store.line_items.clone(), extras)
+        };
+
+        let settings_rate: f64 = {
+            let db = vassl_db::AppDatabase::global(&**cx);
+            vassl_db::shared::get_setting(db, "pricebook.usd_to_jmd_rate")
+                .ok().flatten()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(157.50)
+        };
+        let effective_rate = if extras.exchange_rate_jmd > 0.0 && extras.exchange_rate_jmd != LEGACY_DEFAULT_RATE {
+            extras.exchange_rate_jmd
+        } else {
+            settings_rate
         };
 
         if selected_id.is_none() {
@@ -169,18 +184,19 @@ impl Render for QuotationDetail {
         }
 
         // ── Footer: full financial breakdown ────────────────────────────────
-        root.child(totals_footer(&extras, &items, &c))
+        root.child(totals_footer(&extras, effective_rate, &items, &c))
             .into_any_element()
     }
 }
 
 fn totals_footer(
-    extras: &QuotationExtras,
-    items:  &[vassl_core::QuotationItem],
-    c:      &ThemeColors,
+    extras:         &QuotationExtras,
+    effective_rate: f64,
+    items:          &[vassl_core::QuotationItem],
+    c:              &ThemeColors,
 ) -> impl gpui::IntoElement {
     let subtotal_usd: f64 = items.iter().map(|i| i.total_usd).sum();
-    let rate              = extras.exchange_rate_jmd;
+    let rate              = effective_rate;
     let disc_pct          = extras.discount_percent;
     let gct_pct           = extras.gct_percent;
 
@@ -262,8 +278,10 @@ mod tests {
             description: "Test".into(), quantity: 2.0, unit: None,
             unit_price_usd: 100.0, discount_percent: 0.0, total_usd: 200.0,
         }];
-        // sub=200, disc=20, net=180, gct=27, grand_usd=207, grand_jmd=32292
-        let subtotal: f64  = items.iter().map(|i| i.total_usd).sum();
+        // sub=200, disc=20, net=180, gct=27, grand_usd=207
+        // effective_rate uses settings fallback; test arithmetic with a known rate
+        let rate            = 156.0_f64;
+        let subtotal: f64   = items.iter().map(|i| i.total_usd).sum();
         let discount        = (subtotal * extras.discount_percent / 100.0 * 100.0).round() / 100.0;
         let net             = subtotal - discount;
         let gct             = (net * extras.gct_percent / 100.0 * 100.0).round() / 100.0;
@@ -273,6 +291,6 @@ mod tests {
         assert!((net - 180.0).abs() < 1e-9);
         assert!((gct - 27.0).abs() < 1e-9);
         assert!((grand_usd - 207.0).abs() < 1e-9);
-        assert!((grand_usd * extras.exchange_rate_jmd - 32292.0).abs() < 1e-9);
+        assert!((grand_usd * rate - 32292.0).abs() < 1e-9);
     }
 }

@@ -173,9 +173,12 @@ fn product_row(p: &ProductWithStock, ix: usize, selected: bool, store: Entity<In
         .cursor_pointer()
         .on_mouse_down(
             MouseButton::Left,
-            move |_event: &MouseDownEvent, _window: &mut Window, cx: &mut App| {
+            move |event: &MouseDownEvent, _window: &mut Window, cx: &mut App| {
                 scroll_handle.scroll_to_item(ix, gpui::ScrollStrategy::Nearest);
                 store.update(cx, |s, cx| s.select_product(product_id, cx));
+                if event.click_count == 2 {
+                    store.update(cx, |s, cx| { s.detail_requested = true; cx.notify(); });
+                }
             },
         )
         .on_mouse_down(

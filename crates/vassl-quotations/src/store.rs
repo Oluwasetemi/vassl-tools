@@ -26,9 +26,12 @@ pub struct QuotationStore {
     pub line_items:               Vec<QuotationItem>,
     pub selected_extras:          Option<QuotationExtras>,
     pub projects:                 Vec<Project>,
-    pub loading:                  bool,
-    pub context_menu_quotation:   Option<QuotationContextMenu>,
-    pub context_menu_project:     Option<ProjectContextMenu>,
+    pub selected_project_id:       Option<i64>,
+    pub project_detail_generation: u32,
+    pub loading:                   bool,
+    pub context_menu_quotation:    Option<QuotationContextMenu>,
+    pub context_menu_project:      Option<ProjectContextMenu>,
+    pub detail_requested:          bool,
 }
 
 pub struct QuotationStoreHandle(pub Entity<QuotationStore>);
@@ -54,14 +57,17 @@ impl EventEmitter<QuotationEvent> for QuotationStore {}
 impl QuotationStore {
     pub fn new(_cx: &mut Context<Self>) -> Self {
         Self {
-            quotations:             Vec::new(),
-            selected_id:            None,
-            line_items:             Vec::new(),
-            selected_extras:        None,
-            projects:               Vec::new(),
-            loading:                false,
-            context_menu_quotation: None,
-            context_menu_project:   None,
+            quotations:                Vec::new(),
+            selected_id:               None,
+            line_items:                Vec::new(),
+            selected_extras:           None,
+            projects:                  Vec::new(),
+            selected_project_id:       None,
+            project_detail_generation: 0,
+            loading:                   false,
+            context_menu_quotation:    None,
+            context_menu_project:      None,
+            detail_requested:          false,
         }
     }
 
@@ -139,6 +145,30 @@ impl QuotationStore {
         Some(next)
     }
 
+    pub fn select_project(&mut self, id: i64, cx: &mut Context<Self>) {
+        self.selected_project_id       = Some(id);
+        self.project_detail_generation += 1;
+        cx.notify();
+    }
+
+    pub fn select_project_next(&mut self, cx: &mut Context<Self>) -> Option<usize> {
+        if self.projects.is_empty() { return None; }
+        let cur = self.selected_project_id
+            .and_then(|id| self.projects.iter().position(|p| p.id == id));
+        let next = match cur { None => 0, Some(i) => (i + 1).min(self.projects.len() - 1) };
+        self.select_project(self.projects[next].id, cx);
+        Some(next)
+    }
+
+    pub fn select_project_prev(&mut self, cx: &mut Context<Self>) -> Option<usize> {
+        if self.projects.is_empty() { return None; }
+        let cur = self.selected_project_id
+            .and_then(|id| self.projects.iter().position(|p| p.id == id));
+        let next = match cur { None => 0, Some(0) => 0, Some(i) => i - 1 };
+        self.select_project(self.projects[next].id, cx);
+        Some(next)
+    }
+
     pub fn load_line_items(&mut self, quotation_id: i64, cx: &mut Context<Self>) {
         let db = QuotationDb::global(&**cx);
         cx.spawn(async move |this, cx| {
@@ -152,6 +182,37 @@ impl QuotationStore {
                 }
                 cx.notify();
             });
+        }).detach();
+    }
+
+    pub fn update_quotation(
+        &mut self,
+        id:                i64,
+        project_id:        i64,
+        notes:             Option<String>,
+        exchange_rate_jmd: f64,
+        discount_percent:  f64,
+        gct_percent:       f64,
+        validity_days:     i64,
+        cx:                &mut Context<Self>,
+    ) {
+        let db = QuotationDb::global(&**cx);
+        cx.spawn(async move |this, cx| {
+            let result = db.update_quotation_financials(
+                id, project_id, notes, exchange_rate_jmd, discount_percent, gct_percent, validity_days,
+            ).await;
+            let _ = this.update(cx, |store, cx| {
+                match result {
+                    Ok(_)  => {
+                        store.load_quotations(cx);
+                        if store.selected_id == Some(id) {
+                            store.select_quotation(id, cx);
+                        }
+                    }
+                    Err(e) => tracing::error!("update_quotation failed: {e:?}"),
+                }
+            });
+            Ok::<(), anyhow::Error>(())
         }).detach();
     }
 
@@ -200,6 +261,23 @@ impl QuotationStore {
                         cx.notify();
                     }
                     Err(e) => tracing::error!("delete_quotation failed: {e:?}"),
+                }
+            });
+        }).detach();
+    }
+
+    pub fn update_project(&mut self, project: vassl_core::Project, cx: &mut Context<Self>) {
+        let db = QuotationDb::global(&**cx);
+        let p  = project.clone();
+        cx.spawn(async move |this, cx| {
+            let result = db.update_project(
+                p.id, p.name, p.client_name, p.client_address, p.client_attn, p.client_tel,
+                p.date_started, p.date_completed, p.technicians, p.client_contact, p.vassl_contact, p.signedoff_date,
+            ).await;
+            let _ = this.update(cx, |store, cx| {
+                match result {
+                    Ok(_)  => { store.load_quotations(cx); }
+                    Err(e) => tracing::error!("update_project failed: {e:?}"),
                 }
             });
         }).detach();
@@ -274,14 +352,17 @@ mod tests {
     #[test]
     fn quotation_store_starts_empty() {
         let store = QuotationStore {
-            quotations:             vec![],
-            selected_id:            None,
-            line_items:             vec![],
-            selected_extras:        None,
-            projects:               vec![],
-            loading:                false,
-            context_menu_quotation: None,
-            context_menu_project:   None,
+            quotations:                vec![],
+            selected_id:               None,
+            line_items:                vec![],
+            selected_extras:           None,
+            projects:                  vec![],
+            selected_project_id:       None,
+            project_detail_generation: 0,
+            loading:                   false,
+            context_menu_quotation:    None,
+            context_menu_project:      None,
+            detail_requested:          false,
         };
         assert!(store.quotations.is_empty());
         assert!(store.selected_id.is_none());

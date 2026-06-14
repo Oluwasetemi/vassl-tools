@@ -1,7 +1,7 @@
 use gpui::{Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
-           MouseButton, MouseDownEvent, Render, Window, actions, div, prelude::*, px, rems, rgb, rgba, SharedString};
+           Render, Subscription, Window, actions, div, prelude::*, px, rems, rgb, rgba, SharedString};
 use vassl_pricebook::store::ProductPrice;
-use vassl_ui::{TextInput, ThemeHandle, text_field};
+use vassl_ui::{Dropdown, DropdownItem, DropdownEvent, TextInput, ThemeHandle, text_field};
 
 use crate::db::QuotationDb;
 use crate::store::QuotationStore;
@@ -16,8 +16,9 @@ impl EventEmitter<LineItemFormEvent> for LineItemForm {}
 pub struct LineItemForm {
     store:            Entity<QuotationStore>,
     quotation_id:     i64,
-    products:         Vec<ProductPrice>,
     selected_product: Option<i64>,
+    product_dropdown: Entity<Dropdown>,
+    _dropdown_sub:    Subscription,
     pub description:  Entity<TextInput>,
     pub quantity:     Entity<TextInput>,
     unit:             Entity<TextInput>,
@@ -31,6 +32,13 @@ pub struct LineItemForm {
     price_error:      bool,
 }
 
+fn products_to_items(products: &[ProductPrice]) -> Vec<DropdownItem> {
+    products.iter().filter(|p| p.latest.is_some()).map(|p| DropdownItem {
+        id:       p.product_id,
+        label:    p.name.clone(),
+        sublabel: Some(p.sku.clone()),
+    }).collect()
+}
 
 pub fn validate_line_item(description: &str, quantity: &str, unit_price: &str, discount_pct: &str) -> Result<(String, f64, f64, f64, f64), String> {
     let desc = description.trim();
@@ -63,15 +71,45 @@ impl LineItemForm {
         products:     Vec<ProductPrice>,
         cx:           &mut Context<Self>,
     ) -> Self {
+        let product_dropdown = cx.new(|cx| {
+            Dropdown::new("Select a product…", "No products with pricing found.", cx)
+        });
+        {
+            let items = products_to_items(&products);
+            product_dropdown.update(cx, |d, cx| d.set_items(items, false, cx));
+        }
+
+        let description  = cx.new(|cx| TextInput::with_placeholder("e.g. Paint supplies", cx));
+        let unit_price   = cx.new(|cx| TextInput::with_placeholder("e.g. 120.00", cx));
+
+        let desc_clone  = description.clone();
+        let price_clone = unit_price.clone();
+        let prods_clone = products.clone();
+
+        let _dropdown_sub = cx.subscribe(&product_dropdown, move |this, _, ev: &DropdownEvent, cx| {
+            let DropdownEvent::Selected(pid) = ev;
+            this.selected_product = Some(*pid);
+            // Auto-fill description and unit price from the selected product
+            if let Some(p) = prods_clone.iter().find(|p| p.product_id == *pid) {
+                let name  = p.name.clone();
+                let price = p.latest.as_ref().map(|e| e.selling_price_usd).unwrap_or(0.0);
+                desc_clone.update(cx, |d, cx| d.set_text(name, cx));
+                price_clone.update(cx, |u, cx| u.set_text(format!("{price:.2}"), cx));
+            }
+            this.error = None;
+            cx.notify();
+        });
+
         Self {
             store,
             quotation_id,
-            products,
             selected_product: None,
-            description:      cx.new(|cx| TextInput::with_placeholder("e.g. Paint supplies", cx)),
+            product_dropdown,
+            _dropdown_sub,
+            description,
             quantity:         cx.new(|cx| TextInput::with_placeholder("e.g. 5", cx)),
             unit:             cx.new(|cx| TextInput::with_placeholder("ea / lot / set…", cx)),
-            unit_price:       cx.new(|cx| TextInput::with_placeholder("e.g. 120.00", cx)),
+            unit_price,
             discount_percent: cx.new(|cx| TextInput::with_text("0.0", cx)),
             cancel_focus:     cx.focus_handle(),
             save_focus:       cx.focus_handle(),
@@ -207,34 +245,14 @@ impl Render for LineItemForm {
                         div().flex().flex_col().px(px(20.)).pt(px(8.))
                             .child(
                                 div().flex().flex_row().py(px(10.))
-                                    .child(div().w(px(160.)).pt(px(2.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Product (optional)"))
                                     .child(
-                                        div().id("item-product-picker").flex_1().h(px(110.)).overflow_y_scroll()
-                                            .bg(rgb(c.surface_default)).rounded(px(4.))
-                                            .children(self.products.iter().filter_map(|p| {
-                                                let entry = p.latest.as_ref()?;
-                                                let pid      = p.product_id;
-                                                let selected = self.selected_product == Some(pid);
-                                                let bg       = if selected { c.surface_active } else { c.surface_default };
-                                                let name     = p.name.clone();
-                                                let price    = entry.selling_price_usd;
-                                                Some(div()
-                                                    .id(format!("pick-item-product-{pid}"))
-                                                    .flex().flex_row().items_center()
-                                                    .px(px(10.)).py(px(5.))
-                                                    .bg(rgb(bg)).cursor_pointer()
-                                                    .on_mouse_down(MouseButton::Left, cx.listener(move |this, _: &MouseDownEvent, _, cx| {
-                                                        this.selected_product = Some(pid);
-                                                        let name2 = name.clone();
-                                                        this.description.update(cx, |d, cx| d.set_text(name2, cx));
-                                                        this.unit_price.update(cx, |u, cx| u.set_text(format!("{price:.2}"), cx));
-                                                        this.error = None;
-                                                        cx.notify();
-                                                    }))
-                                                    .child(div().flex_1().text_size(rems(0.923)).text_color(rgb(c.text_default)).child(p.name.clone()))
-                                                    .child(div().text_size(rems(0.846)).text_color(rgb(c.status_green)).child(format!("${price:.2}"))))
-                                            })
-                                            )
+                                        div().w(px(160.)).pt(px(2.))
+                                            .text_size(rems(0.923)).text_color(rgb(c.text_default))
+                                            .child("Product (optional)")
+                                    )
+                                    .child(
+                                        div().flex_1()
+                                            .child(self.product_dropdown.clone())
                                     )
                             )
                     )

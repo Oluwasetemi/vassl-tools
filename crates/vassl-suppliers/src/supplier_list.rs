@@ -170,8 +170,11 @@ fn supplier_row(s: &Supplier, selected: bool, store: Entity<SupplierStore>, c: &
         .cursor_pointer()
         .on_mouse_down(
             MouseButton::Left,
-            move |_: &MouseDownEvent, _: &mut Window, cx: &mut App| {
+            move |event: &MouseDownEvent, _: &mut Window, cx: &mut App| {
                 store.update(cx, |s, cx| s.select_supplier(id, cx));
+                if event.click_count == 2 {
+                    store.update(cx, |s, cx| { s.detail_requested = true; cx.notify(); });
+                }
             },
         )
         .on_mouse_down(
@@ -221,6 +224,7 @@ mod tests {
             contact_person: None,
             email: email.map(String::from),
             phone: phone.map(String::from),
+            address: None,
             notes: None,
             created_at: "2026-01-01T00:00:00Z".to_string(),
         }

@@ -69,7 +69,7 @@ Projects must be created before quotations. A project holds the client details t
      <tbody>
        <tr><td>Reference</td><td>—</td><td>Auto-generated as <code>VASSL-YYYY-NNNN</code> — read-only</td></tr>
        <tr><td>Project</td><td>Yes</td><td>Select from the project dropdown</td></tr>
-       <tr><td>Exchange Rate</td><td>No</td><td>JMD/USD rate (default 156.00)</td></tr>
+       <tr><td>Exchange Rate</td><td>No</td><td>JMD/USD rate — defaults to the rate set in Settings → Price Book</td></tr>
        <tr><td>Discount %</td><td>No</td><td>Discount applied to the subtotal (default 0)</td></tr>
        <tr><td>GCT %</td><td>No</td><td>Jamaica's General Consumption Tax (default 15 %)</td></tr>
        <tr><td>Validity</td><td>No</td><td>Days until the quote expires (default 30)</td></tr>
@@ -82,6 +82,10 @@ Projects must be created before quotations. A project holds the client details t
 
 <Aside type="note">
 Reference numbers are assigned automatically in the format `VASSL-YYYY-NNNN` (e.g. `VASSL-2026-0001`). They cannot be changed after creation.
+</Aside>
+
+<Aside type="tip">
+The exchange rate field pre-fills with the current rate from **Settings → Price Book**. You only need to override it if this particular quotation uses a different rate. Keep Settings up to date and most quotations will not need manual rate entry.
 </Aside>
 
 ## Adding line items
@@ -111,6 +115,33 @@ Reference numbers are assigned automatically in the format `VASSL-YYYY-NNNN` (e.
 Line item prices are pulled from the **most recent Price Book entry** at the time you add the item. If prices change later, the quotation retains the price recorded at build time.
 </Aside>
 
+## Editing a quotation
+
+You can edit the financial details of a quotation while it is in **Draft** status. Once a quotation has been sent, approved, or rejected, it can no longer be edited.
+
+<Steps>
+1. Select a **Draft** quotation in the list.
+2. Click **Edit Quotation** in the detail sidebar.
+3. The edit form opens pre-filled with the quotation's current values. Adjust the project, exchange rate, discount, GCT, validity, or notes as needed.
+4. Click **Save Changes**.
+</Steps>
+
+<Aside type="note">
+Editing a quotation does not change its line items. To change what is on the quotation, add, edit, or remove individual line items from the **Items** tab while the quotation is still in Draft status.
+</Aside>
+
+## Totals and JMD conversion
+
+The quotation detail view shows a summary footer with:
+
+- **Subtotal** — sum of all line items after per-line discounts
+- **Discount** — the overall discount percentage applied to the subtotal
+- **GCT** — General Consumption Tax applied after the discount
+- **Total (USD)** — the final amount in US dollars
+- **Total (JMD)** — the USD total converted at the quotation's exchange rate
+
+The exchange rate used for the JMD total is the rate that was recorded on the quotation when it was created or last edited. If no rate was stored, VASSL falls back to the current rate in **Settings → Price Book**.
+
 ## Approving a quotation
 
 When a client accepts a quotation:
@@ -130,7 +161,8 @@ Approving a quotation is the primary mechanism for recording outgoing stock. You
 ```
 New Project → New Quotation (Draft)
                     │
-                    ├─ Add Line Items
+                    ├─ Add / Edit Line Items
+                    ├─ Edit Quotation (Draft only)
                     ├─ Mark as Sent
                     │
                     ├─ Approved ──► Stock entries created in Inventory

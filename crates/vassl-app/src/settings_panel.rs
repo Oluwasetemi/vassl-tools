@@ -1,8 +1,15 @@
-use gpui::{Context, FocusHandle, Focusable, IntoElement, MouseButton, MouseDownEvent,
-           Render, SharedString, Window, div, prelude::*, px, rems, rgb};
+use gpui::{Context, FocusHandle, Focusable, IntoElement, KeyDownEvent, MouseButton, MouseDownEvent,
+           Render, SharedString, Window, actions, div, prelude::*, px, rems, rgb};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use vassl_ui::{TextInput, ThemeHandle};
+use vassl_ui::{AppSettings, TextInput, ThemeHandle};
+use crate::users_db::{AuthUser, UsersDb};
+
+// Key-nav actions for the Security (password-change) sub-form.
+actions!(settings_security, [SecurityTabField, SecurityBackTabField, SecurityEscapeForm]);
+// Key-nav actions for the Admin add-user and reset-password sub-forms.
+actions!(settings_admin, [AdminAddTabField, AdminAddBackTabField, AdminAddEscapeForm,
+                           AdminResetTabField, AdminResetBackTabField, AdminResetEscapeForm]);
 
 /// Events emitted by SettingsPanel.
 #[derive(Clone, Debug)]
@@ -21,6 +28,8 @@ pub enum SettingsCategory {
     Quotations,
     Database,
     Keyboard,
+    Security,
+    Admin,
     License,
 }
 
@@ -37,6 +46,7 @@ pub enum BackupStatus {
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum SettingSelect { Currency, FontPicker }
 
+
 pub struct SettingsPanel {
     pub active_category: SettingsCategory,
     font_names:          Vec<String>,
@@ -45,8 +55,31 @@ pub struct SettingsPanel {
     // General
     pub user_name:        gpui::Entity<TextInput>,
     pub company_name:     gpui::Entity<TextInput>,
-    pub allow_delete:     bool,
-    pub allow_price_edit: bool,
+
+    // Security (password change)
+    pw_current:           gpui::Entity<TextInput>,
+    pw_new:               gpui::Entity<TextInput>,
+    pw_confirm:           gpui::Entity<TextInput>,
+    pw_message:           Option<String>,
+    pw_is_error:          bool,
+
+    // Admin — user management
+    admin_users:          Vec<AuthUser>,
+    admin_add_form_open:  bool,
+    add_username:         gpui::Entity<TextInput>,
+    add_password:         gpui::Entity<TextInput>,
+    add_can_inventory:    bool,
+    add_can_pricebook:    bool,
+    add_can_quotations:   bool,
+    add_allow_delete:     bool,
+    add_allow_price_edit: bool,
+    add_error:            Option<String>,
+    add_user_save_focus:  FocusHandle,
+    reset_pw_id:          Option<i64>,
+    reset_pw_input:       gpui::Entity<TextInput>,
+    reset_pw_save_focus:  FocusHandle,
+    reset_pw_cancel_focus: FocusHandle,
+    security_save_focus:  FocusHandle,
 
     // Appearance
     pub theme:       String,   // "dark" | "light" — saved by render_appearance toggle
@@ -105,8 +138,7 @@ impl SettingsPanel {
         let prefix_val        = vassl_db::shared::get_setting(db, "quotations.prefix").ok().flatten().unwrap_or_else(|| "VASSL".into());
         let tax_val           = vassl_db::shared::get_setting(db, "quotations.tax_rate").ok().flatten().unwrap_or_else(|| "0".into());
         let notes_val         = vassl_db::shared::get_setting(db, "quotations.notes_template").ok().flatten().unwrap_or_default();
-        let allow_delete_val      = vassl_db::shared::get_setting(db, "general.allow_delete").ok().flatten().unwrap_or_else(|| "false".into());
-        let allow_price_edit_val  = vassl_db::shared::get_setting(db, "general.allow_price_edit").ok().flatten().unwrap_or_else(|| "false".into());
+        // (allow_delete / allow_price_edit are now per-user, not global settings)
 
         // Load persisted keymap overrides
         let keymap_overrides: HashMap<String, String> = crate::keybindings::default_app_bindings()
@@ -144,14 +176,49 @@ impl SettingsPanel {
         let tax_rate       = make_input("0",                 tax_val,          cx);
         let notes_template = make_input("",                  notes_val,        cx);
 
+        let make_pw_input = |ph: &'static str, cx: &mut Context<Self>| {
+            cx.new(move |cx| {
+                let mut t = TextInput::with_placeholder(ph, cx);
+                t.is_password = true;
+                t
+            })
+        };
+
         Self {
             active_category: SettingsCategory::General,
             font_names,
             open_select:     None,
             user_name,
             company_name,
-            allow_delete:     allow_delete_val == "true",
-            allow_price_edit: allow_price_edit_val == "true",
+            pw_current:          make_pw_input("Current password",  cx),
+            pw_new:              make_pw_input("New password",       cx),
+            pw_confirm:          make_pw_input("Confirm new password", cx),
+            pw_message:          None,
+            pw_is_error:         false,
+            admin_users:         Vec::new(),
+            admin_add_form_open: false,
+            add_username:        cx.new(|cx| TextInput::with_placeholder("Username", cx)),
+            add_password:        cx.new(|cx| {
+                let mut t = TextInput::with_placeholder("Password", cx);
+                t.is_password = true;
+                t
+            }),
+            add_can_inventory:    false,
+            add_can_pricebook:    false,
+            add_can_quotations:   false,
+            add_allow_delete:     false,
+            add_allow_price_edit: false,
+            add_error:            None,
+            add_user_save_focus:  cx.focus_handle(),
+            reset_pw_id:          None,
+            reset_pw_input:       cx.new(|cx| {
+                let mut t = TextInput::with_placeholder("New password", cx);
+                t.is_password = true;
+                t
+            }),
+            reset_pw_save_focus:   cx.focus_handle(),
+            reset_pw_cancel_focus: cx.focus_handle(),
+            security_save_focus:   cx.focus_handle(),
             theme:           theme_val,
             font_family:     font_family_val,
             font_size,
@@ -196,14 +263,59 @@ impl SettingsPanel {
         }).detach();
     }
 
+    /// Save the user name and keep the audit log up to date.
+    ///
+    /// All logic runs inside a single serialised DB write closure so there are no
+    /// race conditions between reading the old name and writing the new one.  If a
+    /// NAME_CHANGE audit entry was already created in the last hour (i.e. the user
+    /// is still in the same editing session) its `new_value` is patched in-place;
+    /// otherwise a fresh entry is inserted.  This means the log always shows one
+    /// clean "Alice → Bob" row per session, not one row per keystroke.
+    fn save_user_name_with_audit(&self, new_name: String, cx: &mut Context<Self>) {
+        let db = vassl_db::AppDatabase::global(&**cx).clone();
+        cx.spawn(async move |this, cx| {
+            if let Err(e) = db.write(move |conn| {
+                // Read the old name BEFORE writing the new one.
+                let old_name = vassl_db::shared::current_user(conn)
+                    .ok().flatten().unwrap_or_default();
+                vassl_db::shared::set_setting(conn, "general.user_name", &new_name)?;
+                vassl_db::shared::set_setting(conn, "current_user", &new_name)?;
+                if old_name == new_name { return Ok::<(), anyhow::Error>(()); }
+                // Check for a recent in-progress NAME_CHANGE entry (same session).
+                let recent_id = conn
+                    .select_row_bound::<&str, i64>(
+                        "SELECT id FROM audit_log \
+                         WHERE table_name = 'settings' AND action = 'NAME_CHANGE' \
+                         AND changed_at > datetime('now', '-1 hour') \
+                         ORDER BY id DESC LIMIT 1",
+                    )
+                    .ok()
+                    .and_then(|mut q| q("settings").ok())
+                    .flatten();
+                if let Some(id) = recent_id {
+                    vassl_db::shared::update_audit_new_value(conn, id, &new_name)?;
+                } else if !old_name.is_empty() {
+                    vassl_db::shared::log_audit(
+                        conn, "settings", 0, "NAME_CHANGE",
+                        &new_name, Some(&old_name), Some(&new_name),
+                    )?;
+                }
+                Ok(())
+            }).await {
+                tracing::error!("save_user_name_with_audit failed: {e:?}");
+                let _ = this.update(cx, |sp, cx| {
+                    sp.save_error = Some(format!("Failed to save user name: {e}"));
+                    cx.notify();
+                });
+            }
+            Ok::<(), anyhow::Error>(())
+        }).detach();
+    }
+
     pub fn wire_observers(&mut self, cx: &mut Context<Self>) {
         cx.observe(&self.user_name.clone(), |this, f, cx| {
             let v = f.read(cx).text().to_string();
-            this.save_setting("general.user_name", v.clone(), cx);
-            // Keep current_user in sync — it's the key the audit log reads from.
-            // Both writes go to the serial DB queue, so any subsequent DB action
-            // that reads current_user() will always see the updated value.
-            this.save_setting("current_user", v, cx);
+            this.save_user_name_with_audit(v, cx);
         }).detach();
         cx.observe(&self.company_name.clone(),  |this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("general.company_name",         v, cx); }).detach();
         cx.observe(&self.low_stock.clone(),     |this, f, cx| { let v = f.read(cx).text().to_string(); this.save_setting("inventory.low_stock_threshold", v, cx); }).detach();
@@ -226,8 +338,535 @@ impl SettingsPanel {
             SettingsCategory::Quotations => "Quotations",
             SettingsCategory::Database   => "Database",
             SettingsCategory::Keyboard   => "Keyboard",
+            SettingsCategory::Security   => "Security",
+            SettingsCategory::Admin      => "Admin",
             SettingsCategory::License    => "License",
         }
+    }
+
+    fn load_admin_users(&mut self, cx: &mut Context<Self>) {
+        let db = UsersDb::global(&**cx);
+        cx.spawn(async move |this, cx| {
+            let result = cx.background_executor()
+                .spawn(async move { db.list_users() })
+                .await;
+            let _ = this.update(cx, |sp, cx| {
+                if let Ok(users) = result { sp.admin_users = users; }
+                cx.notify();
+            });
+            Ok::<(), anyhow::Error>(())
+        }).detach();
+    }
+
+    fn do_security_save(&mut self, cx: &mut Context<Self>) {
+        let uid     = cx.global::<AppSettings>().logged_in_user_id;
+        let old_pw  = self.pw_current.read(cx).text().to_string();
+        let new_pw  = self.pw_new.read(cx).text().to_string();
+        let confirm = self.pw_confirm.read(cx).text().to_string();
+
+        if new_pw.len() < 6 {
+            self.pw_message  = Some("New password must be at least 6 characters.".into());
+            self.pw_is_error = true;
+            cx.notify();
+            return;
+        }
+        if new_pw != confirm {
+            self.pw_message  = Some("Passwords do not match.".into());
+            self.pw_is_error = true;
+            cx.notify();
+            return;
+        }
+
+        let db = UsersDb::global(&**cx);
+        cx.spawn(async move |this, cx| {
+            let result = db.change_password(uid, old_pw, &new_pw).await;
+            let _ = this.update(cx, |sp, cx| {
+                match result {
+                    Ok(_) => {
+                        sp.pw_message  = Some("Password changed successfully.".into());
+                        sp.pw_is_error = false;
+                        sp.pw_current.update(cx, |t, cx| t.reset(cx));
+                        sp.pw_new.update(cx, |t, cx| t.reset(cx));
+                        sp.pw_confirm.update(cx, |t, cx| t.reset(cx));
+                    }
+                    Err(e) => {
+                        sp.pw_message  = Some(format!("{e}"));
+                        sp.pw_is_error = true;
+                    }
+                }
+                cx.notify();
+            });
+            Ok::<(), anyhow::Error>(())
+        }).detach();
+    }
+
+    fn render_security(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let c           = cx.global::<ThemeHandle>().0.clone();
+        let cur_focused  = self.pw_current.read(cx).focus_handle.is_focused(window);
+        let new_focused  = self.pw_new.read(cx).focus_handle.is_focused(window);
+        let cf_focused   = self.pw_confirm.read(cx).focus_handle.is_focused(window);
+        let save_focused = self.security_save_focus.is_focused(window);
+        let msg          = self.pw_message.clone();
+        let is_error     = self.pw_is_error;
+
+        let save_btn = div()
+            .id("settings-pw-save")
+            .track_focus(&self.security_save_focus)
+            .px(px(16.)).py(px(7.)).rounded(px(5.))
+            .bg(rgb(c.surface_active))
+            .text_size(rems(0.923)).text_color(rgb(c.text_default))
+            .cursor_pointer()
+            .when(save_focused, |d| d.border_2().border_color(rgb(c.text_muted)))
+            .on_mouse_down(MouseButton::Left, cx.listener(|this, _: &MouseDownEvent, _, cx| {
+                this.do_security_save(cx);
+            }))
+            .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
+                if event.keystroke.key == "enter" { this.do_security_save(cx); }
+            }))
+            .child("Change Password");
+
+        div().flex().flex_col()
+            .child(
+                div().flex().flex_col().py(px(14.)).px(px(32.)).gap(px(12.))
+                    .key_context("SettingsSecurityForm")
+                    .on_action(cx.listener(|this, _: &SecurityTabField, window, cx| {
+                        let handles = [
+                            this.pw_current.read(cx).focus_handle.clone(),
+                            this.pw_new.read(cx).focus_handle.clone(),
+                            this.pw_confirm.read(cx).focus_handle.clone(),
+                            this.security_save_focus.clone(),
+                        ];
+                        let cur = handles.iter().position(|h| h.is_focused(window));
+                        let next = handles[(cur.map(|i| i + 1).unwrap_or(0)) % handles.len()].clone();
+                        window.focus(&next, cx);
+                    }))
+                    .on_action(cx.listener(|this, _: &SecurityBackTabField, window, cx| {
+                        let handles = [
+                            this.pw_current.read(cx).focus_handle.clone(),
+                            this.pw_new.read(cx).focus_handle.clone(),
+                            this.pw_confirm.read(cx).focus_handle.clone(),
+                            this.security_save_focus.clone(),
+                        ];
+                        let cur = handles.iter().position(|h| h.is_focused(window));
+                        let prev = handles[(cur.unwrap_or(0) + handles.len() - 1) % handles.len()].clone();
+                        window.focus(&prev, cx);
+                    }))
+                    .on_action(cx.listener(|this, _: &SecurityEscapeForm, window, cx| {
+                        let h = this.pw_current.read(cx).focus_handle.clone();
+                        window.focus(&h, cx);
+                    }))
+                    .child(vassl_ui::text_field("Current Password", self.pw_current.clone(), cur_focused,  false, cx))
+                    .child(vassl_ui::text_field("New Password",     self.pw_new.clone(),     new_focused,  false, cx))
+                    .child(vassl_ui::text_field("Confirm Password", self.pw_confirm.clone(), cf_focused,   false, cx))
+                    .when_some(msg.clone(), |d, m| {
+                        let col = if is_error { c.status_red } else { c.status_green };
+                        d.child(div().text_size(rems(0.846)).text_color(rgb(col)).child(SharedString::from(m)))
+                    })
+                    .child(
+                        div().flex().justify_end()
+                            .child(save_btn)
+                    )
+            )
+            .child(div().h(px(1.)).mx(px(32.)).bg(rgb(c.surface_default)))
+    }
+
+    fn do_add_user_submit(&mut self, cx: &mut Context<Self>) {
+        let username = self.add_username.read(cx).text().trim().to_string();
+        let password = self.add_password.read(cx).text().to_string();
+        if username.len() < 3 {
+            self.add_error = Some("Username must be at least 3 characters.".into());
+            cx.notify();
+            return;
+        }
+        if password.len() < 6 {
+            self.add_error = Some("Password must be at least 6 characters.".into());
+            cx.notify();
+            return;
+        }
+        let ci = self.add_can_inventory;
+        let cp = self.add_can_pricebook;
+        let cq = self.add_can_quotations;
+        let ad = self.add_allow_delete;
+        let ap = self.add_allow_price_edit;
+        let db = UsersDb::global(&**cx);
+        cx.spawn(async move |this, cx| {
+            let result = db.insert_user(username, &password, ci, cp, cq, ad, ap).await;
+            let _ = this.update(cx, |sp, cx| {
+                match result {
+                    Err(e) => { sp.add_error = Some(format!("Failed: {e}")); cx.notify(); }
+                    Ok(_) => {
+                        sp.admin_add_form_open = false;
+                        sp.add_username.update(cx, |t, cx| t.reset(cx));
+                        sp.add_password.update(cx, |t, cx| t.reset(cx));
+                        sp.add_can_inventory = false; sp.add_can_pricebook = false;
+                        sp.add_can_quotations = false; sp.add_allow_delete = false;
+                        sp.add_allow_price_edit = false; sp.add_error = None;
+                        sp.load_admin_users(cx);
+                    }
+                }
+            });
+            Ok::<(), anyhow::Error>(())
+        }).detach();
+    }
+
+    fn render_admin(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let c          = cx.global::<ThemeHandle>().0.clone();
+        let users      = self.admin_users.clone();
+        let form_open  = self.admin_add_form_open;
+        let add_err    = self.add_error.clone();
+        let reset_id   = self.reset_pw_id;
+        let u_focused  = self.add_username.read(cx).focus_handle.is_focused(window);
+        let p_focused  = self.add_password.read(cx).focus_handle.is_focused(window);
+        let rp_focused = self.reset_pw_input.read(cx).focus_handle.is_focused(window);
+
+        let add_can_inv = self.add_can_inventory;
+        let add_can_pb  = self.add_can_pricebook;
+        let add_can_qt  = self.add_can_quotations;
+        let add_del     = self.add_allow_delete;
+        let add_pe      = self.add_allow_price_edit;
+
+        let mut content = div().flex().flex_col().px(px(32.)).pt(px(16.));
+
+        // ── User list ──────────────────────────────────────────────────────
+        let user_rows: Vec<gpui::AnyElement> = users.iter().map(|u| {
+            let uid      = u.id;
+            let is_active = u.is_active;
+            let uname    = u.username.clone();
+            let ci = u.can_inventory; let cp = u.can_pricebook; let cq = u.can_quotations;
+            let ad = u.allow_delete;  let ap = u.allow_price_edit;
+
+            let status_col = if is_active { c.status_green } else { c.status_red };
+            let status_lbl = if is_active { "Active" } else { "Inactive" };
+
+            let toggle_active_btn = {
+                let lbl = if is_active { "Deactivate" } else { "Reactivate" };
+                let hover2 = rgb(c.surface_hover);
+                div()
+                    .id(SharedString::from(format!("user-toggle-{uid}")))
+                    .px(px(8.)).py(px(3.)).rounded(px(4.))
+                    .bg(rgb(c.surface_default))
+                    .text_size(rems(0.769)).text_color(rgb(c.text_muted))
+                    .cursor_pointer().hover(move |s| s.bg(hover2))
+                    .on_mouse_down(MouseButton::Left, cx.listener(move |_this, _: &MouseDownEvent, _, cx| {
+                        let db = UsersDb::global(&**cx);
+                        cx.spawn(async move |this, cx| {
+                            let result = if is_active { db.deactivate_user(uid).await }
+                                         else         { db.reactivate_user(uid).await };
+                            if result.is_ok() {
+                                let _ = this.update(cx, |sp, cx| { sp.load_admin_users(cx); });
+                            }
+                            Ok::<(), anyhow::Error>(())
+                        }).detach();
+                    }))
+                    .child(lbl)
+            };
+
+            let reset_btn = {
+                let hover2 = rgb(c.surface_hover);
+                div()
+                    .id(SharedString::from(format!("user-reset-{uid}")))
+                    .px(px(8.)).py(px(3.)).rounded(px(4.))
+                    .bg(rgb(c.surface_default))
+                    .text_size(rems(0.769)).text_color(rgb(c.text_muted))
+                    .cursor_pointer().hover(move |s| s.bg(hover2))
+                    .on_mouse_down(MouseButton::Left, cx.listener(move |this, _: &MouseDownEvent, _, cx| {
+                        this.reset_pw_id = Some(uid);
+                        cx.notify();
+                    }))
+                    .child("Reset PW")
+            };
+
+            // Permission toggles (inline small)
+            let perm_toggle = |id_str: &'static str, label: &'static str, val: bool, update_fn: fn(&mut SettingsPanel, bool, i64, &mut Context<SettingsPanel>)| {
+                let col = if val { c.status_green } else { c.text_muted };
+                div()
+                    .id(SharedString::from(format!("{id_str}-{uid}")))
+                    .px(px(6.)).py(px(2.)).rounded(px(3.))
+                    .bg(rgb(c.surface_default))
+                    .text_size(rems(0.692)).text_color(rgb(col))
+                    .cursor_pointer()
+                    .on_mouse_down(MouseButton::Left, cx.listener(move |this, _: &MouseDownEvent, _, cx| {
+                        update_fn(this, !val, uid, cx);
+                    }))
+                    .child(label)
+            };
+
+            div()
+                .flex().flex_col()
+                .child(
+                    div().flex().flex_row().items_center().py(px(10.)).gap(px(8.))
+                        .child(div().w(px(140.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child(uname.clone()))
+                        .child(div().text_size(rems(0.769)).text_color(rgb(status_col)).child(status_lbl))
+                        .child(div().flex_1())
+                        .child(perm_toggle("ci", "Inv", ci, |sp, v, id, cx| { sp.save_perm_update(id, v, sp.admin_users.iter().find(|u| u.id == id).map(|u| u.can_pricebook).unwrap_or(false), sp.admin_users.iter().find(|u| u.id == id).map(|u| u.can_quotations).unwrap_or(false), sp.admin_users.iter().find(|u| u.id == id).map(|u| u.allow_delete).unwrap_or(false), sp.admin_users.iter().find(|u| u.id == id).map(|u| u.allow_price_edit).unwrap_or(false), cx); }))
+                        .child(perm_toggle("cp", "PB",  cp, |sp, v, id, cx| { let u = sp.admin_users.iter().find(|u| u.id == id).cloned().unwrap_or_else(|| AuthUser { id, username: String::new(), is_admin: false, can_inventory: false, can_pricebook: false, can_quotations: false, allow_delete: false, allow_price_edit: false, must_change_password: false, is_active: true }); sp.save_perm_update(id, u.can_inventory, v, u.can_quotations, u.allow_delete, u.allow_price_edit, cx); }))
+                        .child(perm_toggle("cq", "Qt",  cq, |sp, v, id, cx| { let u = sp.admin_users.iter().find(|u| u.id == id).cloned().unwrap_or_else(|| AuthUser { id, username: String::new(), is_admin: false, can_inventory: false, can_pricebook: false, can_quotations: false, allow_delete: false, allow_price_edit: false, must_change_password: false, is_active: true }); sp.save_perm_update(id, u.can_inventory, u.can_pricebook, v, u.allow_delete, u.allow_price_edit, cx); }))
+                        .child(perm_toggle("ad", "Del", ad, |sp, v, id, cx| { let u = sp.admin_users.iter().find(|u| u.id == id).cloned().unwrap_or_else(|| AuthUser { id, username: String::new(), is_admin: false, can_inventory: false, can_pricebook: false, can_quotations: false, allow_delete: false, allow_price_edit: false, must_change_password: false, is_active: true }); sp.save_perm_update(id, u.can_inventory, u.can_pricebook, u.can_quotations, v, u.allow_price_edit, cx); }))
+                        .child(perm_toggle("ap", "PEd", ap, |sp, v, id, cx| { let u = sp.admin_users.iter().find(|u| u.id == id).cloned().unwrap_or_else(|| AuthUser { id, username: String::new(), is_admin: false, can_inventory: false, can_pricebook: false, can_quotations: false, allow_delete: false, allow_price_edit: false, must_change_password: false, is_active: true }); sp.save_perm_update(id, u.can_inventory, u.can_pricebook, u.can_quotations, u.allow_delete, v, cx); }))
+                        .child(reset_btn)
+                        .child(toggle_active_btn)
+                )
+                .child(div().h(px(1.)).bg(rgb(c.surface_default)))
+                .into_any_element()
+        }).collect();
+
+        content = content.children(user_rows);
+
+        // ── Reset password inline panel ─────────────────────────────────
+        if let Some(rid) = reset_id {
+            let hover_cancel = rgb(c.surface_hover);
+            let rp_save_focused   = self.reset_pw_save_focus.is_focused(window);
+            let rp_cancel_focused = self.reset_pw_cancel_focus.is_focused(window);
+            content = content.child(
+                div().mt(px(12.)).flex().flex_row().items_center().gap(px(8.))
+                    .key_context("SettingsAdminResetForm")
+                    .on_action(cx.listener(|this, _: &AdminResetTabField, window, cx| {
+                        let handles = [
+                            this.reset_pw_input.read(cx).focus_handle.clone(),
+                            this.reset_pw_save_focus.clone(),
+                            this.reset_pw_cancel_focus.clone(),
+                        ];
+                        let cur = handles.iter().position(|h| h.is_focused(window));
+                        let next = handles[(cur.map(|i| i + 1).unwrap_or(0)) % handles.len()].clone();
+                        window.focus(&next, cx);
+                    }))
+                    .on_action(cx.listener(|this, _: &AdminResetBackTabField, window, cx| {
+                        let handles = [
+                            this.reset_pw_input.read(cx).focus_handle.clone(),
+                            this.reset_pw_save_focus.clone(),
+                            this.reset_pw_cancel_focus.clone(),
+                        ];
+                        let cur = handles.iter().position(|h| h.is_focused(window));
+                        let prev = handles[(cur.unwrap_or(0) + handles.len() - 1) % handles.len()].clone();
+                        window.focus(&prev, cx);
+                    }))
+                    .on_action(cx.listener(|this, _: &AdminResetEscapeForm, _, cx| {
+                        this.reset_pw_id = None;
+                        this.reset_pw_input.update(cx, |t, cx| t.reset(cx));
+                        cx.notify();
+                    }))
+                    .child(div().text_size(rems(0.923)).text_color(rgb(c.text_muted))
+                        .child(format!("Reset password for user #{rid}:")))
+                    .child(div().w(px(200.)).child(vassl_ui::text_field("", self.reset_pw_input.clone(), rp_focused, false, cx)))
+                    .child(
+                        div()
+                            .id("admin-reset-pw-save")
+                            .track_focus(&self.reset_pw_save_focus)
+                            .px(px(12.)).py(px(6.)).rounded(px(4.))
+                            .bg(rgb(c.surface_active))
+                            .text_size(rems(0.846)).text_color(rgb(c.text_default))
+                            .cursor_pointer()
+                            .when(rp_save_focused, |d| d.border_2().border_color(rgb(c.text_muted)))
+                            .on_mouse_down(MouseButton::Left, cx.listener(move |this, _: &MouseDownEvent, _, cx| {
+                                let new_pw = this.reset_pw_input.read(cx).text().to_string();
+                                if new_pw.len() < 6 {
+                                    this.add_error = Some("Password must be at least 6 characters.".into());
+                                    cx.notify();
+                                    return;
+                                }
+                                let db = UsersDb::global(&**cx);
+                                cx.spawn(async move |this, cx| {
+                                    let result = db.reset_password(rid, &new_pw).await;
+                                    let _ = this.update(cx, |sp, cx| {
+                                        sp.reset_pw_id = None;
+                                        sp.reset_pw_input.update(cx, |t, cx| t.reset(cx));
+                                        if let Err(e) = result {
+                                            sp.add_error = Some(format!("Reset failed: {e}"));
+                                        }
+                                        cx.notify();
+                                    });
+                                    Ok::<(), anyhow::Error>(())
+                                }).detach();
+                            }))
+                            .on_key_down(cx.listener(move |this, event: &KeyDownEvent, _, cx| {
+                                if event.keystroke.key != "enter" { return; }
+                                let new_pw = this.reset_pw_input.read(cx).text().to_string();
+                                if new_pw.len() < 6 {
+                                    this.add_error = Some("Password must be at least 6 characters.".into());
+                                    cx.notify();
+                                    return;
+                                }
+                                let db = UsersDb::global(&**cx);
+                                cx.spawn(async move |this, cx| {
+                                    let result = db.reset_password(rid, &new_pw).await;
+                                    let _ = this.update(cx, |sp, cx| {
+                                        sp.reset_pw_id = None;
+                                        sp.reset_pw_input.update(cx, |t, cx| t.reset(cx));
+                                        if let Err(e) = result {
+                                            sp.add_error = Some(format!("Reset failed: {e}"));
+                                        }
+                                        cx.notify();
+                                    });
+                                    Ok::<(), anyhow::Error>(())
+                                }).detach();
+                            }))
+                            .child("Save")
+                    )
+                    .child(
+                        div()
+                            .id("admin-reset-pw-cancel")
+                            .track_focus(&self.reset_pw_cancel_focus)
+                            .px(px(12.)).py(px(6.)).rounded(px(4.))
+                            .bg(rgb(c.surface_default))
+                            .text_size(rems(0.846)).text_color(rgb(c.text_muted))
+                            .cursor_pointer().hover(move |s| s.bg(hover_cancel))
+                            .when(rp_cancel_focused, |d| d.border_2().border_color(rgb(c.text_muted)))
+                            .on_mouse_down(MouseButton::Left, cx.listener(|this, _: &MouseDownEvent, _, cx| {
+                                this.reset_pw_id = None;
+                                cx.notify();
+                            }))
+                            .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
+                                if event.keystroke.key == "enter" {
+                                    this.reset_pw_id = None;
+                                    cx.notify();
+                                }
+                            }))
+                            .child("Cancel")
+                    )
+            );
+        }
+
+        // ── Add user button / form ──────────────────────────────────────
+        content = content.child(
+            div().mt(px(16.)).flex().flex_col().gap(px(10.))
+                .child(
+                    div()
+                        .id("admin-add-user-toggle")
+                        .px(px(14.)).py(px(7.)).rounded(px(5.))
+                        .bg(rgb(if form_open { c.surface_default } else { c.surface_active }))
+                        .text_size(rems(0.923)).text_color(rgb(c.text_default))
+                        .cursor_pointer()
+                        .when(!form_open, |d| d.hover(move |s| s.bg(rgb(c.surface_hover))))
+                        .on_mouse_down(MouseButton::Left, cx.listener(|this, _: &MouseDownEvent, _, cx| {
+                            this.admin_add_form_open = !this.admin_add_form_open;
+                            if !this.admin_add_form_open { this.add_error = None; }
+                            cx.notify();
+                        }))
+                        .child(if form_open { "Cancel" } else { "+ Add User" })
+                )
+                .when(form_open, |d| {
+                    let add_save_focused = self.add_user_save_focus.is_focused(window);
+                    d.child(
+                        div().flex().flex_col().gap(px(10.))
+                            .p(px(16.))
+                            .bg(rgb(c.surface_default))
+                            .rounded(px(6.))
+                            .key_context("SettingsAdminAddForm")
+                            .on_action(cx.listener(|this, _: &AdminAddTabField, window, cx| {
+                                let handles = [
+                                    this.add_username.read(cx).focus_handle.clone(),
+                                    this.add_password.read(cx).focus_handle.clone(),
+                                    this.add_user_save_focus.clone(),
+                                ];
+                                let cur = handles.iter().position(|h| h.is_focused(window));
+                                let next = handles[(cur.map(|i| i + 1).unwrap_or(0)) % handles.len()].clone();
+                                window.focus(&next, cx);
+                            }))
+                            .on_action(cx.listener(|this, _: &AdminAddBackTabField, window, cx| {
+                                let handles = [
+                                    this.add_username.read(cx).focus_handle.clone(),
+                                    this.add_password.read(cx).focus_handle.clone(),
+                                    this.add_user_save_focus.clone(),
+                                ];
+                                let cur = handles.iter().position(|h| h.is_focused(window));
+                                let prev = handles[(cur.unwrap_or(0) + handles.len() - 1) % handles.len()].clone();
+                                window.focus(&prev, cx);
+                            }))
+                            .on_action(cx.listener(|this, _: &AdminAddEscapeForm, _, cx| {
+                                this.admin_add_form_open = false;
+                                this.add_error = None;
+                                cx.notify();
+                            }))
+                            .child(vassl_ui::text_field("Username", self.add_username.clone(), u_focused, false, cx))
+                            .child(vassl_ui::text_field("Password", self.add_password.clone(), p_focused, false, cx))
+                            // Permission checkboxes
+                            .child(
+                                div().flex().flex_row().flex_wrap().gap(px(12.)).pt(px(4.))
+                                    .child(Self::perm_checkbox("add-ci", "Inventory",        add_can_inv, cx.listener(|this, _, _, cx| { this.add_can_inventory    = !this.add_can_inventory;    cx.notify(); }), &c))
+                                    .child(Self::perm_checkbox("add-cp", "Price Book",       add_can_pb,  cx.listener(|this, _, _, cx| { this.add_can_pricebook    = !this.add_can_pricebook;    cx.notify(); }), &c))
+                                    .child(Self::perm_checkbox("add-cq", "Quotations",       add_can_qt,  cx.listener(|this, _, _, cx| { this.add_can_quotations   = !this.add_can_quotations;   cx.notify(); }), &c))
+                                    .child(Self::perm_checkbox("add-ad", "Allow Delete",     add_del,     cx.listener(|this, _, _, cx| { this.add_allow_delete     = !this.add_allow_delete;     cx.notify(); }), &c))
+                                    .child(Self::perm_checkbox("add-ap", "Allow Price Edit", add_pe,      cx.listener(|this, _, _, cx| { this.add_allow_price_edit = !this.add_allow_price_edit; cx.notify(); }), &c))
+                            )
+                            .when_some(add_err, |d, err| {
+                                d.child(div().text_size(rems(0.846)).text_color(rgb(c.status_red)).child(SharedString::from(err)))
+                            })
+                            .child(
+                                div().flex().justify_end()
+                                    .child(
+                                        div()
+                                            .id("admin-add-user-save")
+                                            .track_focus(&self.add_user_save_focus)
+                                            .px(px(16.)).py(px(7.)).rounded(px(5.))
+                                            .bg(rgb(c.surface_active))
+                                            .text_size(rems(0.923)).text_color(rgb(c.text_default))
+                                            .cursor_pointer()
+                                            .when(add_save_focused, |d| d.border_2().border_color(rgb(c.text_muted)))
+                                            .on_mouse_down(MouseButton::Left, cx.listener(|this, _: &MouseDownEvent, _, cx| {
+                                                this.do_add_user_submit(cx);
+                                            }))
+                                            .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
+                                                if event.keystroke.key == "enter" {
+                                                    this.do_add_user_submit(cx);
+                                                }
+                                            }))
+                                            .child("Create User")
+                                    )
+                            )
+                    )
+                })
+        );
+
+        content
+    }
+
+    fn perm_checkbox<F>(
+        id:       &'static str,
+        label:    &'static str,
+        checked:  bool,
+        on_click: F,
+        c:        &vassl_ui::ThemeColors,
+    ) -> impl IntoElement
+    where
+        F: Fn(&gpui::MouseDownEvent, &mut gpui::Window, &mut gpui::App) + 'static,
+    {
+        div().flex().flex_row().items_center().gap(px(6.)).cursor_pointer()
+            .id(id)
+            .on_mouse_down(MouseButton::Left, on_click)
+            .child(
+                div()
+                    .w(px(16.)).h(px(16.)).rounded(px(3.))
+                    .border_1().border_color(rgb(c.surface_active))
+                    .bg(rgb(if checked { c.surface_active } else { c.canvas_bg }))
+                    .flex().items_center().justify_center()
+                    .when(checked, |d| d.child(div().text_size(rems(0.692)).text_color(rgb(c.text_default)).child("✓")))
+            )
+            .child(div().text_size(rems(0.846)).text_color(rgb(c.text_default)).child(label))
+    }
+
+    fn save_perm_update(
+        &mut self,
+        id: i64,
+        can_inventory: bool, can_pricebook: bool, can_quotations: bool,
+        allow_delete: bool, allow_price_edit: bool,
+        cx: &mut Context<Self>,
+    ) {
+        // Optimistically update local state
+        if let Some(u) = self.admin_users.iter_mut().find(|u| u.id == id) {
+            u.can_inventory    = can_inventory;
+            u.can_pricebook    = can_pricebook;
+            u.can_quotations   = can_quotations;
+            u.allow_delete     = allow_delete;
+            u.allow_price_edit = allow_price_edit;
+        }
+        cx.notify();
+        let db = UsersDb::global(&**cx);
+        cx.spawn(async move |_, _cx| {
+            if let Err(e) = db.update_user_permissions(id, can_inventory, can_pricebook, can_quotations, allow_delete, allow_price_edit).await {
+                tracing::warn!("update_user_permissions failed: {e:?}");
+            }
+            Ok::<(), anyhow::Error>(())
+        }).detach();
     }
 
     fn render_license(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1063,67 +1702,9 @@ impl SettingsPanel {
     }
 
     fn render_general(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let c           = cx.global::<ThemeHandle>().0.clone();
+        let c            = cx.global::<ThemeHandle>().0.clone();
         let name_focused = self.user_name.read(cx).focus_handle.is_focused(window);
         let co_focused   = self.company_name.read(cx).focus_handle.is_focused(window);
-        let allow_delete     = self.allow_delete;
-        let allow_price_edit = self.allow_price_edit;
-
-        // Allow Delete toggle pill
-        let delete_toggle = {
-            let (pill_bg, thumb_x) = if allow_delete {
-                (c.surface_active, px(16.))
-            } else {
-                (c.surface_default, px(2.))
-            };
-            div().id("settings-allow-delete-toggle")
-                .w(px(32.)).h(px(18.)).rounded_full()
-                .bg(rgb(pill_bg)).cursor_pointer().relative()
-                .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
-                    this.allow_delete = !this.allow_delete;
-                    let v = if this.allow_delete { "true" } else { "false" };
-                    this.save_setting("general.allow_delete", v.into(), cx);
-                    cx.set_global(vassl_ui::AppSettings {
-                        allow_delete:     this.allow_delete,
-                        allow_price_edit: this.allow_price_edit,
-                    });
-                    cx.notify();
-                }))
-                .child(
-                    div().absolute()
-                        .top(px(2.)).left(thumb_x)
-                        .w(px(14.)).h(px(14.)).rounded_full()
-                        .bg(rgb(c.canvas_bg))
-                )
-        };
-
-        // Allow Price Edit toggle pill
-        let price_edit_toggle = {
-            let (pill_bg, thumb_x) = if allow_price_edit {
-                (c.surface_active, px(16.))
-            } else {
-                (c.surface_default, px(2.))
-            };
-            div().id("settings-allow-price-edit-toggle")
-                .w(px(32.)).h(px(18.)).rounded_full()
-                .bg(rgb(pill_bg)).cursor_pointer().relative()
-                .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
-                    this.allow_price_edit = !this.allow_price_edit;
-                    let v = if this.allow_price_edit { "true" } else { "false" };
-                    this.save_setting("general.allow_price_edit", v.into(), cx);
-                    cx.set_global(vassl_ui::AppSettings {
-                        allow_delete:     this.allow_delete,
-                        allow_price_edit: this.allow_price_edit,
-                    });
-                    cx.notify();
-                }))
-                .child(
-                    div().absolute()
-                        .top(px(2.)).left(thumb_x)
-                        .w(px(14.)).h(px(14.)).rounded_full()
-                        .bg(rgb(c.canvas_bg))
-                )
-        };
 
         div().flex().flex_col()
             .child(Self::render_row(
@@ -1138,34 +1719,6 @@ impl SettingsPanel {
                 vassl_ui::text_field("", self.company_name.clone(), co_focused, false, cx),
                 &c,
             ))
-            .child(
-                div().flex().flex_col()
-                    .child(
-                        div().flex().flex_row().items_center().py(px(14.)).px(px(32.))
-                            .child(
-                                div().flex_1().flex().flex_col().gap(px(3.))
-                                    .child(div().text_size(rems(1.)).text_color(rgb(c.text_default)).child("Allow Deleting Records"))
-                                    .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted))
-                                        .child("When enabled, context menus will show a Delete option for products, suppliers, and other records."))
-                            )
-                            .child(delete_toggle)
-                    )
-                    .child(div().h(px(1.)).mx(px(32.)).bg(rgb(c.surface_default)))
-            )
-            .child(
-                div().flex().flex_col()
-                    .child(
-                        div().flex().flex_row().items_center().py(px(14.)).px(px(32.))
-                            .child(
-                                div().flex_1().flex().flex_col().gap(px(3.))
-                                    .child(div().text_size(rems(1.)).text_color(rgb(c.text_default)).child("Allow Editing Price Entries"))
-                                    .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted))
-                                        .child("When enabled, price entries can be edited directly from the pricebook context menu."))
-                            )
-                            .child(price_edit_toggle)
-                    )
-                    .child(div().h(px(1.)).mx(px(32.)).bg(rgb(c.surface_default)))
-            )
     }
 }
 
@@ -1180,7 +1733,9 @@ impl Render for SettingsPanel {
         let c = cx.global::<ThemeHandle>().0.clone();
         let active = self.active_category;
 
-        let categories = [
+        let is_admin = cx.global::<AppSettings>().is_admin;
+
+        let mut categories_vec = vec![
             SettingsCategory::General,
             SettingsCategory::Appearance,
             SettingsCategory::Inventory,
@@ -1188,8 +1743,13 @@ impl Render for SettingsPanel {
             SettingsCategory::Quotations,
             SettingsCategory::Database,
             SettingsCategory::Keyboard,
-            SettingsCategory::License,
+            SettingsCategory::Security,
         ];
+        if is_admin {
+            categories_vec.push(SettingsCategory::Admin);
+        }
+        categories_vec.push(SettingsCategory::License);
+        let categories = categories_vec;
 
         // ── category nav (160px) ──────────────────────────────────────
         let nav = div()
@@ -1208,6 +1768,9 @@ impl Render for SettingsPanel {
                     .text_size(rems(1.)).cursor_pointer()
                     .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |this, _, _, cx| {
                         this.active_category = cat;
+                        if cat == SettingsCategory::Admin {
+                            this.load_admin_users(cx);
+                        }
                         cx.notify();
                     }))
                     .child(Self::category_label(cat))
@@ -1236,6 +1799,8 @@ impl Render for SettingsPanel {
                     SettingsCategory::Quotations => self.render_quotations(window, cx).into_any_element(),
                     SettingsCategory::Database   => self.render_database(cx).into_any_element(),
                     SettingsCategory::Keyboard   => self.render_keyboard(cx).into_any_element(),
+                    SettingsCategory::Security   => self.render_security(window, cx).into_any_element(),
+                    SettingsCategory::Admin      => self.render_admin(window, cx).into_any_element(),
                     SettingsCategory::License    => self.render_license(cx).into_any_element(),
                 }
             });

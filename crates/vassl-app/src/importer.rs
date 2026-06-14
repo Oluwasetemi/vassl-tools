@@ -42,7 +42,7 @@ pub async fn import_rows(
                     let id = if let Some(id) = existing {
                         id
                     } else {
-                        match sup_db.insert_supplier(sup_name, None, None, None, None).await {
+                        match sup_db.insert_supplier(sup_name, None, None, None, None, None).await {
                             Ok(id) => { summary.suppliers_created += 1; id }
                             Err(e) => {
                                 summary.errors.push(format!("supplier '{}': {e}", sup_name));
@@ -66,6 +66,7 @@ pub async fn import_rows(
                 existing.id, &row.name, row.category.as_deref(), &row.unit,
                 existing.min_stock_level, existing.description.as_deref(), supplier_id,
                 row.model_number.as_deref(), row.part_number.as_deref(), row.duty_percent,
+                existing.end_of_life, existing.replacement.as_deref(),
             ).await {
                 Ok(_) => { summary.products_updated += 1; existing.id }
                 Err(e) => {
@@ -78,6 +79,7 @@ pub async fn import_rows(
                 &row.sku, &row.name, row.category.as_deref(), &row.unit, 0.0,
                 None, None, supplier_id,
                 row.model_number.as_deref(), row.part_number.as_deref(), row.duty_percent,
+                false, None,
             ).await {
                 Ok(id) => { summary.products_created += 1; id }
                 Err(e) => {
