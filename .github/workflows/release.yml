@@ -67,10 +67,10 @@ jobs:
           print(f"const SIGNING_SECRET: [u8; 32] = [\n{rows},\n];")
           EOF
 
-      # macOS alpha builds expire in 3 days — intentionally short to push
-      # alpha testers toward fresh releases. Windows uses 90 days (see below).
-      - name: Compute build expiry (3 days)
-        run: echo "VASSL_BUILD_EXPIRES=$(date -v+3d +%Y-%m-%d)" >> "$GITHUB_ENV"
+      # Beta builds expire in 14 days — long enough for proper testing,
+      # short enough to keep testers on current releases. Windows uses 90 days (see below).
+      - name: Compute build expiry (14 days)
+        run: echo "VASSL_BUILD_EXPIRES=$(date -v+14d +%Y-%m-%d)" >> "$GITHUB_ENV"
 
       - name: Build release binary
         env:
