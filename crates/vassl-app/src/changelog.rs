@@ -3,6 +3,38 @@ use gpui::{Context, EventEmitter, IntoElement, MouseButton, MouseDownEvent, Rend
 use vassl_ui::ThemeHandle;
 
 const CHANGELOG: &str = r#"
+## v0.1.0-beta.3  —  2026-06-14
+
+### Added
+- Project CLAUDE.md with agent skill configuration (issue tracker, triage labels, domain docs).
+- docs/agents/ reference docs for engineering skills: issue-tracker, triage-labels, domain.
+
+---
+
+## v0.1.0-beta.2  —  2026-06-12
+
+### Added
+- macOS code signing and notarization support in CI.
+
+### Fixed
+- Inventory: fall back to global low stock threshold for products with no per-product minimum.
+- CI: extend macOS build artifact expiry to 14 days for the beta channel.
+- CI: embed vassl.icns into Contents/Resources after cargo-bundle.
+- CI: use job-level env for signing gate; fix checkout ordering.
+- Release: DMG creation and bundle metadata.
+
+---
+
+## v0.1.0-beta.1  —  2026-06-08
+
+### Added
+- Authentication and user management.
+- Quotation editing.
+- Currency-aware pricing.
+- Auto-focus UX improvements.
+
+---
+
 ## v0.1.0-alpha.18  —  2026-06-12
 
 ### Fixed
