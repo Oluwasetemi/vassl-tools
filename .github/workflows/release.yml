@@ -21,6 +21,8 @@ jobs:
   build-macos:
     name: macOS (${{ matrix.target }})
     runs-on: macos-14
+    env:
+      SIGNED: ${{ secrets.DEV_ID_CERT != '' }}
     strategy:
       matrix:
         include:
@@ -109,7 +111,7 @@ jobs:
           echo "BUNDLE_DIR=$BUNDLE_DIR" >> "$GITHUB_ENV"
 
       - name: Sign .app
-        if: ${{ secrets.DEV_ID_CERT != '' }}
+        if: env.SIGNED == 'true'
         env:
           DEV_ID_CERT:          ${{ secrets.DEV_ID_CERT }}
           DEV_ID_CERT_PASSWORD: ${{ secrets.DEV_ID_CERT_PASSWORD }}
@@ -146,11 +148,10 @@ jobs:
 
       - name: Create ZIP and DMG, notarize, staple
         env:
-          ARCH:             ${{ matrix.arch }}
-          APPLE_ID:         ${{ secrets.APPLE_ID }}
+          ARCH:              ${{ matrix.arch }}
+          APPLE_ID:          ${{ secrets.APPLE_ID }}
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
-          TEAM_ID:          ${{ secrets.TEAM_ID }}
-          SIGNED:           ${{ secrets.DEV_ID_CERT != '' }}
+          TEAM_ID:           ${{ secrets.TEAM_ID }}
         run: |
           # ── ZIP (used by the in-app auto-updater) ──────────────────────────
           cd "$BUNDLE_DIR"
@@ -195,8 +196,12 @@ jobs:
     name: macOS universal binary
     needs: build-macos
     runs-on: macos-14
+    env:
+      SIGNED: ${{ secrets.DEV_ID_CERT != '' }}
 
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           name: VASSL-macos-arm64
@@ -206,8 +211,6 @@ jobs:
         with:
           name: VASSL-macos-x86_64
           path: x86_64
-
-      - uses: actions/checkout@v4
 
       - name: Create universal .app
         run: |
@@ -231,7 +234,7 @@ jobs:
           echo "APP_NAME=$APP_NAME" >> "$GITHUB_ENV"
 
       - name: Sign universal .app
-        if: ${{ secrets.DEV_ID_CERT != '' }}
+        if: env.SIGNED == 'true'
         env:
           DEV_ID_CERT:          ${{ secrets.DEV_ID_CERT }}
           DEV_ID_CERT_PASSWORD: ${{ secrets.DEV_ID_CERT_PASSWORD }}
@@ -271,7 +274,6 @@ jobs:
           APPLE_ID:          ${{ secrets.APPLE_ID }}
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
           TEAM_ID:           ${{ secrets.TEAM_ID }}
-          SIGNED:            ${{ secrets.DEV_ID_CERT != '' }}
         run: |
           # ── ZIP (auto-updater) — must contain .app at root ────────────────
           mv universal-app "${APP_NAME}"
