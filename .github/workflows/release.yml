@@ -110,6 +110,17 @@ jobs:
           echo "APP_NAME=$APP_NAME"     >> "$GITHUB_ENV"
           echo "BUNDLE_DIR=$BUNDLE_DIR" >> "$GITHUB_ENV"
 
+      # cargo-bundle v0.11 silently skips pre-built .icns files — it only
+      # embeds icons when given PNGs to convert. Patch the bundle manually.
+      - name: Patch app icon
+        run: |
+          mkdir -p "${BUNDLE}/Contents/Resources"
+          cp assets/icons/vassl.icns "${BUNDLE}/Contents/Resources/vassl.icns"
+          if ! grep -q "CFBundleIconFile" "${BUNDLE}/Contents/Info.plist"; then
+            sed -i '' 's|</dict>|  <key>CFBundleIconFile</key>\n  <string>vassl</string>\n</dict>|' \
+              "${BUNDLE}/Contents/Info.plist"
+          fi
+
       - name: Sign .app
         if: env.SIGNED == 'true'
         env:
