@@ -1,6 +1,6 @@
 [package]
 name        = "vassl-app"
-version = "0.1.0-beta.3"
+version.workspace = true
 edition     = "2021"
 default-run = "vassl"
 autobins    = false
