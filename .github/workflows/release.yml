@@ -75,7 +75,7 @@ jobs:
           VASSL_BUILD_EXPIRES: ${{ env.VASSL_BUILD_EXPIRES }}
         run: cargo build --release --target ${{ matrix.target }} -p vassl-app
 
-      - name: Bundle .app, create ZIP and DMG
+      - name: Bundle .app
         # IMPORTANT: VASSL_BUILD_EXPIRES must be set in both the explicit cargo build
         # step above AND here so that cargo bundle's internal `cargo build` invocation
         # sees the same environment. If the env var differs between steps, Cargo detects
@@ -95,7 +95,6 @@ jobs:
           BUNDLE_DIR="target/${{ matrix.target }}/release/bundle/osx"
           BUNDLE=$(find "$BUNDLE_DIR" -maxdepth 1 -name "*.app" | head -1)
           APP_NAME=$(basename "$BUNDLE")
-          ARCH="${{ matrix.arch }}"
 
           # Sanity-check: fail loudly if the binary inside the bundle is < 1 MB,
           # which would indicate the stub/empty-bundle problem recurred.
@@ -105,6 +104,54 @@ jobs:
             exit 1
           fi
 
+          echo "BUNDLE=$BUNDLE"         >> "$GITHUB_ENV"
+          echo "APP_NAME=$APP_NAME"     >> "$GITHUB_ENV"
+          echo "BUNDLE_DIR=$BUNDLE_DIR" >> "$GITHUB_ENV"
+
+      - name: Sign .app
+        if: ${{ secrets.DEV_ID_CERT != '' }}
+        env:
+          DEV_ID_CERT:          ${{ secrets.DEV_ID_CERT }}
+          DEV_ID_CERT_PASSWORD: ${{ secrets.DEV_ID_CERT_PASSWORD }}
+          DEV_ID_IDENTITY:      ${{ secrets.DEV_ID_IDENTITY }}
+        run: |
+          echo "$DEV_ID_CERT" | base64 --decode > /tmp/cert.p12
+
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 16)
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain  -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -lut 3600 build.keychain
+
+          security import /tmp/cert.p12 \
+            -k build.keychain \
+            -P "$DEV_ID_CERT_PASSWORD" \
+            -T /usr/bin/codesign
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -k "$KEYCHAIN_PASSWORD" build.keychain
+
+          rm /tmp/cert.p12
+
+          codesign \
+            --force \
+            --sign "$DEV_ID_IDENTITY" \
+            --timestamp \
+            --options runtime \
+            --entitlements crates/vassl-app/entitlements.plist \
+            --deep \
+            "$BUNDLE"
+
+          security delete-keychain build.keychain
+
+      - name: Create ZIP and DMG, notarize, staple
+        env:
+          ARCH:             ${{ matrix.arch }}
+          APPLE_ID:         ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          TEAM_ID:          ${{ secrets.TEAM_ID }}
+          SIGNED:           ${{ secrets.DEV_ID_CERT != '' }}
+        run: |
           # ── ZIP (used by the in-app auto-updater) ──────────────────────────
           cd "$BUNDLE_DIR"
           zip -r "$GITHUB_WORKSPACE/VASSL-macos-${ARCH}.zip" "$APP_NAME"
@@ -121,6 +168,18 @@ jobs:
             -format UDZO \
             "VASSL-macos-${ARCH}"
           rm -rf dmg-staging
+
+          # ── Notarize & staple DMG (only when signing secrets are present) ──
+          if [ "$SIGNED" = "true" ]; then
+            ditto -c -k --sequesterRsrc "VASSL-macos-${ARCH}.dmg" notarize-upload.zip
+            xcrun notarytool submit notarize-upload.zip \
+              --apple-id "$APPLE_ID" \
+              --team-id  "$TEAM_ID" \
+              --password "$APPLE_ID_PASSWORD" \
+              --wait
+            rm notarize-upload.zip
+            xcrun stapler staple "VASSL-macos-${ARCH}.dmg"
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -148,7 +207,9 @@ jobs:
           name: VASSL-macos-x86_64
           path: x86_64
 
-      - name: Create universal .app, ZIP and DMG
+      - uses: actions/checkout@v4
+
+      - name: Create universal .app
         run: |
           # Extract both .app bundles
           unzip arm64/VASSL-macos-arm64.zip   -d arm64-out
@@ -167,6 +228,51 @@ jobs:
             "x86_64-out/${APP_NAME}/Contents/MacOS/${BIN_NAME}" \
             -output "universal-app/Contents/MacOS/${BIN_NAME}"
 
+          echo "APP_NAME=$APP_NAME" >> "$GITHUB_ENV"
+
+      - name: Sign universal .app
+        if: ${{ secrets.DEV_ID_CERT != '' }}
+        env:
+          DEV_ID_CERT:          ${{ secrets.DEV_ID_CERT }}
+          DEV_ID_CERT_PASSWORD: ${{ secrets.DEV_ID_CERT_PASSWORD }}
+          DEV_ID_IDENTITY:      ${{ secrets.DEV_ID_IDENTITY }}
+        run: |
+          echo "$DEV_ID_CERT" | base64 --decode > /tmp/cert.p12
+
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 16)
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain  -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -lut 3600 build.keychain
+
+          security import /tmp/cert.p12 \
+            -k build.keychain \
+            -P "$DEV_ID_CERT_PASSWORD" \
+            -T /usr/bin/codesign
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -k "$KEYCHAIN_PASSWORD" build.keychain
+
+          rm /tmp/cert.p12
+
+          codesign \
+            --force \
+            --sign "$DEV_ID_IDENTITY" \
+            --timestamp \
+            --options runtime \
+            --entitlements crates/vassl-app/entitlements.plist \
+            --deep \
+            "universal-app"
+
+          security delete-keychain build.keychain
+
+      - name: Create ZIP and DMG, notarize, staple
+        env:
+          APPLE_ID:          ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          TEAM_ID:           ${{ secrets.TEAM_ID }}
+          SIGNED:            ${{ secrets.DEV_ID_CERT != '' }}
+        run: |
           # ── ZIP (auto-updater) — must contain .app at root ────────────────
           mv universal-app "${APP_NAME}"
           zip -r VASSL-macos-universal.zip "${APP_NAME}"
@@ -183,6 +289,18 @@ jobs:
             -format UDZO \
             VASSL-macos-universal
           rm -rf dmg-staging
+
+          # ── Notarize & staple DMG (only when signing secrets are present) ──
+          if [ "$SIGNED" = "true" ]; then
+            ditto -c -k --sequesterRsrc VASSL-macos-universal.dmg notarize-upload.zip
+            xcrun notarytool submit notarize-upload.zip \
+              --apple-id "$APPLE_ID" \
+              --team-id  "$TEAM_ID" \
+              --password "$APPLE_ID_PASSWORD" \
+              --wait
+            rm notarize-upload.zip
+            xcrun stapler staple VASSL-macos-universal.dmg
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
