@@ -173,12 +173,16 @@ jobs:
           mkdir -p dmg-staging
           cp -r "$BUNDLE" dmg-staging/VASSL.app
           ln -sf /Applications dmg-staging/Applications
-          hdiutil create \
-            -volname "VASSL" \
-            -srcfolder dmg-staging \
-            -ov \
-            -format UDZO \
-            "VASSL-macos-${ARCH}"
+          for attempt in 1 2 3; do
+            hdiutil create \
+              -volname "VASSL" \
+              -srcfolder dmg-staging \
+              -ov \
+              -format UDZO \
+              "VASSL-macos-${ARCH}" && break
+            echo "hdiutil attempt ${attempt} failed — retrying in 5s"
+            sleep 5
+          done
           rm -rf dmg-staging
 
           # ── Notarize & staple DMG (only when signing secrets are present) ──
@@ -295,12 +299,16 @@ jobs:
           mkdir -p dmg-staging
           cp -r universal-app "dmg-staging/${APP_NAME}"
           ln -sf /Applications dmg-staging/Applications
-          hdiutil create \
-            -volname "VASSL" \
-            -srcfolder dmg-staging \
-            -ov \
-            -format UDZO \
-            VASSL-macos-universal
+          for attempt in 1 2 3; do
+            hdiutil create \
+              -volname "VASSL" \
+              -srcfolder dmg-staging \
+              -ov \
+              -format UDZO \
+              VASSL-macos-universal && break
+            echo "hdiutil attempt ${attempt} failed — retrying in 5s"
+            sleep 5
+          done
           rm -rf dmg-staging
 
           # ── Notarize & staple DMG (only when signing secrets are present) ──
