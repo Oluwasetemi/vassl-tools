@@ -1,8 +1,10 @@
-use gpui::{Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render,
-           Subscription, Window, actions, div, prelude::*, px, rems, rgb, rgba, SharedString};
+use gpui::{
+    actions, div, prelude::*, px, rems, rgb, rgba, Context, Entity, EventEmitter, FocusHandle,
+    Focusable, IntoElement, Render, SharedString, Subscription, Window,
+};
 use vassl_core::{AcquisitionType, Product};
 use vassl_suppliers::store::SupplierStoreHandle;
-use vassl_ui::{Dropdown, DropdownItem, TextInput, ThemeHandle, text_field};
+use vassl_ui::{text_field, Dropdown, DropdownItem, TextInput, ThemeHandle};
 
 use crate::db::InventoryDb;
 use crate::store::InventoryStore;
@@ -10,7 +12,10 @@ use crate::store::InventoryStore;
 actions!(product_form, [EscapeForm, TabField, BackTabField]);
 
 #[derive(Debug)]
-pub enum ProductFormEvent { Submitted, Cancelled }
+pub enum ProductFormEvent {
+    Submitted,
+    Cancelled,
+}
 
 impl EventEmitter<ProductFormEvent> for ProductForm {}
 
@@ -20,53 +25,76 @@ enum FormMode {
 }
 
 pub struct ProductForm {
-    mode:               FormMode,
-    store:              Entity<InventoryStore>,
-    sku_display:        String,
-    original_stock:     Option<f64>,
-    pub sku:            Entity<TextInput>,
-    name:               Entity<TextInput>,
-    category:           Entity<TextInput>,
-    unit:               Entity<TextInput>,
-    model_number:       Entity<TextInput>,
-    part_number:        Entity<TextInput>,
-    duty_percent:       Entity<TextInput>,
-    end_of_life:        bool,
-    replacement:        Entity<TextInput>,
-    initial_qty:        Entity<TextInput>,
-    edit_stock:         Entity<TextInput>,
-    min_stock:          Entity<TextInput>,
-    description:        Entity<TextInput>,
-    supplier_dropdown:  Entity<Dropdown>,
-    _supplier_sub:      Subscription,
-    cancel_focus:       FocusHandle,
-    save_focus:         FocusHandle,
-    error:              Option<String>,
-    sku_error:          bool,
-    name_error:         bool,
+    mode: FormMode,
+    store: Entity<InventoryStore>,
+    sku_display: String,
+    original_stock: Option<f64>,
+    pub sku: Entity<TextInput>,
+    name: Entity<TextInput>,
+    category: Entity<TextInput>,
+    unit: Entity<TextInput>,
+    model_number: Entity<TextInput>,
+    part_number: Entity<TextInput>,
+    duty_percent: Entity<TextInput>,
+    end_of_life: bool,
+    replacement: Entity<TextInput>,
+    initial_qty: Entity<TextInput>,
+    edit_stock: Entity<TextInput>,
+    min_stock: Entity<TextInput>,
+    description: Entity<TextInput>,
+    supplier_dropdown: Entity<Dropdown>,
+    _supplier_sub: Subscription,
+    eol_focus: FocusHandle,
+    cancel_focus: FocusHandle,
+    save_focus: FocusHandle,
+    error: Option<String>,
+    sku_error: bool,
+    name_error: bool,
 }
 
-fn validate_product(sku: &str, name: &str, unit: &str, min_stock: &str) -> Result<(String, String, String, f64), String> {
+fn validate_product(
+    sku: &str,
+    name: &str,
+    unit: &str,
+    min_stock: &str,
+) -> Result<(String, String, String, f64), String> {
     let sku = sku.trim().to_string();
-    if sku.is_empty()  { return Err("SKU is required.".to_string()); }
+    if sku.is_empty() {
+        return Err("SKU is required.".to_string());
+    }
     validate_product_fields(name, unit, min_stock).map(|(n, u, m)| (sku, n, u, m))
 }
 
-fn validate_product_fields(name: &str, unit: &str, min_stock: &str) -> Result<(String, String, f64), String> {
+fn validate_product_fields(
+    name: &str,
+    unit: &str,
+    min_stock: &str,
+) -> Result<(String, String, f64), String> {
     let name = name.trim().to_string();
-    if name.is_empty() { return Err("Name is required.".to_string()); }
+    if name.is_empty() {
+        return Err("Name is required.".to_string());
+    }
     let unit = unit.trim().to_string();
     let min: f64 = min_stock.trim().parse().unwrap_or(0.0);
-    if min < 0.0  { return Err("Min stock must be ≥ 0.".to_string()); }
+    if min < 0.0 {
+        return Err("Min stock must be ≥ 0.".to_string());
+    }
     Ok((name, unit, min))
 }
 
 impl ProductForm {
-    fn make_supplier_dropdown(preselect: Option<i64>, cx: &mut Context<Self>) -> (Entity<Dropdown>, Subscription) {
+    fn make_supplier_dropdown(
+        preselect: Option<i64>,
+        cx: &mut Context<Self>,
+    ) -> (Entity<Dropdown>, Subscription) {
         let sup_store = cx.global::<SupplierStoreHandle>().0.clone();
         let suppliers = sup_store.read(cx).suppliers.clone();
-        let dropdown  = cx.new(|cx| {
-            let mut d = Dropdown::new("No preferred supplier", "No suppliers yet — add one in Suppliers.", cx);
+        let dropdown = cx.new(|cx| {
+            let mut d = Dropdown::new(
+                "No preferred supplier",
+                "No suppliers yet — add one in Suppliers.",
+                cx,
+            );
             d.items = Self::suppliers_to_items(&suppliers);
             d.loading = false;
             d.selected_id = preselect;
@@ -77,7 +105,7 @@ impl ProductForm {
             move |_this, store_ent, cx| {
                 let suppliers = store_ent.read(cx).suppliers.clone();
                 dropdown.update(cx, |d, cx| {
-                    d.items   = ProductForm::suppliers_to_items(&suppliers);
+                    d.items = ProductForm::suppliers_to_items(&suppliers);
                     d.loading = false;
                     cx.notify();
                 });
@@ -87,15 +115,18 @@ impl ProductForm {
     }
 
     fn suppliers_to_items(suppliers: &[vassl_core::Supplier]) -> Vec<DropdownItem> {
-        let mut items = vec![DropdownItem { id: -1, label: "(None)".into(), sublabel: None }];
+        let mut items = vec![DropdownItem {
+            id: -1,
+            label: "(None)".into(),
+            sublabel: None,
+        }];
         items.extend(suppliers.iter().map(|s| DropdownItem {
-            id:       s.id,
-            label:    s.name.clone(),
+            id: s.id,
+            label: s.name.clone(),
             sublabel: s.contact_person.clone(),
         }));
         items
     }
-
 
     pub fn new(store: Entity<InventoryStore>, cx: &mut Context<Self>) -> Self {
         let (supplier_dropdown, _supplier_sub) = Self::make_supplier_dropdown(None, cx);
@@ -104,47 +135,62 @@ impl ProductForm {
             f.suppress_placeholder = true;
             f
         });
-        let db            = vassl_db::AppDatabase::global(&**cx);
-        let default_unit  = vassl_db::shared::get_setting(db, "inventory.default_unit").ok().flatten().unwrap_or_default();
-        let default_min   = vassl_db::shared::get_setting(db, "inventory.low_stock_threshold").ok().flatten().unwrap_or_default();
+        let db = vassl_db::AppDatabase::global(&**cx);
+        let default_unit = vassl_db::shared::get_setting(db, "inventory.default_unit")
+            .ok()
+            .flatten()
+            .unwrap_or_default();
+        let default_min = vassl_db::shared::get_setting(db, "inventory.low_stock_threshold")
+            .ok()
+            .flatten()
+            .unwrap_or_default();
         Self {
-            mode:           FormMode::Create,
+            mode: FormMode::Create,
             store,
-            sku_display:    String::new(),
+            sku_display: String::new(),
             original_stock: None,
-            sku:          cx.new(|cx| TextInput::with_placeholder("e.g. CAM-IP-2MP", cx)),
-            name:         cx.new(|cx| TextInput::with_placeholder("e.g. IP Camera 2MP", cx)),
-            category:     cx.new(|cx| TextInput::with_placeholder("optional: Cameras, Cabling…", cx)),
-            unit:         cx.new(move |cx| {
+            sku: cx.new(|cx| TextInput::with_placeholder("e.g. CAM-IP-2MP", cx)),
+            name: cx.new(|cx| TextInput::with_placeholder("e.g. IP Camera 2MP", cx)),
+            category: cx.new(|cx| TextInput::with_placeholder("optional: Cameras, Cabling…", cx)),
+            unit: cx.new(move |cx| {
                 let mut f = TextInput::with_placeholder("pcs, meters, rolls… (optional)", cx);
-                if !default_unit.is_empty() { f.set_text(&default_unit, cx); }
+                if !default_unit.is_empty() {
+                    f.set_text(&default_unit, cx);
+                }
                 f
             }),
             model_number: cx.new(|cx| TextInput::with_placeholder("e.g. DS-2CD2143G2-I", cx)),
-            part_number:  cx.new(|cx| TextInput::with_placeholder("e.g. PN-001", cx)),
+            part_number: cx.new(|cx| TextInput::with_placeholder("e.g. PN-001", cx)),
             duty_percent: cx.new(|cx| TextInput::with_placeholder("e.g. 42.5", cx)),
-            end_of_life:  false,
-            replacement:  cx.new(|cx| TextInput::with_placeholder("e.g. CAM-IP-4MP", cx)),
-            initial_qty:  cx.new(|cx| TextInput::with_placeholder("e.g. 10  (optional)", cx)),
-            edit_stock:   cx.new(|cx| TextInput::with_placeholder("", cx)),
-            min_stock:    cx.new(move |cx| {
+            end_of_life: false,
+            replacement: cx.new(|cx| TextInput::with_placeholder("e.g. CAM-IP-4MP", cx)),
+            initial_qty: cx.new(|cx| TextInput::with_placeholder("e.g. 10  (optional)", cx)),
+            edit_stock: cx.new(|cx| TextInput::with_placeholder("", cx)),
+            min_stock: cx.new(move |cx| {
                 let mut f = TextInput::with_placeholder("0", cx);
-                if !default_min.is_empty() { f.set_text(&default_min, cx); }
+                if !default_min.is_empty() {
+                    f.set_text(&default_min, cx);
+                }
                 f
             }),
             description,
             supplier_dropdown,
             _supplier_sub,
+            eol_focus: cx.focus_handle(),
             cancel_focus: cx.focus_handle(),
-            save_focus:   cx.focus_handle(),
-            error:        None,
-            sku_error:    false,
-            name_error:   false,
+            save_focus: cx.focus_handle(),
+            error: None,
+            sku_error: false,
+            name_error: false,
         }
     }
 
-    pub fn new_edit(store: Entity<InventoryStore>, product: &Product, current_stock: f64, cx: &mut Context<Self>) -> Self {
-
+    pub fn new_edit(
+        store: Entity<InventoryStore>,
+        product: &Product,
+        current_stock: f64,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let name_field = cx.new(|cx| {
             let mut f = TextInput::with_placeholder("e.g. IP Camera 2MP", cx);
             f.set_text(&product.name, cx);
@@ -152,7 +198,9 @@ impl ProductForm {
         });
         let cat_field = cx.new(|cx| {
             let mut f = TextInput::with_placeholder("optional", cx);
-            if let Some(c) = &product.category { f.set_text(c, cx); }
+            if let Some(c) = &product.category {
+                f.set_text(c, cx);
+            }
             f
         });
         let unit_field = cx.new(|cx| {
@@ -168,7 +216,9 @@ impl ProductForm {
         let desc_field = cx.new(|cx| {
             let mut f = TextInput::with_placeholder("optional", cx);
             f.suppress_placeholder = true;
-            if let Some(d) = &product.description { f.set_text(d, cx); }
+            if let Some(d) = &product.description {
+                f.set_text(d, cx);
+            }
             f
         });
         let stock_field = cx.new(|cx| {
@@ -178,12 +228,16 @@ impl ProductForm {
         });
         let model_field = cx.new(|cx| {
             let mut f = TextInput::with_placeholder("e.g. DS-2CD2143G2-I", cx);
-            if let Some(m) = &product.model_number { f.set_text(m, cx); }
+            if let Some(m) = &product.model_number {
+                f.set_text(m, cx);
+            }
             f
         });
         let part_field = cx.new(|cx| {
             let mut f = TextInput::with_placeholder("e.g. PN-001", cx);
-            if let Some(p) = &product.part_number { f.set_text(p, cx); }
+            if let Some(p) = &product.part_number {
+                f.set_text(p, cx);
+            }
             f
         });
         let duty_field = cx.new(|cx| {
@@ -196,56 +250,76 @@ impl ProductForm {
         let eol_value = product.end_of_life;
         let repl_field = cx.new(|cx| {
             let mut f = TextInput::with_placeholder("e.g. CAM-IP-4MP", cx);
-            if let Some(v) = &product.replacement { f.set_text(v, cx); }
+            if let Some(v) = &product.replacement {
+                f.set_text(v, cx);
+            }
             f
         });
         let preselect = product.preferred_supplier_id;
         let (supplier_dropdown, _supplier_sub) = Self::make_supplier_dropdown(preselect, cx);
         Self {
-            mode:           FormMode::Edit { product_id: product.id },
+            mode: FormMode::Edit {
+                product_id: product.id,
+            },
             store,
-            sku_display:    product.sku.clone(),
+            sku_display: product.sku.clone(),
             original_stock: Some(current_stock),
-            sku:          cx.new(|cx| TextInput::with_placeholder("", cx)),
-            name:         name_field,
-            category:     cat_field,
-            unit:         unit_field,
+            sku: cx.new(|cx| TextInput::with_placeholder("", cx)),
+            name: name_field,
+            category: cat_field,
+            unit: unit_field,
             model_number: model_field,
-            part_number:  part_field,
+            part_number: part_field,
             duty_percent: duty_field,
-            end_of_life:  eol_value,
-            replacement:  repl_field,
-            initial_qty:  cx.new(|cx| TextInput::with_placeholder("", cx)),
-            edit_stock:   stock_field,
-            min_stock:    min_field,
-            description:  desc_field,
+            end_of_life: eol_value,
+            replacement: repl_field,
+            initial_qty: cx.new(|cx| TextInput::with_placeholder("", cx)),
+            edit_stock: stock_field,
+            min_stock: min_field,
+            description: desc_field,
             supplier_dropdown,
             _supplier_sub,
+            eol_focus: cx.focus_handle(),
             cancel_focus: cx.focus_handle(),
-            save_focus:   cx.focus_handle(),
-            error:        None,
-            sku_error:    false,
-            name_error:   false,
+            save_focus: cx.focus_handle(),
+            error: None,
+            sku_error: false,
+            name_error: false,
         }
     }
 
     fn submit(&mut self, cx: &mut Context<Self>) {
-        let name      = self.name.read(cx).text().to_string();
-        let unit      = self.unit.read(cx).text().to_string();
-        let min_s     = self.min_stock.read(cx).text().to_string();
-        let category  = self.category.read(cx).text().trim().to_string();
-        let cat_opt   = if category.is_empty() { None } else { Some(category) };
-        let desc      = self.description.read(cx).text().trim().to_string();
-        let desc_opt  = if desc.is_empty() { None } else { Some(desc) };
-        let model     = self.model_number.read(cx).text().trim().to_string();
+        let name = self.name.read(cx).text().to_string();
+        let unit = self.unit.read(cx).text().to_string();
+        let min_s = self.min_stock.read(cx).text().to_string();
+        let category = self.category.read(cx).text().trim().to_string();
+        let cat_opt = if category.is_empty() {
+            None
+        } else {
+            Some(category)
+        };
+        let desc = self.description.read(cx).text().trim().to_string();
+        let desc_opt = if desc.is_empty() { None } else { Some(desc) };
+        let model = self.model_number.read(cx).text().trim().to_string();
         let model_opt = if model.is_empty() { None } else { Some(model) };
-        let part      = self.part_number.read(cx).text().trim().to_string();
-        let part_opt  = if part.is_empty() { None } else { Some(part) };
-        let duty: f64 = self.duty_percent.read(cx).text().trim().parse::<f64>().unwrap_or(0.0).max(0.0);
-        let eol       = self.end_of_life;
-        let repl      = self.replacement.read(cx).text().trim().to_string();
-        let repl_opt  = if repl.is_empty() { None } else { Some(repl) };
-        let sup_id    = self.supplier_dropdown.read(cx).selected_id.filter(|&id| id > 0);
+        let part = self.part_number.read(cx).text().trim().to_string();
+        let part_opt = if part.is_empty() { None } else { Some(part) };
+        let duty: f64 = self
+            .duty_percent
+            .read(cx)
+            .text()
+            .trim()
+            .parse::<f64>()
+            .unwrap_or(0.0)
+            .max(0.0);
+        let eol = self.end_of_life;
+        let repl = self.replacement.read(cx).text().trim().to_string();
+        let repl_opt = if repl.is_empty() { None } else { Some(repl) };
+        let sup_id = self
+            .supplier_dropdown
+            .read(cx)
+            .selected_id
+            .filter(|&id| id > 0);
 
         self.name_error = name.trim().is_empty();
 
@@ -253,28 +327,50 @@ impl ProductForm {
             FormMode::Create => {
                 let sku = self.sku.read(cx).text().to_string();
                 self.sku_error = sku.trim().is_empty();
-                let qty_s   = self.initial_qty.read(cx).text().trim().to_string();
+                let qty_s = self.initial_qty.read(cx).text().trim().to_string();
                 let init_qty: Option<f64> = if qty_s.is_empty() {
                     None
                 } else {
                     match qty_s.parse::<f64>() {
                         Ok(q) if q > 0.0 => Some(q),
-                        Ok(_) => { self.error = Some("Initial quantity must be > 0.".to_string()); cx.notify(); return; }
-                        Err(_) => { self.error = Some("Initial quantity must be a number.".to_string()); cx.notify(); return; }
+                        Ok(_) => {
+                            self.error = Some("Initial quantity must be > 0.".to_string());
+                            cx.notify();
+                            return;
+                        }
+                        Err(_) => {
+                            self.error = Some("Initial quantity must be a number.".to_string());
+                            cx.notify();
+                            return;
+                        }
                     }
                 };
                 match validate_product(&sku, &name, &unit, &min_s) {
-                    Err(msg) => { self.error = Some(msg); cx.notify(); }
+                    Err(msg) => {
+                        self.error = Some(msg);
+                        cx.notify();
+                    }
                     Ok((sku, name, unit, min)) => {
-                        let db    = InventoryDb::global(&**cx);
+                        let db = InventoryDb::global(&**cx);
                         let store = self.store.clone();
                         cx.spawn(async move |this, cx| {
-                            let insert_result = db.insert_product(
-                                &sku, &name, cat_opt.as_deref(), &unit, min,
-                                desc_opt.as_deref(), None, sup_id,
-                                model_opt.as_deref(), part_opt.as_deref(), duty,
-                                eol, repl_opt.as_deref(),
-                            ).await;
+                            let insert_result = db
+                                .insert_product(
+                                    &sku,
+                                    &name,
+                                    cat_opt.as_deref(),
+                                    &unit,
+                                    min,
+                                    desc_opt.as_deref(),
+                                    None,
+                                    sup_id,
+                                    model_opt.as_deref(),
+                                    part_opt.as_deref(),
+                                    duty,
+                                    eol,
+                                    repl_opt.as_deref(),
+                                )
+                                .await;
                             match insert_result {
                                 Err(e) => {
                                     tracing::error!("insert_product failed: {e:?}");
@@ -283,23 +379,38 @@ impl ProductForm {
                                     } else {
                                         format!("Save failed: {e}")
                                     };
-                                    let _ = this.update(cx, |form, cx| { form.error = Some(msg); cx.notify(); });
+                                    let _ = this.update(cx, |form, cx| {
+                                        form.error = Some(msg);
+                                        cx.notify();
+                                    });
                                     return Ok(());
                                 }
                                 Ok(new_id) => {
                                     if let Some(qty) = init_qty {
-                                        if let Err(e) = db.insert_stock_entry(
-                                            new_id, qty, 0.0, None,
-                                            AcquisitionType::Restock, None, None, None,
-                                        ).await {
-                                            tracing::error!("insert initial stock entry failed: {e:?}");
+                                        if let Err(e) = db
+                                            .insert_stock_entry(
+                                                new_id,
+                                                qty,
+                                                0.0,
+                                                None,
+                                                AcquisitionType::Restock,
+                                                None,
+                                                None,
+                                                None,
+                                            )
+                                            .await
+                                        {
+                                            tracing::error!(
+                                                "insert initial stock entry failed: {e:?}"
+                                            );
                                         }
                                     }
                                 }
                             }
                             let _ = store.update(cx, |s, cx| s.load_products(cx));
                             this.update(cx, |_, cx| cx.emit(ProductFormEvent::Submitted))
-                        }).detach();
+                        })
+                        .detach();
                     }
                 }
             }
@@ -308,22 +419,43 @@ impl ProductForm {
                 let stock_s = self.edit_stock.read(cx).text().trim().to_string();
                 let new_stock: f64 = match stock_s.parse() {
                     Ok(v) if v >= 0.0 => v,
-                    Ok(_) => { self.error = Some("Stock must be ≥ 0.".to_string()); cx.notify(); return; }
-                    Err(_) => { self.error = Some("Stock must be a number.".to_string()); cx.notify(); return; }
+                    Ok(_) => {
+                        self.error = Some("Stock must be ≥ 0.".to_string());
+                        cx.notify();
+                        return;
+                    }
+                    Err(_) => {
+                        self.error = Some("Stock must be a number.".to_string());
+                        cx.notify();
+                        return;
+                    }
                 };
                 let delta = new_stock - self.original_stock.unwrap_or(0.0);
                 match validate_product_fields(&name, &unit, &min_s) {
-                    Err(msg) => { self.error = Some(msg); cx.notify(); }
+                    Err(msg) => {
+                        self.error = Some(msg);
+                        cx.notify();
+                    }
                     Ok((name, unit, min)) => {
-                        let db    = InventoryDb::global(&**cx);
+                        let db = InventoryDb::global(&**cx);
                         let store = self.store.clone();
                         cx.spawn(async move |this, cx| {
-                            let update_result = db.update_product(
-                                pid, &name, cat_opt.as_deref(), &unit, min,
-                                desc_opt.as_deref(), sup_id,
-                                model_opt.as_deref(), part_opt.as_deref(), duty,
-                                eol, repl_opt.as_deref(),
-                            ).await;
+                            let update_result = db
+                                .update_product(
+                                    pid,
+                                    &name,
+                                    cat_opt.as_deref(),
+                                    &unit,
+                                    min,
+                                    desc_opt.as_deref(),
+                                    sup_id,
+                                    model_opt.as_deref(),
+                                    part_opt.as_deref(),
+                                    duty,
+                                    eol,
+                                    repl_opt.as_deref(),
+                                )
+                                .await;
                             if let Err(e) = update_result {
                                 tracing::error!("update_product failed: {e:?}");
                                 let _ = this.update(cx, |form, cx| {
@@ -333,16 +465,26 @@ impl ProductForm {
                                 return Ok(());
                             }
                             if delta.abs() > f64::EPSILON {
-                                if let Err(e) = db.insert_stock_entry(
-                                    pid, delta, 0.0, None,
-                                    AcquisitionType::Adjustment, None, Some("manual adjustment"), None,
-                                ).await {
+                                if let Err(e) = db
+                                    .insert_stock_entry(
+                                        pid,
+                                        delta,
+                                        0.0,
+                                        None,
+                                        AcquisitionType::Adjustment,
+                                        None,
+                                        Some("manual adjustment"),
+                                        None,
+                                    )
+                                    .await
+                                {
                                     tracing::error!("stock adjustment failed: {e:?}");
                                 }
                             }
                             let _ = store.update(cx, |s, cx| s.load_products(cx));
                             this.update(cx, |_, cx| cx.emit(ProductFormEvent::Submitted))
-                        }).detach();
+                        })
+                        .detach();
                     }
                 }
             }
@@ -351,32 +493,38 @@ impl ProductForm {
 }
 
 impl Focusable for ProductForm {
-    fn focus_handle(&self, cx: &gpui::App) -> FocusHandle { self.sku.read(cx).focus_handle.clone() }
+    fn focus_handle(&self, cx: &gpui::App) -> FocusHandle {
+        self.sku.read(cx).focus_handle.clone()
+    }
 }
 
 impl Render for ProductForm {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let c      = cx.global::<ThemeHandle>().0.clone();
+        let c = cx.global::<ThemeHandle>().0.clone();
         let is_edit = matches!(self.mode, FormMode::Edit { .. });
 
-        let name_f      = self.name.read(cx).focus_handle.is_focused(window);
-        let cat_f       = self.category.read(cx).focus_handle.is_focused(window);
-        let unit_f      = self.unit.read(cx).focus_handle.is_focused(window);
-        let model_f     = self.model_number.read(cx).focus_handle.is_focused(window);
-        let part_f      = self.part_number.read(cx).focus_handle.is_focused(window);
-        let duty_f      = self.duty_percent.read(cx).focus_handle.is_focused(window);
-        let repl_f      = self.replacement.read(cx).focus_handle.is_focused(window);
+        let name_f = self.name.read(cx).focus_handle.is_focused(window);
+        let cat_f = self.category.read(cx).focus_handle.is_focused(window);
+        let unit_f = self.unit.read(cx).focus_handle.is_focused(window);
+        let model_f = self.model_number.read(cx).focus_handle.is_focused(window);
+        let part_f = self.part_number.read(cx).focus_handle.is_focused(window);
+        let duty_f = self.duty_percent.read(cx).focus_handle.is_focused(window);
+        let repl_f = self.replacement.read(cx).focus_handle.is_focused(window);
         let end_of_life = self.end_of_life;
-        let qty_f       = self.initial_qty.read(cx).focus_handle.is_focused(window);
-        let stock_f     = self.edit_stock.read(cx).focus_handle.is_focused(window);
-        let min_f       = self.min_stock.read(cx).focus_handle.is_focused(window);
-        let desc_f      = self.description.read(cx).focus_handle.is_focused(window);
-        let cancel_f    = self.cancel_focus.is_focused(window);
-        let save_f      = self.save_focus.is_focused(window);
-        let has_desc    = !self.description.read(cx).content.is_empty();
+        let qty_f = self.initial_qty.read(cx).focus_handle.is_focused(window);
+        let stock_f = self.edit_stock.read(cx).focus_handle.is_focused(window);
+        let min_f = self.min_stock.read(cx).focus_handle.is_focused(window);
+        let desc_f = self.description.read(cx).focus_handle.is_focused(window);
+        let eol_f = self.eol_focus.is_focused(window);
+        let cancel_f = self.cancel_focus.is_focused(window);
+        let save_f = self.save_focus.is_focused(window);
+        let has_desc = !self.description.read(cx).content.is_empty();
 
         let (title, save_label) = if is_edit {
-            (format!("Edit Product — {}", self.sku_display), "Update Product")
+            (
+                format!("Edit Product — {}", self.sku_display),
+                "Update Product",
+            )
         } else {
             ("New Product".to_string(), "Save Product")
         };
@@ -398,6 +546,10 @@ impl Render for ProductForm {
                 }
             }))
             .on_action(cx.listener(move |this, _: &TabField, window, cx| {
+                // Base order mirrors visual top-to-bottom render order.
+                // EOL checkbox sits between duty % and replacement in both modes.
+                // Create: sku(0) name cat unit model part duty eol replacement initial_qty min desc supplier cancel save
+                // Edit:   stock(0) name cat unit model part duty eol replacement min desc supplier cancel save
                 let mut handles = vec![
                     this.name.read(cx).focus_handle.clone(),
                     this.category.read(cx).focus_handle.clone(),
@@ -405,6 +557,7 @@ impl Render for ProductForm {
                     this.model_number.read(cx).focus_handle.clone(),
                     this.part_number.read(cx).focus_handle.clone(),
                     this.duty_percent.read(cx).focus_handle.clone(),
+                    this.eol_focus.clone(),
                     this.replacement.read(cx).focus_handle.clone(),
                     this.min_stock.read(cx).focus_handle.clone(),
                     this.description.read(cx).focus_handle.clone(),
@@ -414,7 +567,8 @@ impl Render for ProductForm {
                 ];
                 if !is_edit {
                     handles.insert(0, this.sku.read(cx).focus_handle.clone());
-                    handles.insert(7, this.initial_qty.read(cx).focus_handle.clone());
+                    // initial_qty renders after replacement (index 8 post-sku-insert)
+                    handles.insert(9, this.initial_qty.read(cx).focus_handle.clone());
                 } else {
                     handles.insert(0, this.edit_stock.read(cx).focus_handle.clone());
                 }
@@ -430,6 +584,7 @@ impl Render for ProductForm {
                     this.model_number.read(cx).focus_handle.clone(),
                     this.part_number.read(cx).focus_handle.clone(),
                     this.duty_percent.read(cx).focus_handle.clone(),
+                    this.eol_focus.clone(),
                     this.replacement.read(cx).focus_handle.clone(),
                     this.min_stock.read(cx).focus_handle.clone(),
                     this.description.read(cx).focus_handle.clone(),
@@ -439,7 +594,7 @@ impl Render for ProductForm {
                 ];
                 if !is_edit {
                     handles.insert(0, this.sku.read(cx).focus_handle.clone());
-                    handles.insert(7, this.initial_qty.read(cx).focus_handle.clone());
+                    handles.insert(9, this.initial_qty.read(cx).focus_handle.clone());
                 } else {
                     handles.insert(0, this.edit_stock.read(cx).focus_handle.clone());
                 }
@@ -542,15 +697,24 @@ impl Render for ProductForm {
                                     .child(
                                         div()
                                             .id("eol-checkbox")
+                                            .track_focus(&self.eol_focus)
                                             .w(px(18.)).h(px(18.))
                                             .rounded(px(3.))
                                             .border_1().border_color(rgb(c.surface_active))
+                                            .when(eol_f, |d| d.border_2().border_color(rgb(c.surface_hover)))
                                             .bg(rgb(if end_of_life { c.surface_active } else { c.canvas_bg }))
                                             .cursor_pointer()
                                             .flex().items_center().justify_center()
-                                            .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
+                                            .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, cx| {
                                                 this.end_of_life = !this.end_of_life;
+                                                window.focus(&this.eol_focus, cx);
                                                 cx.notify();
+                                            }))
+                                            .on_key_down(cx.listener(|this, e: &gpui::KeyDownEvent, _, cx| {
+                                                if e.keystroke.key == " " {
+                                                    this.end_of_life = !this.end_of_life;
+                                                    cx.notify();
+                                                }
                                             }))
                                             .when(end_of_life, |d| d.child(
                                                 div().text_size(rems(0.769)).text_color(rgb(c.text_default)).child("✓")
@@ -662,9 +826,24 @@ impl Render for ProductForm {
 #[cfg(test)]
 mod tests {
     use super::validate_product;
-    #[test] fn rejects_empty_sku()    { assert!(validate_product("", "Camera", "pcs", "5").is_err()); }
-    #[test] fn rejects_empty_name()  { assert!(validate_product("CAM-001", "", "pcs", "5").is_err()); }
-    #[test] fn accepts_empty_unit()  { assert!(validate_product("CAM-001", "Camera", "", "5").is_ok()); }
-    #[test] fn accepts_zero_min()    { assert!(validate_product("CAM-001", "Camera", "pcs", "0").is_ok()); }
-    #[test] fn accepts_valid()       { assert!(validate_product("CAM-001", "IP Camera", "pcs", "5.0").is_ok()); }
+    #[test]
+    fn rejects_empty_sku() {
+        assert!(validate_product("", "Camera", "pcs", "5").is_err());
+    }
+    #[test]
+    fn rejects_empty_name() {
+        assert!(validate_product("CAM-001", "", "pcs", "5").is_err());
+    }
+    #[test]
+    fn accepts_empty_unit() {
+        assert!(validate_product("CAM-001", "Camera", "", "5").is_ok());
+    }
+    #[test]
+    fn accepts_zero_min() {
+        assert!(validate_product("CAM-001", "Camera", "pcs", "0").is_ok());
+    }
+    #[test]
+    fn accepts_valid() {
+        assert!(validate_product("CAM-001", "IP Camera", "pcs", "5.0").is_ok());
+    }
 }
