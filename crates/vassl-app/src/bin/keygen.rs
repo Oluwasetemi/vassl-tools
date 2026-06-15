@@ -22,9 +22,9 @@ fn main() {
 
     let edition = match args[1].as_str() {
         "alpha" => license::Edition::Alpha,
-        "beta"  => license::Edition::Beta,
-        "pro"   => license::Edition::Pro,
-        other   => {
+        "beta" => license::Edition::Beta,
+        "pro" => license::Edition::Pro,
+        other => {
             eprintln!("Unknown edition '{other}'. Use: alpha | beta | pro");
             std::process::exit(1);
         }
@@ -32,8 +32,8 @@ fn main() {
 
     let expiry = match args[2].as_str() {
         "never" => None,
-        date    => match chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d") {
-            Ok(d)  => Some(d),
+        date => match chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d") {
+            Ok(d) => Some(d),
             Err(_) => {
                 eprintln!("Invalid date '{date}'. Use YYYY-MM-DD or 'never'.");
                 std::process::exit(1);

@@ -1,22 +1,27 @@
-use gpui::{Context, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Window,
-           div, prelude::*, px, rems, rgb, rgba, SharedString};
-use vassl_ui::{TextInput, ThemeHandle, text_field};
+use gpui::{
+    div, prelude::*, px, rems, rgb, rgba, Context, EventEmitter, FocusHandle, Focusable,
+    IntoElement, Render, SharedString, Window,
+};
+use vassl_ui::{text_field, TextInput, ThemeHandle};
 
-pub enum LicenseDialogEvent { Validated }
+pub enum LicenseDialogEvent {
+    Validated,
+}
 
 impl EventEmitter<LicenseDialogEvent> for LicenseDialog {}
 
 pub struct LicenseDialog {
-    key_input:    gpui::Entity<TextInput>,
-    error:        Option<String>,
+    key_input: gpui::Entity<TextInput>,
+    error: Option<String>,
     focus_handle: FocusHandle,
 }
 
 impl LicenseDialog {
     pub fn new(cx: &mut Context<Self>) -> Self {
         Self {
-            key_input:    cx.new(|cx| TextInput::with_placeholder("VASSL-XXXXX-XXXXX-XXXXX-XXXXX", cx)),
-            error:        None,
+            key_input: cx
+                .new(|cx| TextInput::with_placeholder("VASSL-XXXXX-XXXXX-XXXXX-XXXXX", cx)),
+            error: None,
             focus_handle: cx.focus_handle(),
         }
     }
@@ -28,13 +33,16 @@ impl LicenseDialog {
                 let db = vassl_db::AppDatabase::global(&**cx).clone();
                 let key_to_save = raw.trim().to_string();
                 cx.spawn(async move |this, cx| {
-                    let _ = db.write(move |conn| -> anyhow::Result<()> {
-                        vassl_db::shared::set_setting(conn, "license.key", &key_to_save)?;
-                        Ok(())
-                    }).await;
+                    let _ = db
+                        .write(move |conn| -> anyhow::Result<()> {
+                            vassl_db::shared::set_setting(conn, "license.key", &key_to_save)?;
+                            Ok(())
+                        })
+                        .await;
                     let _ = this.update(cx, |_, cx| cx.emit(LicenseDialogEvent::Validated));
                     Ok::<(), anyhow::Error>(())
-                }).detach();
+                })
+                .detach();
             }
             Err(e) => {
                 self.error = Some(e.to_string());
@@ -45,7 +53,9 @@ impl LicenseDialog {
 }
 
 impl Focusable for LicenseDialog {
-    fn focus_handle(&self, _: &gpui::App) -> FocusHandle { self.focus_handle.clone() }
+    fn focus_handle(&self, _: &gpui::App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
 }
 
 impl Render for LicenseDialog {

@@ -1,4 +1,4 @@
-use gpui::{Context, Entity, IntoElement, Render, Window, div, prelude::*, px, rems, rgb};
+use gpui::{div, prelude::*, px, rems, rgb, Context, Entity, IntoElement, Render, Window};
 use vassl_ui::ThemeHandle;
 
 use crate::store::{InventoryStore, StockStatus};
@@ -19,15 +19,19 @@ impl Render for RestockAlerts {
         // Extract owned data — borrow ends after this block
         let items: Vec<(String, f64, f64, String, bool)> = {
             let store = self.store.read(cx);
-            store.products.iter()
+            store
+                .products
+                .iter()
                 .filter(|p| matches!(p.status, StockStatus::Critical | StockStatus::Low))
-                .map(|p| (
-                    p.product.name.clone(),
-                    p.current_stock,
-                    p.product.min_stock_level,
-                    p.product.unit.clone(),
-                    matches!(p.status, StockStatus::Critical),
-                ))
+                .map(|p| {
+                    (
+                        p.product.name.clone(),
+                        p.current_stock,
+                        p.product.min_stock_level,
+                        p.product.unit.clone(),
+                        matches!(p.status, StockStatus::Critical),
+                    )
+                })
                 .collect()
         };
 
@@ -42,27 +46,45 @@ impl Render for RestockAlerts {
                 .into_any_element();
         }
 
-        let rows: Vec<_> = items.iter().map(|(name, current, min, unit, is_critical)| {
-            let badge = if *is_critical { c.status_red } else { c.status_amber };
+        let rows: Vec<_> = items
+            .iter()
+            .map(|(name, current, min, unit, is_critical)| {
+                let badge = if *is_critical {
+                    c.status_red
+                } else {
+                    c.status_amber
+                };
 
-            div()
-                .flex()
-                .flex_row()
-                .items_center()
-                .w_full()
-                .px(px(12.)).py(px(8.))
-                .child(
-                    div().w(px(8.)).h(px(8.)).rounded_full().bg(rgb(badge)).mr(px(8.))
-                )
-                .child(
-                    div().flex_1().text_size(rems(1.)).text_color(rgb(c.text_default))
-                        .child(name.clone())
-                )
-                .child(
-                    div().text_size(rems(0.923)).text_color(rgb(badge))
-                        .child(format!("{current:.1} / min {min:.1} {unit}"))
-                )
-        }).collect();
+                div()
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .w_full()
+                    .px(px(12.))
+                    .py(px(8.))
+                    .child(
+                        div()
+                            .w(px(8.))
+                            .h(px(8.))
+                            .rounded_full()
+                            .bg(rgb(badge))
+                            .mr(px(8.)),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .text_size(rems(1.))
+                            .text_color(rgb(c.text_default))
+                            .child(name.clone()),
+                    )
+                    .child(
+                        div()
+                            .text_size(rems(0.923))
+                            .text_color(rgb(badge))
+                            .child(format!("{current:.1} / min {min:.1} {unit}")),
+                    )
+            })
+            .collect();
 
         div()
             .flex_1()
@@ -117,10 +139,14 @@ mod tests {
             make_pws(4, 0.0, StockStatus::NoAlert),
         ];
 
-        let alert_count = products.iter()
+        let alert_count = products
+            .iter()
             .filter(|p| matches!(p.status, StockStatus::Critical | StockStatus::Low))
             .count();
 
-        assert_eq!(alert_count, 2, "only Critical and Low should appear in alerts");
+        assert_eq!(
+            alert_count, 2,
+            "only Critical and Low should appear in alerts"
+        );
     }
 }

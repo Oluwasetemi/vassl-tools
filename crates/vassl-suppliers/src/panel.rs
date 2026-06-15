@@ -1,18 +1,20 @@
-use gpui::{Context, Entity, Focusable, IntoElement, MouseButton, MouseDownEvent, Render, Subscription, Window,
-           div, prelude::*, px, rems, rgb};
-use vassl_ui::{AppSettings, NewRecord, TextInput, ThemeHandle, text_field, tooltip_keyed};
+use gpui::{
+    div, prelude::*, px, rems, rgb, Context, Entity, Focusable, IntoElement, MouseButton,
+    MouseDownEvent, Render, Subscription, Window,
+};
+use vassl_ui::{text_field, tooltip_keyed, AppSettings, NewRecord, TextInput, ThemeHandle};
 
 use crate::store::SupplierStore;
 use crate::supplier_form::{SupplierForm, SupplierFormEvent};
 use crate::supplier_list::SupplierList;
 
 pub struct SupplierPanel {
-    store:        Entity<SupplierStore>,
-    list:         Entity<SupplierList>,
-    form:         Option<Entity<SupplierForm>>,
-    _form_sub:    Option<Subscription>,
+    store: Entity<SupplierStore>,
+    list: Entity<SupplierList>,
+    form: Option<Entity<SupplierForm>>,
+    _form_sub: Option<Subscription>,
     search_input: Entity<TextInput>,
-    detail_open:  bool,
+    detail_open: bool,
 }
 
 impl SupplierPanel {
@@ -24,7 +26,8 @@ impl SupplierPanel {
         cx.observe(&search_input, |this, input, cx| {
             let q = input.read(cx).text().to_string();
             this.store.update(cx, |s, cx| s.set_search_query(q, cx));
-        }).detach();
+        })
+        .detach();
 
         cx.observe(&store, |this, _, cx| {
             if this.store.read(cx).detail_requested {
@@ -32,29 +35,51 @@ impl SupplierPanel {
                 this.store.update(cx, |s, _| s.detail_requested = false);
                 cx.notify();
             }
-        }).detach();
+        })
+        .detach();
 
-        Self { store, list, form: None, _form_sub: None, search_input, detail_open: false }
+        Self {
+            store,
+            list,
+            form: None,
+            _form_sub: None,
+            search_input,
+            detail_open: false,
+        }
     }
 
-    pub fn show_detail(&mut self, cx: &mut Context<Self>) { self.detail_open = true; cx.notify(); }
-    pub fn hide_detail(&mut self, cx: &mut Context<Self>) { self.detail_open = false; cx.notify(); }
+    pub fn show_detail(&mut self, cx: &mut Context<Self>) {
+        self.detail_open = true;
+        cx.notify();
+    }
+    pub fn hide_detail(&mut self, cx: &mut Context<Self>) {
+        self.detail_open = false;
+        cx.notify();
+    }
 
     pub fn select_next(&mut self, cx: &mut Context<Self>) {
         if let Some(idx) = self.store.update(cx, |s, cx| s.select_next(cx)) {
-            self.list.update(cx, |l, _| l.scroll_handle.scroll_to_item(idx, gpui::ScrollStrategy::Top));
+            self.list.update(cx, |l, _| {
+                l.scroll_handle
+                    .scroll_to_item(idx, gpui::ScrollStrategy::Top)
+            });
         }
     }
 
     pub fn select_prev(&mut self, cx: &mut Context<Self>) {
         if let Some(idx) = self.store.update(cx, |s, cx| s.select_prev(cx)) {
-            self.list.update(cx, |l, _| l.scroll_handle.scroll_to_item(idx, gpui::ScrollStrategy::Top));
+            self.list.update(cx, |l, _| {
+                l.scroll_handle
+                    .scroll_to_item(idx, gpui::ScrollStrategy::Top)
+            });
         }
     }
 
     pub fn create_new_form(&mut self, cx: &mut Context<Self>) -> Option<gpui::FocusHandle> {
-        if self.form.is_some() { return None; }
-        let form  = cx.new(|cx| SupplierForm::new(self.store.clone(), cx));
+        if self.form.is_some() {
+            return None;
+        }
+        let form = cx.new(|cx| SupplierForm::new(self.store.clone(), cx));
         let fh = form.read(cx).focus_handle(cx);
         self.wire_form_sub(form, cx);
         Some(fh)
@@ -62,35 +87,43 @@ impl SupplierPanel {
 
     pub fn open_new_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(fh) = self.create_new_form(cx) {
-            window.defer(cx, move |window, cx| { window.focus(&fh, cx); });
+            window.defer(cx, move |window, cx| {
+                window.focus(&fh, cx);
+            });
         }
     }
 
     fn open_edit_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.form.is_some() { return; }
+        if self.form.is_some() {
+            return;
+        }
         let supplier = {
             let store = self.store.read(cx);
-            let Some(id) = store.selected_supplier_id else { return; };
+            let Some(id) = store.selected_supplier_id else {
+                return;
+            };
             store.suppliers.iter().find(|s| s.id == id).cloned()
         };
-        let Some(supplier) = supplier else { return; };
-        let form  = cx.new(|cx| SupplierForm::edit(self.store.clone(), &supplier, cx));
+        let Some(supplier) = supplier else {
+            return;
+        };
+        let form = cx.new(|cx| SupplierForm::edit(self.store.clone(), &supplier, cx));
         let fh = form.read(cx).focus_handle(cx);
         self.wire_form_sub(form, cx);
-        window.defer(cx, move |window, cx| { window.focus(&fh, cx); });
+        window.defer(cx, move |window, cx| {
+            window.focus(&fh, cx);
+        });
     }
 
     fn wire_form_sub(&mut self, form: gpui::Entity<SupplierForm>, cx: &mut Context<Self>) {
-        let sub = cx.subscribe(&form, |this, _form, ev: &SupplierFormEvent, cx| {
-            match ev {
-                SupplierFormEvent::Submitted | SupplierFormEvent::Cancelled => {
-                    this._form_sub = None;
-                    this.form      = None;
-                    cx.notify();
-                }
+        let sub = cx.subscribe(&form, |this, _form, ev: &SupplierFormEvent, cx| match ev {
+            SupplierFormEvent::Submitted | SupplierFormEvent::Cancelled => {
+                this._form_sub = None;
+                this.form = None;
+                cx.notify();
             }
         });
-        self.form      = Some(form);
+        self.form = Some(form);
         self._form_sub = Some(sub);
         cx.notify();
     }
@@ -98,7 +131,7 @@ impl SupplierPanel {
 
 impl Render for SupplierPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let c             = cx.global::<ThemeHandle>().0.clone();
+        let c = cx.global::<ThemeHandle>().0.clone();
         let has_selection = self.store.read(cx).selected_supplier_id.is_some();
 
         #[cfg(target_os = "macos")]
@@ -265,21 +298,17 @@ impl Render for SupplierPanel {
             let viewport = window.viewport_size();
             const MENU_W: f32 = 220.0;
             const MENU_H: f32 = 120.0;
-            let menu_x = target.x.min((viewport.width.as_f32()  - MENU_W).max(0.0));
+            let menu_x = target.x.min((viewport.width.as_f32() - MENU_W).max(0.0));
             let menu_y = target.y.min((viewport.height.as_f32() - MENU_H).max(0.0));
             let sid = target.supplier_id;
 
             root = root
-                .child(
-                    div()
-                        .absolute().inset_0()
-                        .on_mouse_down(
-                            MouseButton::Left,
-                            cx.listener(|this, _: &MouseDownEvent, _: &mut Window, cx| {
-                                this.store.update(cx, |s, cx| s.clear_context_menu(cx));
-                            }),
-                        )
-                )
+                .child(div().absolute().inset_0().on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|this, _: &MouseDownEvent, _: &mut Window, cx| {
+                        this.store.update(cx, |s, cx| s.clear_context_menu(cx));
+                    }),
+                ))
                 .child(
                     div()
                         .absolute()
@@ -291,17 +320,20 @@ impl Render for SupplierPanel {
                         .shadow_md()
                         .child(
                             div()
-                                .px(px(12.)).pt(px(10.)).pb(px(4.))
+                                .px(px(12.))
+                                .pt(px(10.))
+                                .pb(px(4.))
                                 .text_size(rems(1.))
                                 .text_color(rgb(c.text_default))
                                 .font_weight(gpui::FontWeight::BOLD)
-                                .child(target.supplier_name.clone())
+                                .child(target.supplier_name.clone()),
                         )
                         .child({
                             let hover_bg = rgb(c.surface_hover);
                             div()
                                 .id("ctx-sup-view-details")
-                                .px(px(12.)).py(px(8.))
+                                .px(px(12.))
+                                .py(px(8.))
                                 .cursor_pointer()
                                 .hover(move |s| s.bg(hover_bg))
                                 .text_size(rems(1.))
@@ -322,25 +354,28 @@ impl Render for SupplierPanel {
                             let hover_bg = rgb(c.surface_hover);
                             menu.child(div().h(px(1.)).bg(rgb(c.surface_default)))
                                 .child(
-                                    div()
-                                        .id("ctx-sup-delete")
-                                        .px(px(12.)).py(px(8.))
-                                        .cursor_pointer()
-                                        .hover(move |s| s.bg(hover_bg))
-                                        .text_size(rems(1.))
-                                        .text_color(rgb(c.status_red))
-                                        .child("Delete Supplier")
-                                        .on_mouse_down(
-                                            MouseButton::Left,
-                                            cx.listener(move |this, _: &MouseDownEvent, _: &mut Window, cx| {
+                                div()
+                                    .id("ctx-sup-delete")
+                                    .px(px(12.))
+                                    .py(px(8.))
+                                    .cursor_pointer()
+                                    .hover(move |s| s.bg(hover_bg))
+                                    .text_size(rems(1.))
+                                    .text_color(rgb(c.status_red))
+                                    .child("Delete Supplier")
+                                    .on_mouse_down(
+                                        MouseButton::Left,
+                                        cx.listener(
+                                            move |this, _: &MouseDownEvent, _: &mut Window, cx| {
                                                 this.store.update(cx, |s, cx| {
                                                     s.clear_context_menu(cx);
                                                     s.delete_supplier(sid, cx);
                                                 });
-                                            }),
-                                        )
-                                )
-                        })
+                                            },
+                                        ),
+                                    ),
+                            )
+                        }),
                 );
         }
 
@@ -348,16 +383,29 @@ impl Render for SupplierPanel {
     }
 }
 
-fn sup_detail_field(label: impl Into<String>, value: impl Into<String>, c: &vassl_ui::ThemeColors) -> impl gpui::IntoElement {
+fn sup_detail_field(
+    label: impl Into<String>,
+    value: impl Into<String>,
+    c: &vassl_ui::ThemeColors,
+) -> impl gpui::IntoElement {
     div()
-        .flex().flex_col().px(px(12.)).py(px(8.))
-        .border_b_1().border_color(rgb(c.surface_default))
+        .flex()
+        .flex_col()
+        .px(px(12.))
+        .py(px(8.))
+        .border_b_1()
+        .border_color(rgb(c.surface_default))
         .child(
-            div().text_size(rems(0.769)).text_color(rgb(c.text_muted)).mb(px(2.))
-                .child(label.into())
+            div()
+                .text_size(rems(0.769))
+                .text_color(rgb(c.text_muted))
+                .mb(px(2.))
+                .child(label.into()),
         )
         .child(
-            div().text_size(rems(0.923)).text_color(rgb(c.text_default))
-                .child(value.into())
+            div()
+                .text_size(rems(0.923))
+                .text_color(rgb(c.text_default))
+                .child(value.into()),
         )
 }

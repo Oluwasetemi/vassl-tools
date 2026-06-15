@@ -1,18 +1,21 @@
 #![allow(dead_code)]
 
-use gpui::{Context, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Window,
-           div, prelude::*, px, rems, rgb, rgba, SharedString};
-use vassl_ui::{TextInput, ThemeHandle, text_field};
-
+use gpui::{
+    div, prelude::*, px, rems, rgb, rgba, Context, EventEmitter, FocusHandle, Focusable,
+    IntoElement, Render, SharedString, Window,
+};
+use vassl_ui::{text_field, TextInput, ThemeHandle};
 
 #[derive(Debug)]
-pub enum FirstRunEvent { Saved }
+pub enum FirstRunEvent {
+    Saved,
+}
 
 impl EventEmitter<FirstRunEvent> for FirstRunPrompt {}
 
 pub struct FirstRunPrompt {
-    name_input:   gpui::Entity<TextInput>,
-    error:        Option<String>,
+    name_input: gpui::Entity<TextInput>,
+    error: Option<String>,
     auto_focused: bool,
     focus_handle: FocusHandle,
 }
@@ -29,8 +32,8 @@ fn validate_name(name: &str) -> Result<String, String> {
 impl FirstRunPrompt {
     pub fn new(cx: &mut Context<Self>) -> Self {
         Self {
-            name_input:   cx.new(|cx| TextInput::with_placeholder("e.g. John Doe", cx)),
-            error:        None,
+            name_input: cx.new(|cx| TextInput::with_placeholder("e.g. John Doe", cx)),
+            error: None,
             auto_focused: false,
             focus_handle: cx.focus_handle(),
         }
@@ -39,26 +42,34 @@ impl FirstRunPrompt {
     fn save(&mut self, cx: &mut Context<Self>) {
         let raw = self.name_input.read(cx).text().to_string();
         match validate_name(&raw) {
-            Err(msg) => { self.error = Some(msg); cx.notify(); }
+            Err(msg) => {
+                self.error = Some(msg);
+                cx.notify();
+            }
             Ok(name) => {
                 let db = vassl_db::AppDatabase::global(&**cx).clone();
                 cx.spawn(async move |this, cx| {
-                    let result = db.write(move |conn| -> anyhow::Result<()> {
-                        vassl_db::shared::set_current_user(conn, &name)
-                    }).await;
+                    let result = db
+                        .write(move |conn| -> anyhow::Result<()> {
+                            vassl_db::shared::set_current_user(conn, &name)
+                        })
+                        .await;
                     if let Err(e) = result {
                         tracing::error!("set_current_user failed: {e:?}");
                         return Ok(());
                     }
                     this.update(cx, |_, cx| cx.emit(FirstRunEvent::Saved))
-                }).detach();
+                })
+                .detach();
             }
         }
     }
 }
 
 impl Focusable for FirstRunPrompt {
-    fn focus_handle(&self, _: &gpui::App) -> FocusHandle { self.focus_handle.clone() }
+    fn focus_handle(&self, _: &gpui::App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
 }
 
 impl Render for FirstRunPrompt {
@@ -136,7 +147,16 @@ impl Render for FirstRunPrompt {
 #[cfg(test)]
 mod tests {
     use super::validate_name;
-    #[test] fn rejects_empty()      { assert!(validate_name("").is_err()); }
-    #[test] fn rejects_whitespace() { assert!(validate_name("   ").is_err()); }
-    #[test] fn accepts_name()       { assert_eq!(validate_name("  Alice  ").unwrap(), "Alice"); }
+    #[test]
+    fn rejects_empty() {
+        assert!(validate_name("").is_err());
+    }
+    #[test]
+    fn rejects_whitespace() {
+        assert!(validate_name("   ").is_err());
+    }
+    #[test]
+    fn accepts_name() {
+        assert_eq!(validate_name("  Alice  ").unwrap(), "Alice");
+    }
 }

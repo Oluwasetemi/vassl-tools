@@ -7,31 +7,31 @@ const DEFAULT_RATE: f64 = 157.50;
 
 #[derive(Debug, Clone)]
 pub struct ProductPrice {
-    pub product_id:   i64,
-    pub sku:          String,
-    pub name:         String,
+    pub product_id: i64,
+    pub sku: String,
+    pub name: String,
     pub duty_percent: f64,
-    pub latest:       Option<PriceEntry>,
+    pub latest: Option<PriceEntry>,
 }
 
 #[derive(Debug, Clone)]
 pub struct ContextMenuTarget {
-    pub product_id:   i64,
+    pub product_id: i64,
     pub product_name: String,
-    pub x:            f32,
-    pub y:            f32,
+    pub x: f32,
+    pub y: f32,
 }
 
 pub struct PriceBookStore {
-    pub product_prices:      Vec<ProductPrice>,
+    pub product_prices: Vec<ProductPrice>,
     pub selected_product_id: Option<i64>,
-    pub detail_generation:   u32,
-    pub history:             Vec<PriceEntry>,
-    pub loading:             bool,
-    pub context_menu:        Option<ContextMenuTarget>,
-    pub search_query:        String,
-    pub edit_target:         Option<vassl_core::PriceEntry>,
-    pub usd_to_jmd_rate:     f64,
+    pub detail_generation: u32,
+    pub history: Vec<PriceEntry>,
+    pub loading: bool,
+    pub context_menu: Option<ContextMenuTarget>,
+    pub search_query: String,
+    pub edit_target: Option<vassl_core::PriceEntry>,
+    pub usd_to_jmd_rate: f64,
 }
 
 pub struct PriceBookStoreHandle(pub Entity<PriceBookStore>);
@@ -48,25 +48,29 @@ impl EventEmitter<PriceBookEvent> for PriceBookStore {}
 impl PriceBookStore {
     pub fn new(_cx: &mut Context<Self>) -> Self {
         Self {
-            product_prices:      Vec::new(),
+            product_prices: Vec::new(),
             selected_product_id: None,
-            detail_generation:   0,
-            history:             Vec::new(),
-            loading:             false,
-            context_menu:        None,
-            search_query:        String::new(),
-            edit_target:         None,
-            usd_to_jmd_rate:     DEFAULT_RATE,
+            detail_generation: 0,
+            history: Vec::new(),
+            loading: false,
+            context_menu: None,
+            search_query: String::new(),
+            edit_target: None,
+            usd_to_jmd_rate: DEFAULT_RATE,
         }
     }
 
     pub fn load_products(&mut self, cx: &mut Context<Self>) {
-        if self.loading { return; }
+        if self.loading {
+            return;
+        }
         self.loading = true;
 
         let app_db = vassl_db::AppDatabase::global(&**cx);
         if let Ok(Some(s)) = vassl_db::shared::get_setting(app_db, "pricebook.usd_to_jmd_rate") {
-            if let Ok(r) = s.parse::<f64>() { self.usd_to_jmd_rate = r; }
+            if let Ok(r) = s.parse::<f64>() {
+                self.usd_to_jmd_rate = r;
+            }
         }
 
         cx.notify();
@@ -84,7 +88,13 @@ impl PriceBookStore {
                     Ok(rows) => {
                         store.product_prices = rows
                             .into_iter()
-                            .map(|(pid, sku, name, latest)| ProductPrice { product_id: pid, sku, name, duty_percent: 0.0, latest })
+                            .map(|(pid, sku, name, latest)| ProductPrice {
+                                product_id: pid,
+                                sku,
+                                name,
+                                duty_percent: 0.0,
+                                latest,
+                            })
                             .collect();
                         cx.emit(PriceBookEvent::ProductsLoaded);
                     }
@@ -97,7 +107,9 @@ impl PriceBookStore {
     }
 
     pub fn select_product(&mut self, product_id: i64, cx: &mut Context<Self>) {
-        if self.selected_product_id == Some(product_id) { return; }
+        if self.selected_product_id == Some(product_id) {
+            return;
+        }
         self.selected_product_id = Some(product_id);
         self.history.clear();
         cx.notify();
@@ -110,7 +122,9 @@ impl PriceBookStore {
                 .await;
 
             let _ = this.update(cx, |store, cx| {
-                if store.selected_product_id != Some(product_id) { return; } // stale result
+                if store.selected_product_id != Some(product_id) {
+                    return;
+                } // stale result
                 match result {
                     Ok(entries) => {
                         store.history = entries;
@@ -134,21 +148,24 @@ impl PriceBookStore {
         let db = PriceBookDb::global(&**cx);
         cx.spawn(async move |this, cx| {
             let result = db.delete_price_entry(entry_id).await;
-            let _ = this.update(cx, |store, cx| {
-                match result {
-                    Ok(_) => {
-                        store.history.retain(|e| e.id != entry_id);
-                        if let Some(pp) = store.product_prices.iter_mut().find(|pp| pp.product_id == product_id) {
-                            if pp.latest.as_ref().map(|e| e.id) == Some(entry_id) {
-                                pp.latest = store.history.first().cloned();
-                            }
+            let _ = this.update(cx, |store, cx| match result {
+                Ok(_) => {
+                    store.history.retain(|e| e.id != entry_id);
+                    if let Some(pp) = store
+                        .product_prices
+                        .iter_mut()
+                        .find(|pp| pp.product_id == product_id)
+                    {
+                        if pp.latest.as_ref().map(|e| e.id) == Some(entry_id) {
+                            pp.latest = store.history.first().cloned();
                         }
-                        cx.notify();
                     }
-                    Err(e) => tracing::error!("delete_price_entry failed: {e:?}"),
+                    cx.notify();
                 }
+                Err(e) => tracing::error!("delete_price_entry failed: {e:?}"),
             });
-        }).detach();
+        })
+        .detach();
     }
 
     pub fn set_edit_target(&mut self, entry: vassl_core::PriceEntry, cx: &mut Context<Self>) {
@@ -172,27 +189,42 @@ impl PriceBookStore {
     }
 
     pub fn set_search_query(&mut self, query: String, cx: &mut Context<Self>) {
-        if self.search_query == query { return; }
+        if self.search_query == query {
+            return;
+        }
         self.search_query = query;
         cx.notify();
     }
 
     pub fn select_next(&mut self, cx: &mut Context<Self>) -> Option<usize> {
         let filtered = self.filtered_product_prices();
-        if filtered.is_empty() { return None; }
-        let cur = self.selected_product_id
+        if filtered.is_empty() {
+            return None;
+        }
+        let cur = self
+            .selected_product_id
             .and_then(|id| filtered.iter().position(|pp| pp.product_id == id));
-        let next = match cur { None => 0, Some(i) => (i + 1).min(filtered.len() - 1) };
+        let next = match cur {
+            None => 0,
+            Some(i) => (i + 1).min(filtered.len() - 1),
+        };
         self.select_product(filtered[next].product_id, cx);
         Some(next)
     }
 
     pub fn select_prev(&mut self, cx: &mut Context<Self>) -> Option<usize> {
         let filtered = self.filtered_product_prices();
-        if filtered.is_empty() { return None; }
-        let cur = self.selected_product_id
+        if filtered.is_empty() {
+            return None;
+        }
+        let cur = self
+            .selected_product_id
             .and_then(|id| filtered.iter().position(|pp| pp.product_id == id));
-        let next = match cur { None => 0, Some(0) => 0, Some(i) => i - 1 };
+        let next = match cur {
+            None => 0,
+            Some(0) => 0,
+            Some(i) => i - 1,
+        };
         self.select_product(filtered[next].product_id, cx);
         Some(next)
     }
@@ -202,9 +234,10 @@ impl PriceBookStore {
         if q.is_empty() {
             return self.product_prices.iter().collect();
         }
-        self.product_prices.iter().filter(|pp| {
-            pp.name.to_lowercase().contains(&q) || pp.sku.to_lowercase().contains(&q)
-        }).collect()
+        self.product_prices
+            .iter()
+            .filter(|pp| pp.name.to_lowercase().contains(&q) || pp.sku.to_lowercase().contains(&q))
+            .collect()
     }
 }
 
@@ -217,14 +250,14 @@ mod tests {
         PriceEntry {
             id,
             product_id,
-            quantity:          1.0,
-            cost_price_usd:    cost,
-            duty_cost_usd:     0.0,
-            markup_percent:    30.0,
+            quantity: 1.0,
+            cost_price_usd: cost,
+            duty_cost_usd: 0.0,
+            markup_percent: 30.0,
             selling_price_usd: vassl_core::selling_price(cost, 0.0, 30.0).unwrap_or(0.0),
-            effective_date:    "2026-01-01T00:00:00Z".to_string(),
-            notes:             None,
-            currency:          "USD".to_string(),
+            effective_date: "2026-01-01T00:00:00Z".to_string(),
+            notes: None,
+            currency: "USD".to_string(),
         }
     }
 
@@ -232,8 +265,20 @@ mod tests {
     fn filtered_product_prices_empty_query_returns_all() {
         let store = PriceBookStore {
             product_prices: vec![
-                ProductPrice { product_id: 1, sku: "CAM-001".into(), name: "IP Camera".into(), duty_percent: 0.0, latest: None },
-                ProductPrice { product_id: 2, sku: "NVR-001".into(), name: "NVR Unit".into(),  duty_percent: 0.0, latest: None },
+                ProductPrice {
+                    product_id: 1,
+                    sku: "CAM-001".into(),
+                    name: "IP Camera".into(),
+                    duty_percent: 0.0,
+                    latest: None,
+                },
+                ProductPrice {
+                    product_id: 2,
+                    sku: "NVR-001".into(),
+                    name: "NVR Unit".into(),
+                    duty_percent: 0.0,
+                    latest: None,
+                },
             ],
             selected_product_id: None,
             detail_generation: 0,
@@ -251,8 +296,20 @@ mod tests {
     fn filtered_product_prices_matches_name_case_insensitive() {
         let store = PriceBookStore {
             product_prices: vec![
-                ProductPrice { product_id: 1, sku: "CAM-001".into(), name: "IP Camera".into(), duty_percent: 0.0, latest: None },
-                ProductPrice { product_id: 2, sku: "NVR-001".into(), name: "NVR Unit".into(),  duty_percent: 0.0, latest: None },
+                ProductPrice {
+                    product_id: 1,
+                    sku: "CAM-001".into(),
+                    name: "IP Camera".into(),
+                    duty_percent: 0.0,
+                    latest: None,
+                },
+                ProductPrice {
+                    product_id: 2,
+                    sku: "NVR-001".into(),
+                    name: "NVR Unit".into(),
+                    duty_percent: 0.0,
+                    latest: None,
+                },
             ],
             selected_product_id: None,
             detail_generation: 0,
@@ -271,9 +328,13 @@ mod tests {
     #[test]
     fn filtered_product_prices_matches_sku() {
         let store = PriceBookStore {
-            product_prices: vec![
-                ProductPrice { product_id: 1, sku: "CAM-001".into(), name: "IP Camera".into(), duty_percent: 0.0, latest: None },
-            ],
+            product_prices: vec![ProductPrice {
+                product_id: 1,
+                sku: "CAM-001".into(),
+                name: "IP Camera".into(),
+                duty_percent: 0.0,
+                latest: None,
+            }],
             selected_product_id: None,
             detail_generation: 0,
             history: vec![],
@@ -289,12 +350,12 @@ mod tests {
     #[test]
     fn pricebook_context_menu_target_fields_roundtrip() {
         let target = ContextMenuTarget {
-            product_id:   7,
+            product_id: 7,
             product_name: "NVR Unit".to_string(),
-            x:            200.0,
-            y:            450.0,
+            x: 200.0,
+            y: 450.0,
         };
-        assert_eq!(target.product_id,   7);
+        assert_eq!(target.product_id, 7);
         assert_eq!(target.product_name, "NVR Unit");
         assert_eq!(target.x, 200.0);
         assert_eq!(target.y, 450.0);
@@ -303,11 +364,11 @@ mod tests {
     #[test]
     fn product_price_with_no_entry_has_no_latest() {
         let pp = ProductPrice {
-            product_id:   1,
-            sku:          "X".to_string(),
-            name:         "Y".to_string(),
+            product_id: 1,
+            sku: "X".to_string(),
+            name: "Y".to_string(),
             duty_percent: 0.0,
-            latest:       None,
+            latest: None,
         };
         assert!(pp.latest.is_none());
     }
@@ -315,13 +376,12 @@ mod tests {
     #[test]
     fn product_price_with_entry_exposes_selling_price() {
         let pp = ProductPrice {
-            product_id:   1,
-            sku:          "A".to_string(),
-            name:         "B".to_string(),
+            product_id: 1,
+            sku: "A".to_string(),
+            name: "B".to_string(),
             duty_percent: 0.0,
-            latest:       Some(make_entry(1, 1, 100.0)),
+            latest: Some(make_entry(1, 1, 100.0)),
         };
         assert_eq!(pp.latest.unwrap().selling_price_usd, 130.0);
     }
-
 }

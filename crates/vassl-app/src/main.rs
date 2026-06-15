@@ -1,26 +1,29 @@
 // Suppress the console window on Windows in release builds.
 // Debug builds keep it so that tracing output is visible during development.
-#![cfg_attr(all(target_os = "windows", not(debug_assertions)), windows_subsystem = "windows")]
+#![cfg_attr(
+    all(target_os = "windows", not(debug_assertions)),
+    windows_subsystem = "windows"
+)]
 // objc 0.2.x uses `#[cfg(cargo-clippy)]` (old Clippy detection hook); rustc 1.80+
 // warns about unknown cfg names when the macros expand in this crate.
 #![allow(unexpected_cfgs)]
 
 mod about_dialog;
 mod actions;
-mod license;
-mod license_dialog;
-mod changelog;
-mod assets;
-mod auto_update;
 mod app;
 mod app_menus;
-mod docs_server;
+mod assets;
 mod audit_log;
+mod auto_update;
+mod changelog;
 mod command_palette;
+mod docs_server;
 mod first_run;
 mod global_search;
 mod importer;
 mod keybindings;
+mod license;
+mod license_dialog;
 mod login_panel;
 mod platform;
 mod root;
@@ -29,27 +32,55 @@ mod sidebar;
 mod status_bar;
 mod users_db;
 
-use actions::{CheckForUpdates, ConfirmSelection, DecreaseFontSize, EscapeModal, FocusSearch, Hide, HideOthers, IncreaseFontSize, InstallUpdate, Logout, Minimize, OpenAuditLog, OpenDocumentation, OpenGlobalSearch, OpenInventory, OpenPriceBook, OpenQuotations, OpenSuppliers, OpenSettings, Quit, SelectNext, SelectPrev, ShowAll};
-use login_panel::{EscapeForm as LoginEscapeForm, TabField as LoginTabField, BackTabField as LoginBackTabField};
-use settings_panel::{SecurityTabField, SecurityBackTabField, SecurityEscapeForm,
-                     AdminAddTabField, AdminAddBackTabField, AdminAddEscapeForm,
-                     AdminResetTabField, AdminResetBackTabField, AdminResetEscapeForm};
-use vassl_ui::{NewRecord, DropdownDown, DropdownUp, DropdownConfirm, DropdownClose};
-use vassl_ui::text_input::{BackTab, Backspace, Copy, Cut, Delete, End, Home, Left, Paste, Right, SelectAll, SelectLeft, SelectRight, ShowCharacterPalette, Tab as TextTab};
-use vassl_inventory::product_form::{EscapeForm as ProductEscapeForm, TabField as ProductTab, BackTabField as ProductBackTab};
-use vassl_inventory::stock_form::{EscapeForm as StockEscapeForm, TabField as StockTab, BackTabField as StockBackTab};
-use vassl_pricebook::price_form::{EscapeForm as PriceEscapeForm, TabField as PriceTab, BackTabField as PriceBackTab};
-use vassl_suppliers::supplier_form::{EscapeForm as SupplierEscapeForm, TabField as SupplierTab, BackTabField as SupplierBackTab};
-use vassl_quotations::quotation_form::{EscapeForm as QuotationEscapeForm, TabField as QuotationTab, BackTabField as QuotationBackTab};
-use vassl_quotations::project_form::{EscapeForm as ProjectEscapeForm, TabField as ProjectTab, BackTabField as ProjectBackTab};
-use vassl_quotations::line_item_form::{EscapeForm as LineItemEscapeForm, TabField as LineItemTab, BackTabField as LineItemBackTab};
-use vassl_ui::{ThemeColors, ThemeHandle};
+use actions::{
+    CheckForUpdates, ConfirmSelection, DecreaseFontSize, EscapeModal, FocusSearch, Hide,
+    HideOthers, IncreaseFontSize, InstallUpdate, Logout, Minimize, OpenAuditLog, OpenDocumentation,
+    OpenGlobalSearch, OpenInventory, OpenPriceBook, OpenQuotations, OpenSettings, OpenSuppliers,
+    Quit, SelectNext, SelectPrev, ShowAll,
+};
 use app::VasslApp;
-use gpui::{App, AppContext, Bounds, KeyBinding, WindowAppearance, WindowBounds, WindowOptions, px, size};
+use gpui::{
+    px, size, App, AppContext, Bounds, KeyBinding, WindowAppearance, WindowBounds, WindowOptions,
+};
+use login_panel::{
+    BackTabField as LoginBackTabField, EscapeForm as LoginEscapeForm, TabField as LoginTabField,
+};
 use root::VasslRoot;
+use settings_panel::{
+    AdminAddBackTabField, AdminAddEscapeForm, AdminAddTabField, AdminResetBackTabField,
+    AdminResetEscapeForm, AdminResetTabField, SecurityBackTabField, SecurityEscapeForm,
+    SecurityTabField,
+};
 use std::collections::HashMap;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::{fmt, layer::SubscriberExt as _, util::SubscriberInitExt as _, EnvFilter};
+use vassl_inventory::product_form::{
+    BackTabField as ProductBackTab, EscapeForm as ProductEscapeForm, TabField as ProductTab,
+};
+use vassl_inventory::stock_form::{
+    BackTabField as StockBackTab, EscapeForm as StockEscapeForm, TabField as StockTab,
+};
+use vassl_pricebook::price_form::{
+    BackTabField as PriceBackTab, EscapeForm as PriceEscapeForm, TabField as PriceTab,
+};
+use vassl_quotations::line_item_form::{
+    BackTabField as LineItemBackTab, EscapeForm as LineItemEscapeForm, TabField as LineItemTab,
+};
+use vassl_quotations::project_form::{
+    BackTabField as ProjectBackTab, EscapeForm as ProjectEscapeForm, TabField as ProjectTab,
+};
+use vassl_quotations::quotation_form::{
+    BackTabField as QuotationBackTab, EscapeForm as QuotationEscapeForm, TabField as QuotationTab,
+};
+use vassl_suppliers::supplier_form::{
+    BackTabField as SupplierBackTab, EscapeForm as SupplierEscapeForm, TabField as SupplierTab,
+};
+use vassl_ui::text_input::{
+    BackTab, Backspace, Copy, Cut, Delete, End, Home, Left, Paste, Right, SelectAll, SelectLeft,
+    SelectRight, ShowCharacterPalette, Tab as TextTab,
+};
+use vassl_ui::{DropdownClose, DropdownConfirm, DropdownDown, DropdownUp, NewRecord};
+use vassl_ui::{ThemeColors, ThemeHandle};
 
 pub use keybindings::default_app_bindings;
 
@@ -62,131 +93,191 @@ pub fn apply_keybindings(cx: &mut App, overrides: &HashMap<String, String>) {
         KeyBinding::new("secondary-m", Minimize, Some("VasslRoot")),
         // Remappable navigation shortcuts
         KeyBinding::new(
-            overrides.get("vassl::OpenInventory").map(|s| s.as_str()).unwrap_or("secondary-1"),
-            OpenInventory, Some("VasslRoot"),
+            overrides
+                .get("vassl::OpenInventory")
+                .map(|s| s.as_str())
+                .unwrap_or("secondary-1"),
+            OpenInventory,
+            Some("VasslRoot"),
         ),
         KeyBinding::new(
-            overrides.get("vassl::OpenQuotations").map(|s| s.as_str()).unwrap_or("secondary-2"),
-            OpenQuotations, Some("VasslRoot"),
+            overrides
+                .get("vassl::OpenQuotations")
+                .map(|s| s.as_str())
+                .unwrap_or("secondary-2"),
+            OpenQuotations,
+            Some("VasslRoot"),
         ),
         KeyBinding::new(
-            overrides.get("vassl::OpenPriceBook").map(|s| s.as_str()).unwrap_or("secondary-3"),
-            OpenPriceBook, Some("VasslRoot"),
+            overrides
+                .get("vassl::OpenPriceBook")
+                .map(|s| s.as_str())
+                .unwrap_or("secondary-3"),
+            OpenPriceBook,
+            Some("VasslRoot"),
         ),
         KeyBinding::new(
-            overrides.get("vassl::OpenSuppliers").map(|s| s.as_str()).unwrap_or("secondary-4"),
-            OpenSuppliers, Some("VasslRoot"),
+            overrides
+                .get("vassl::OpenSuppliers")
+                .map(|s| s.as_str())
+                .unwrap_or("secondary-4"),
+            OpenSuppliers,
+            Some("VasslRoot"),
         ),
         KeyBinding::new(
-            overrides.get("vassl::OpenAuditLog").map(|s| s.as_str()).unwrap_or("secondary-shift-a"),
-            OpenAuditLog, Some("VasslRoot"),
+            overrides
+                .get("vassl::OpenAuditLog")
+                .map(|s| s.as_str())
+                .unwrap_or("secondary-shift-a"),
+            OpenAuditLog,
+            Some("VasslRoot"),
         ),
         KeyBinding::new(
-            overrides.get("vassl::NewRecord").map(|s| s.as_str()).unwrap_or("secondary-n"),
-            NewRecord, None,
+            overrides
+                .get("vassl::NewRecord")
+                .map(|s| s.as_str())
+                .unwrap_or("secondary-n"),
+            NewRecord,
+            None,
         ),
         KeyBinding::new(
-            overrides.get("vassl::FocusSearch").map(|s| s.as_str()).unwrap_or("secondary-f"),
-            FocusSearch, Some("VasslRoot"),
+            overrides
+                .get("vassl::FocusSearch")
+                .map(|s| s.as_str())
+                .unwrap_or("secondary-f"),
+            FocusSearch,
+            Some("VasslRoot"),
         ),
         KeyBinding::new(
-            overrides.get("vassl::OpenGlobalSearch").map(|s| s.as_str()).unwrap_or("secondary-shift-f"),
-            OpenGlobalSearch, Some("VasslRoot"),
+            overrides
+                .get("vassl::OpenGlobalSearch")
+                .map(|s| s.as_str())
+                .unwrap_or("secondary-shift-f"),
+            OpenGlobalSearch,
+            Some("VasslRoot"),
         ),
         KeyBinding::new(
-            overrides.get("vassl::OpenSettings").map(|s| s.as_str()).unwrap_or("secondary-,"),
-            OpenSettings, Some("VasslRoot"),
+            overrides
+                .get("vassl::OpenSettings")
+                .map(|s| s.as_str())
+                .unwrap_or("secondary-,"),
+            OpenSettings,
+            Some("VasslRoot"),
         ),
         KeyBinding::new(
-            overrides.get("vassl::IncreaseFontSize").map(|s| s.as_str()).unwrap_or("secondary-="),
-            IncreaseFontSize, Some("VasslRoot"),
+            overrides
+                .get("vassl::IncreaseFontSize")
+                .map(|s| s.as_str())
+                .unwrap_or("secondary-="),
+            IncreaseFontSize,
+            Some("VasslRoot"),
         ),
         KeyBinding::new("secondary-shift-=", IncreaseFontSize, Some("VasslRoot")),
         KeyBinding::new(
-            overrides.get("vassl::DecreaseFontSize").map(|s| s.as_str()).unwrap_or("secondary--"),
-            DecreaseFontSize, Some("VasslRoot"),
+            overrides
+                .get("vassl::DecreaseFontSize")
+                .map(|s| s.as_str())
+                .unwrap_or("secondary--"),
+            DecreaseFontSize,
+            Some("VasslRoot"),
         ),
         KeyBinding::new("secondary-shift-u", CheckForUpdates, Some("VasslRoot")),
-        KeyBinding::new("secondary-shift-i", InstallUpdate,   Some("VasslRoot")),
-        KeyBinding::new("secondary-shift-l", Logout,          Some("VasslRoot")),
+        KeyBinding::new("secondary-shift-i", InstallUpdate, Some("VasslRoot")),
+        KeyBinding::new("secondary-shift-l", Logout, Some("VasslRoot")),
         // Login panel
-        KeyBinding::new("escape",    LoginEscapeForm,    Some("LoginPanel")),
-        KeyBinding::new("tab",       LoginTabField,      Some("LoginPanel")),
-        KeyBinding::new("shift-tab", LoginBackTabField,  Some("LoginPanel")),
+        KeyBinding::new("escape", LoginEscapeForm, Some("LoginPanel")),
+        KeyBinding::new("tab", LoginTabField, Some("LoginPanel")),
+        KeyBinding::new("shift-tab", LoginBackTabField, Some("LoginPanel")),
         // Settings — Security (change password) form
-        KeyBinding::new("escape",    SecurityEscapeForm,    Some("SettingsSecurityForm")),
-        KeyBinding::new("tab",       SecurityTabField,      Some("SettingsSecurityForm")),
-        KeyBinding::new("shift-tab", SecurityBackTabField,  Some("SettingsSecurityForm")),
+        KeyBinding::new("escape", SecurityEscapeForm, Some("SettingsSecurityForm")),
+        KeyBinding::new("tab", SecurityTabField, Some("SettingsSecurityForm")),
+        KeyBinding::new(
+            "shift-tab",
+            SecurityBackTabField,
+            Some("SettingsSecurityForm"),
+        ),
         // Settings — Admin add-user form
-        KeyBinding::new("escape",    AdminAddEscapeForm,   Some("SettingsAdminAddForm")),
-        KeyBinding::new("tab",       AdminAddTabField,     Some("SettingsAdminAddForm")),
-        KeyBinding::new("shift-tab", AdminAddBackTabField, Some("SettingsAdminAddForm")),
+        KeyBinding::new("escape", AdminAddEscapeForm, Some("SettingsAdminAddForm")),
+        KeyBinding::new("tab", AdminAddTabField, Some("SettingsAdminAddForm")),
+        KeyBinding::new(
+            "shift-tab",
+            AdminAddBackTabField,
+            Some("SettingsAdminAddForm"),
+        ),
         // Settings — Admin reset-password form
-        KeyBinding::new("escape",    AdminResetEscapeForm,   Some("SettingsAdminResetForm")),
-        KeyBinding::new("tab",       AdminResetTabField,     Some("SettingsAdminResetForm")),
-        KeyBinding::new("shift-tab", AdminResetBackTabField, Some("SettingsAdminResetForm")),
+        KeyBinding::new(
+            "escape",
+            AdminResetEscapeForm,
+            Some("SettingsAdminResetForm"),
+        ),
+        KeyBinding::new("tab", AdminResetTabField, Some("SettingsAdminResetForm")),
+        KeyBinding::new(
+            "shift-tab",
+            AdminResetBackTabField,
+            Some("SettingsAdminResetForm"),
+        ),
         // TextInput editing keys (non-remappable)
-        KeyBinding::new("backspace",        Backspace,   Some("TextInput")),
-        KeyBinding::new("delete",           Delete,      Some("TextInput")),
-        KeyBinding::new("left",             Left,        Some("TextInput")),
-        KeyBinding::new("right",            Right,       Some("TextInput")),
-        KeyBinding::new("shift-left",       SelectLeft,  Some("TextInput")),
-        KeyBinding::new("shift-right",      SelectRight, Some("TextInput")),
-        KeyBinding::new("secondary-a",      SelectAll,   Some("TextInput")),
-        KeyBinding::new("home",             Home,        Some("TextInput")),
-        KeyBinding::new("end",              End,         Some("TextInput")),
-        KeyBinding::new("secondary-v",      Paste,       Some("TextInput")),
-        KeyBinding::new("secondary-c",      Copy,        Some("TextInput")),
-        KeyBinding::new("secondary-x",      Cut,              Some("TextInput")),
-        KeyBinding::new("tab",               TextTab,              Some("TextInput")),
-        KeyBinding::new("shift-tab",         BackTab,              Some("TextInput")),
-        KeyBinding::new("ctrl-cmd-space",    ShowCharacterPalette, Some("TextInput")),
+        KeyBinding::new("backspace", Backspace, Some("TextInput")),
+        KeyBinding::new("delete", Delete, Some("TextInput")),
+        KeyBinding::new("left", Left, Some("TextInput")),
+        KeyBinding::new("right", Right, Some("TextInput")),
+        KeyBinding::new("shift-left", SelectLeft, Some("TextInput")),
+        KeyBinding::new("shift-right", SelectRight, Some("TextInput")),
+        KeyBinding::new("secondary-a", SelectAll, Some("TextInput")),
+        KeyBinding::new("home", Home, Some("TextInput")),
+        KeyBinding::new("end", End, Some("TextInput")),
+        KeyBinding::new("secondary-v", Paste, Some("TextInput")),
+        KeyBinding::new("secondary-c", Copy, Some("TextInput")),
+        KeyBinding::new("secondary-x", Cut, Some("TextInput")),
+        KeyBinding::new("tab", TextTab, Some("TextInput")),
+        KeyBinding::new("shift-tab", BackTab, Some("TextInput")),
+        KeyBinding::new("ctrl-cmd-space", ShowCharacterPalette, Some("TextInput")),
         // Escape closes overlays
-        KeyBinding::new("escape",            EscapeModal,      Some("VasslRoot")),
+        KeyBinding::new("escape", EscapeModal, Some("VasslRoot")),
         // CommandPalette keyboard navigation
-        KeyBinding::new("down",              SelectNext,       Some("VasslRoot")),
-        KeyBinding::new("up",                SelectPrev,       Some("VasslRoot")),
-        KeyBinding::new("down",              SelectNext,       Some("CommandPalette")),
-        KeyBinding::new("up",                SelectPrev,       Some("CommandPalette")),
-        KeyBinding::new("enter",             ConfirmSelection, Some("CommandPalette")),
+        KeyBinding::new("down", SelectNext, Some("VasslRoot")),
+        KeyBinding::new("up", SelectPrev, Some("VasslRoot")),
+        KeyBinding::new("down", SelectNext, Some("CommandPalette")),
+        KeyBinding::new("up", SelectPrev, Some("CommandPalette")),
+        KeyBinding::new("enter", ConfirmSelection, Some("CommandPalette")),
         // GlobalSearch keyboard navigation
-        KeyBinding::new("down",              SelectNext,       Some("GlobalSearch")),
-        KeyBinding::new("up",                SelectPrev,       Some("GlobalSearch")),
-        KeyBinding::new("enter",             ConfirmSelection, Some("GlobalSearch")),
+        KeyBinding::new("down", SelectNext, Some("GlobalSearch")),
+        KeyBinding::new("up", SelectPrev, Some("GlobalSearch")),
+        KeyBinding::new("enter", ConfirmSelection, Some("GlobalSearch")),
         // Dropdown keyboard navigation
-        KeyBinding::new("down",              DropdownDown,    Some("Dropdown")),
-        KeyBinding::new("up",                DropdownUp,      Some("Dropdown")),
-        KeyBinding::new("enter",             DropdownConfirm, Some("Dropdown")),
-        KeyBinding::new("escape",            DropdownClose,   Some("Dropdown")),
-        KeyBinding::new("tab",               DropdownClose,   Some("Dropdown")),
+        KeyBinding::new("down", DropdownDown, Some("Dropdown")),
+        KeyBinding::new("up", DropdownUp, Some("Dropdown")),
+        KeyBinding::new("enter", DropdownConfirm, Some("Dropdown")),
+        KeyBinding::new("escape", DropdownClose, Some("Dropdown")),
+        KeyBinding::new("tab", DropdownClose, Some("Dropdown")),
         // ProductForm escape + tab
-        KeyBinding::new("escape",            ProductEscapeForm, Some("ProductForm")),
-        KeyBinding::new("tab",               ProductTab,        Some("ProductForm")),
-        KeyBinding::new("shift-tab",         ProductBackTab,    Some("ProductForm")),
+        KeyBinding::new("escape", ProductEscapeForm, Some("ProductForm")),
+        KeyBinding::new("tab", ProductTab, Some("ProductForm")),
+        KeyBinding::new("shift-tab", ProductBackTab, Some("ProductForm")),
         // StockEntryForm escape + tab
-        KeyBinding::new("escape",            StockEscapeForm,  Some("StockEntryForm")),
-        KeyBinding::new("tab",               StockTab,         Some("StockEntryForm")),
-        KeyBinding::new("shift-tab",         StockBackTab,     Some("StockEntryForm")),
+        KeyBinding::new("escape", StockEscapeForm, Some("StockEntryForm")),
+        KeyBinding::new("tab", StockTab, Some("StockEntryForm")),
+        KeyBinding::new("shift-tab", StockBackTab, Some("StockEntryForm")),
         // PriceEntryForm escape + tab
-        KeyBinding::new("escape",            PriceEscapeForm,  Some("PriceEntryForm")),
-        KeyBinding::new("tab",               PriceTab,         Some("PriceEntryForm")),
-        KeyBinding::new("shift-tab",         PriceBackTab,     Some("PriceEntryForm")),
+        KeyBinding::new("escape", PriceEscapeForm, Some("PriceEntryForm")),
+        KeyBinding::new("tab", PriceTab, Some("PriceEntryForm")),
+        KeyBinding::new("shift-tab", PriceBackTab, Some("PriceEntryForm")),
         // SupplierForm escape + tab
-        KeyBinding::new("escape",    SupplierEscapeForm, Some("SupplierForm")),
-        KeyBinding::new("tab",       SupplierTab,        Some("SupplierForm")),
-        KeyBinding::new("shift-tab", SupplierBackTab,    Some("SupplierForm")),
+        KeyBinding::new("escape", SupplierEscapeForm, Some("SupplierForm")),
+        KeyBinding::new("tab", SupplierTab, Some("SupplierForm")),
+        KeyBinding::new("shift-tab", SupplierBackTab, Some("SupplierForm")),
         // QuotationForm escape + tab
-        KeyBinding::new("escape",    QuotationEscapeForm, Some("QuotationForm")),
-        KeyBinding::new("tab",       QuotationTab,        Some("QuotationForm")),
-        KeyBinding::new("shift-tab", QuotationBackTab,    Some("QuotationForm")),
+        KeyBinding::new("escape", QuotationEscapeForm, Some("QuotationForm")),
+        KeyBinding::new("tab", QuotationTab, Some("QuotationForm")),
+        KeyBinding::new("shift-tab", QuotationBackTab, Some("QuotationForm")),
         // ProjectForm escape + tab
-        KeyBinding::new("escape",            ProjectEscapeForm,   Some("ProjectForm")),
-        KeyBinding::new("tab",               ProjectTab,          Some("ProjectForm")),
-        KeyBinding::new("shift-tab",         ProjectBackTab,      Some("ProjectForm")),
+        KeyBinding::new("escape", ProjectEscapeForm, Some("ProjectForm")),
+        KeyBinding::new("tab", ProjectTab, Some("ProjectForm")),
+        KeyBinding::new("shift-tab", ProjectBackTab, Some("ProjectForm")),
         // LineItemForm escape + tab
-        KeyBinding::new("escape",            LineItemEscapeForm,  Some("LineItemForm")),
-        KeyBinding::new("tab",               LineItemTab,         Some("LineItemForm")),
-        KeyBinding::new("shift-tab",         LineItemBackTab,     Some("LineItemForm")),
+        KeyBinding::new("escape", LineItemEscapeForm, Some("LineItemForm")),
+        KeyBinding::new("tab", LineItemTab, Some("LineItemForm")),
+        KeyBinding::new("shift-tab", LineItemBackTab, Some("LineItemForm")),
     ]);
 }
 
@@ -264,89 +355,91 @@ fn main() {
     gpui_platform::application()
         .with_assets(assets::VasslAssets)
         .run(|cx: &mut App| {
-        #[cfg(target_os = "macos")]
-        set_dock_icon();
+            #[cfg(target_os = "macos")]
+            set_dock_icon();
 
-        if let Err(e) = vassl_db::init(cx) {
-            tracing::error!("DB init failed: {e:?}");
-            cx.quit();
-            return;
-        }
-
-        let _app_state = VasslApp::new(cx);
-
-        vassl_inventory::init(cx);
-        vassl_quotations::init(cx);
-        vassl_pricebook::init(cx);
-        vassl_suppliers::init(cx);
-
-        // Initialize theme based on current OS appearance.
-        let initial_dark = matches!(
-            cx.window_appearance(),
-            WindowAppearance::Dark | WindowAppearance::VibrantDark
-        );
-        cx.set_global(ThemeHandle(if initial_dark { ThemeColors::dark() } else { ThemeColors::light() }));
-
-        cx.activate(true);
-
-        // App-level menu actions (no window context needed)
-        cx.on_action(|_: &OpenDocumentation, _cx| {
-            let url = docs_server::docs_url();
-            docs_server::open_in_browser(&url);
-        });
-        cx.on_action(|_: &Quit,       cx| cx.quit());
-        #[cfg(target_os = "macos")]
-        cx.on_action(|_: &Hide,       cx| cx.hide());
-        #[cfg(target_os = "macos")]
-        cx.on_action(|_: &HideOthers, cx| cx.hide_other_apps());
-        #[cfg(target_os = "macos")]
-        cx.on_action(|_: &ShowAll,    cx| cx.unhide_other_apps());
-
-        cx.set_menus(app_menus::app_menus());
-
-        // Load any persisted keymap overrides from the settings DB.
-        let keymap_overrides: HashMap<String, String> = {
-            let db = vassl_db::AppDatabase::global(cx);
-            keybindings::default_app_bindings()
-                .iter()
-                .filter_map(|(action_name, _default, _label)| {
-                    let db_key = format!("keymap.{action_name}");
-                    vassl_db::shared::get_setting(db, &db_key)
-                        .ok()
-                        .flatten()
-                        .map(|v| (action_name.to_string(), v))
-                })
-                .collect()
-        };
-
-        // Register all keybindings (remappable ones with overrides applied).
-        apply_keybindings(cx, &keymap_overrides);
-
-        let bounds = Bounds::centered(None, size(px(1280.0), px(720.0)), cx);
-
-        match cx.open_window(
-            WindowOptions {
-                window_bounds: Some(WindowBounds::Windowed(bounds)),
-                app_id: Some(platform::app_name().to_string()),
-                // Hide the native Win32 title bar on Windows so GPUI draws custom caption
-                // buttons that match the app theme without the DWM compositing delay.
-                // macOS uses the system titlebar by default (appears_transparent=false).
-                #[cfg(target_os = "windows")]
-                titlebar: Some(gpui::TitlebarOptions {
-                    appears_transparent: true,
-                    ..Default::default()
-                }),
-                ..Default::default()
-            },
-            |window, cx| {
-                cx.new(|cx| VasslRoot::new(window, cx))
-            },
-        ) {
-            Ok(_handle) => {}
-            Err(e) => {
-                tracing::error!("failed to open main window: {e:?}");
+            if let Err(e) = vassl_db::init(cx) {
+                tracing::error!("DB init failed: {e:?}");
                 cx.quit();
+                return;
             }
-        }
-    });
+
+            let _app_state = VasslApp::new(cx);
+
+            vassl_inventory::init(cx);
+            vassl_quotations::init(cx);
+            vassl_pricebook::init(cx);
+            vassl_suppliers::init(cx);
+
+            // Initialize theme based on current OS appearance.
+            let initial_dark = matches!(
+                cx.window_appearance(),
+                WindowAppearance::Dark | WindowAppearance::VibrantDark
+            );
+            cx.set_global(ThemeHandle(if initial_dark {
+                ThemeColors::dark()
+            } else {
+                ThemeColors::light()
+            }));
+
+            cx.activate(true);
+
+            // App-level menu actions (no window context needed)
+            cx.on_action(|_: &OpenDocumentation, _cx| {
+                let url = docs_server::docs_url();
+                docs_server::open_in_browser(&url);
+            });
+            cx.on_action(|_: &Quit, cx| cx.quit());
+            #[cfg(target_os = "macos")]
+            cx.on_action(|_: &Hide, cx| cx.hide());
+            #[cfg(target_os = "macos")]
+            cx.on_action(|_: &HideOthers, cx| cx.hide_other_apps());
+            #[cfg(target_os = "macos")]
+            cx.on_action(|_: &ShowAll, cx| cx.unhide_other_apps());
+
+            cx.set_menus(app_menus::app_menus());
+
+            // Load any persisted keymap overrides from the settings DB.
+            let keymap_overrides: HashMap<String, String> = {
+                let db = vassl_db::AppDatabase::global(cx);
+                keybindings::default_app_bindings()
+                    .iter()
+                    .filter_map(|(action_name, _default, _label)| {
+                        let db_key = format!("keymap.{action_name}");
+                        vassl_db::shared::get_setting(db, &db_key)
+                            .ok()
+                            .flatten()
+                            .map(|v| (action_name.to_string(), v))
+                    })
+                    .collect()
+            };
+
+            // Register all keybindings (remappable ones with overrides applied).
+            apply_keybindings(cx, &keymap_overrides);
+
+            let bounds = Bounds::centered(None, size(px(1280.0), px(720.0)), cx);
+
+            match cx.open_window(
+                WindowOptions {
+                    window_bounds: Some(WindowBounds::Windowed(bounds)),
+                    app_id: Some(platform::app_name().to_string()),
+                    // Hide the native Win32 title bar on Windows so GPUI draws custom caption
+                    // buttons that match the app theme without the DWM compositing delay.
+                    // macOS uses the system titlebar by default (appears_transparent=false).
+                    #[cfg(target_os = "windows")]
+                    titlebar: Some(gpui::TitlebarOptions {
+                        appears_transparent: true,
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+                |window, cx| cx.new(|cx| VasslRoot::new(window, cx)),
+            ) {
+                Ok(_handle) => {}
+                Err(e) => {
+                    tracing::error!("failed to open main window: {e:?}");
+                    cx.quit();
+                }
+            }
+        });
 }

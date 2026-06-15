@@ -1,15 +1,14 @@
 use anyhow::Context as _;
 use sqlez::domain::Domain;
 use vassl_core::Supplier;
-use vassl_db::SharedDomain;
 use vassl_db::shared::{current_user, log_audit};
+use vassl_db::SharedDomain;
 
 pub struct SupplierDb(pub sqlez::thread_safe_connection::ThreadSafeConnection);
 
 impl Domain for SupplierDb {
     const NAME: &'static str = "suppliers";
-    const MIGRATIONS: &'static [&'static str] = &[
-        "CREATE TABLE IF NOT EXISTS suppliers (
+    const MIGRATIONS: &'static [&'static str] = &["CREATE TABLE IF NOT EXISTS suppliers (
             id             INTEGER PRIMARY KEY AUTOINCREMENT,
             name           TEXT UNIQUE NOT NULL,
             contact_person TEXT,
@@ -18,44 +17,67 @@ impl Domain for SupplierDb {
             notes          TEXT,
             created_at     TEXT NOT NULL,
             address        TEXT
-        )",
-    ];
-    fn should_allow_migration_change(_: usize, _: &str, _: &str) -> bool { true }
+        )"];
+    fn should_allow_migration_change(_: usize, _: &str, _: &str) -> bool {
+        true
+    }
 }
 
 vassl_db::static_connection!(SupplierDb, [SharedDomain]);
 
 impl SupplierDb {
     pub fn list_suppliers(&self) -> anyhow::Result<Vec<Supplier>> {
-        self.select::<(i64, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, String)>(
+        self.select::<(
+            i64,
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            String,
+        )>(
             "SELECT id, name, contact_person, email, phone, address, notes, created_at
              FROM suppliers ORDER BY name",
         )
         .context("prepare list_suppliers")?()
         .context("execute list_suppliers")
         .map(|rows| {
-            rows.into_iter().map(|(id, name, contact_person, email, phone, address, notes, created_at)| {
-                Supplier { id, name, contact_person, email, phone, address, notes, created_at }
-            }).collect()
+            rows.into_iter()
+                .map(
+                    |(id, name, contact_person, email, phone, address, notes, created_at)| {
+                        Supplier {
+                            id,
+                            name,
+                            contact_person,
+                            email,
+                            phone,
+                            address,
+                            notes,
+                            created_at,
+                        }
+                    },
+                )
+                .collect()
         })
     }
 
     pub async fn insert_supplier(
         &self,
-        name:           &str,
+        name: &str,
         contact_person: Option<&str>,
-        email:          Option<&str>,
-        phone:          Option<&str>,
-        address:        Option<&str>,
-        notes:          Option<&str>,
+        email: Option<&str>,
+        phone: Option<&str>,
+        address: Option<&str>,
+        notes: Option<&str>,
     ) -> anyhow::Result<i64> {
-        let name    = name.to_string();
+        let name = name.to_string();
         let contact = contact_person.map(String::from);
-        let email   = email.map(String::from);
-        let phone   = phone.map(String::from);
+        let email = email.map(String::from);
+        let phone = phone.map(String::from);
         let address = address.map(String::from);
-        let notes   = notes.map(String::from);
-        let now     = chrono::Utc::now().to_rfc3339();
+        let notes = notes.map(String::from);
+        let now = chrono::Utc::now().to_rfc3339();
 
         self.write(move |conn| {
             conn.exec_bound::<(String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, String)>(
@@ -83,33 +105,36 @@ impl SupplierDb {
     pub async fn delete_supplier(&self, id: i64) -> anyhow::Result<()> {
         self.write(move |conn| {
             conn.exec_bound::<i64>("DELETE FROM suppliers WHERE id = ?1")
-                .context("prepare delete supplier")?
-                (id)
-                .context("execute delete supplier")?;
-            let changed_by = current_user(conn).ok().flatten().unwrap_or_else(|| "system".into());
+                .context("prepare delete supplier")?(id)
+            .context("execute delete supplier")?;
+            let changed_by = current_user(conn)
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| "system".into());
             if let Err(e) = log_audit(conn, "suppliers", id, "DELETE", &changed_by, None, None) {
                 tracing::warn!("audit log failed for delete_supplier: {e:?}");
             }
             Ok(())
-        }).await
+        })
+        .await
     }
 
     pub async fn update_supplier(
         &self,
-        id:             i64,
-        name:           &str,
+        id: i64,
+        name: &str,
         contact_person: Option<&str>,
-        email:          Option<&str>,
-        phone:          Option<&str>,
-        address:        Option<&str>,
-        notes:          Option<&str>,
+        email: Option<&str>,
+        phone: Option<&str>,
+        address: Option<&str>,
+        notes: Option<&str>,
     ) -> anyhow::Result<()> {
-        let name    = name.to_string();
+        let name = name.to_string();
         let contact = contact_person.map(String::from);
-        let email   = email.map(String::from);
-        let phone   = phone.map(String::from);
+        let email = email.map(String::from);
+        let phone = phone.map(String::from);
         let address = address.map(String::from);
-        let notes   = notes.map(String::from);
+        let notes = notes.map(String::from);
 
         self.write(move |conn| {
             conn.exec_bound::<(String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, i64)>(
@@ -145,7 +170,17 @@ mod tests {
     #[tokio::test]
     async fn insert_and_list_supplier() {
         let db = SupplierDb::open_test_db("sup_test_insert").await;
-        let id = db.insert_supplier("Acme Ltd", Some("John"), Some("j@acme.com"), None, None, None).await.unwrap();
+        let id = db
+            .insert_supplier(
+                "Acme Ltd",
+                Some("John"),
+                Some("j@acme.com"),
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
         assert!(id > 0);
         let rows = db.list_suppliers().unwrap();
         assert_eq!(rows.len(), 1);
@@ -157,16 +192,25 @@ mod tests {
     #[tokio::test]
     async fn duplicate_name_returns_error() {
         let db = SupplierDb::open_test_db("sup_test_dup").await;
-        db.insert_supplier("Acme Ltd", None, None, None, None, None).await.unwrap();
-        let result = db.insert_supplier("Acme Ltd", None, None, None, None, None).await;
+        db.insert_supplier("Acme Ltd", None, None, None, None, None)
+            .await
+            .unwrap();
+        let result = db
+            .insert_supplier("Acme Ltd", None, None, None, None, None)
+            .await;
         assert!(result.is_err(), "duplicate name should fail");
     }
 
     #[tokio::test]
     async fn update_supplier_changes_fields() {
         let db = SupplierDb::open_test_db("sup_test_update").await;
-        let id = db.insert_supplier("Old Name", None, None, None, None, None).await.unwrap();
-        db.update_supplier(id, "New Name", Some("Alice"), None, None, None, None).await.unwrap();
+        let id = db
+            .insert_supplier("Old Name", None, None, None, None, None)
+            .await
+            .unwrap();
+        db.update_supplier(id, "New Name", Some("Alice"), None, None, None, None)
+            .await
+            .unwrap();
         let rows = db.list_suppliers().unwrap();
         assert_eq!(rows[0].name, "New Name");
         assert_eq!(rows[0].contact_person.as_deref(), Some("Alice"));

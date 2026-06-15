@@ -33,7 +33,9 @@ fn serve_request(mut stream: std::net::TcpStream) {
     });
 
     let mut request_line = String::new();
-    if reader.read_line(&mut request_line).is_err() { return; }
+    if reader.read_line(&mut request_line).is_err() {
+        return;
+    }
 
     // Consume remaining headers so the browser doesn't get a RST.
     for line in reader.lines() {
@@ -89,17 +91,29 @@ fn url_to_asset_path(url_path: &str) -> String {
 }
 
 fn mime_for(path: &str) -> &'static str {
-    if path.ends_with(".html")       { "text/html; charset=utf-8" }
-    else if path.ends_with(".css")   { "text/css" }
-    else if path.ends_with(".js")    { "application/javascript" }
-    else if path.ends_with(".svg")   { "image/svg+xml" }
-    else if path.ends_with(".png")   { "image/png" }
-    else if path.ends_with(".webp")  { "image/webp" }
-    else if path.ends_with(".ico")   { "image/x-icon" }
-    else if path.ends_with(".woff2") { "font/woff2" }
-    else if path.ends_with(".woff")  { "font/woff" }
-    else if path.ends_with(".json")  { "application/json" }
-    else                             { "application/octet-stream" }
+    if path.ends_with(".html") {
+        "text/html; charset=utf-8"
+    } else if path.ends_with(".css") {
+        "text/css"
+    } else if path.ends_with(".js") {
+        "application/javascript"
+    } else if path.ends_with(".svg") {
+        "image/svg+xml"
+    } else if path.ends_with(".png") {
+        "image/png"
+    } else if path.ends_with(".webp") {
+        "image/webp"
+    } else if path.ends_with(".ico") {
+        "image/x-icon"
+    } else if path.ends_with(".woff2") {
+        "font/woff2"
+    } else if path.ends_with(".woff") {
+        "font/woff"
+    } else if path.ends_with(".json") {
+        "application/json"
+    } else {
+        "application/octet-stream"
+    }
 }
 
 /// Opens `url` in the system's default browser. Fire-and-forget.
@@ -107,7 +121,9 @@ pub fn open_in_browser(url: &str) {
     #[cfg(target_os = "macos")]
     let _ = std::process::Command::new("open").arg(url).spawn();
     #[cfg(target_os = "windows")]
-    let _ = std::process::Command::new("cmd").args(["/c", "start", url]).spawn();
+    let _ = std::process::Command::new("cmd")
+        .args(["/c", "start", url])
+        .spawn();
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     let _ = std::process::Command::new("xdg-open").arg(url).spawn();
 }

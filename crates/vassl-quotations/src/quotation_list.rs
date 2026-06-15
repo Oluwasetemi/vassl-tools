@@ -1,10 +1,11 @@
-use gpui::{App, Context, Entity, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent,
-           MouseUpEvent, Render, Window,
-           div, prelude::*, px, rems, rgb, uniform_list, UniformListScrollHandle};
-use vassl_ui::{ScrollDragState, ThemeColors, ThemeHandle, scrollbar_geometry};
+use gpui::{
+    div, prelude::*, px, rems, rgb, uniform_list, App, Context, Entity, IntoElement, MouseButton,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, Render, UniformListScrollHandle, Window,
+};
+use vassl_ui::{scrollbar_geometry, ScrollDragState, ThemeColors, ThemeHandle};
 
 use crate::db::QuotationRow;
-use crate::store::{QuotationStore, status_badge_color};
+use crate::store::{status_badge_color, QuotationStore};
 
 const TRACK_W: f32 = 14.0;
 
@@ -16,7 +17,11 @@ pub struct QuotationList {
 
 impl QuotationList {
     pub fn new(store: Entity<QuotationStore>, _cx: &mut Context<Self>) -> Self {
-        Self { store, scroll_handle: UniformListScrollHandle::default(), drag: None }
+        Self {
+            store,
+            scroll_handle: UniformListScrollHandle::default(),
+            drag: None,
+        }
     }
 }
 
@@ -31,7 +36,10 @@ impl Render for QuotationList {
 
         if store.loading {
             return div()
-                .flex_1().flex().items_center().justify_center()
+                .flex_1()
+                .flex()
+                .items_center()
+                .justify_center()
                 .text_color(rgb(c.text_muted))
                 .child("Loading…")
                 .into_any_element();
@@ -39,7 +47,10 @@ impl Render for QuotationList {
 
         if store.quotations.is_empty() {
             return div()
-                .flex_1().flex().items_center().justify_center()
+                .flex_1()
+                .flex()
+                .items_center()
+                .justify_center()
                 .text_color(rgb(c.text_default))
                 .child("No quotations yet — click \"+ New Quotation\" to create one.")
                 .into_any_element();
@@ -60,7 +71,11 @@ impl Render for QuotationList {
             .bg(rgb(c.surface_default));
 
         if let Some(g) = &geom {
-            let thumb_color = if is_dragging { rgb(c.text_default) } else { rgb(c.text_muted) };
+            let thumb_color = if is_dragging {
+                rgb(c.text_default)
+            } else {
+                rgb(c.text_muted)
+            };
             let (viewport_h, thumb_h, max_scroll) = (g.viewport_h, g.thumb_h, g.max_scroll);
             track = track.child(
                 div()
@@ -73,21 +88,27 @@ impl Render for QuotationList {
                     .rounded(px(6.))
                     .bg(thumb_color)
                     .cursor_pointer()
-                    .on_mouse_down(MouseButton::Left, cx.listener(move |this, ev: &MouseDownEvent, _, cx| {
-                        this.drag = Some(ScrollDragState {
-                            drag_offset: ev.position.y.as_f32(),
-                            thumb_h,
-                            viewport_h,
-                            max_scroll,
-                        });
-                        cx.notify();
-                    }))
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |this, ev: &MouseDownEvent, _, cx| {
+                            this.drag = Some(ScrollDragState {
+                                drag_offset: ev.position.y.as_f32(),
+                                thumb_h,
+                                viewport_h,
+                                max_scroll,
+                            });
+                            cx.notify();
+                        }),
+                    ),
             );
         }
 
         let mut root = div()
             .relative()
-            .flex_1().flex().flex_row().min_h(px(0.))
+            .flex_1()
+            .flex()
+            .flex_row()
+            .min_h(px(0.))
             .child(
                 uniform_list(
                     "quotation-list",
@@ -96,14 +117,16 @@ impl Render for QuotationList {
                         let store = this.store.read(cx);
                         let c = cx.global::<ThemeHandle>().0.clone();
                         let selected = store.selected_id;
-                        range.map(|ix| {
-                            let q = &store.quotations[ix];
-                            quotation_row(q, selected == Some(q.id), store_entity.clone(), &c)
-                        }).collect()
+                        range
+                            .map(|ix| {
+                                let q = &store.quotations[ix];
+                                quotation_row(q, selected == Some(q.id), store_entity.clone(), &c)
+                            })
+                            .collect()
                     }),
                 )
                 .track_scroll(&self.scroll_handle)
-                .flex_1()
+                .flex_1(),
             )
             .child(track);
 
@@ -111,21 +134,27 @@ impl Render for QuotationList {
             root = root.child(
                 div()
                     .id("quot-sb-overlay")
-                    .absolute().inset_0()
+                    .absolute()
+                    .inset_0()
                     .cursor_pointer()
                     .on_mouse_move(cx.listener(|this, ev: &MouseMoveEvent, _, cx| {
                         if let Some(drag) = &this.drag {
                             let new_offset = drag.compute_offset(ev.position.y.as_f32());
-                            this.scroll_handle.0.borrow().base_handle.set_offset(
-                                gpui::point(gpui::px(0.), gpui::px(new_offset))
-                            );
+                            this.scroll_handle
+                                .0
+                                .borrow()
+                                .base_handle
+                                .set_offset(gpui::point(gpui::px(0.), gpui::px(new_offset)));
                             cx.notify();
                         }
                     }))
-                    .on_mouse_up(MouseButton::Left, cx.listener(|this, _: &MouseUpEvent, _, cx| {
-                        this.drag = None;
-                        cx.notify();
-                    }))
+                    .on_mouse_up(
+                        MouseButton::Left,
+                        cx.listener(|this, _: &MouseUpEvent, _, cx| {
+                            this.drag = None;
+                            cx.notify();
+                        }),
+                    ),
             );
         }
 
@@ -133,17 +162,30 @@ impl Render for QuotationList {
     }
 }
 
-fn quotation_row(q: &QuotationRow, selected: bool, store: Entity<QuotationStore>, c: &ThemeColors) -> impl IntoElement {
-    let id        = q.id;
-    let row_bg    = if selected { c.surface_active } else { c.canvas_bg };
-    let hover_bg  = rgb(c.surface_hover);
+fn quotation_row(
+    q: &QuotationRow,
+    selected: bool,
+    store: Entity<QuotationStore>,
+    c: &ThemeColors,
+) -> impl IntoElement {
+    let id = q.id;
+    let row_bg = if selected {
+        c.surface_active
+    } else {
+        c.canvas_bg
+    };
+    let hover_bg = rgb(c.surface_hover);
     let badge_col = status_badge_color(q.status.clone());
-    let date_str  = q.created_at.get(..10).unwrap_or("").to_string();
+    let date_str = q.created_at.get(..10).unwrap_or("").to_string();
 
     div()
         .id(format!("quot-row-{id}"))
-        .flex().flex_row().items_center().w_full()
-        .px(px(12.)).py(px(6.))
+        .flex()
+        .flex_row()
+        .items_center()
+        .w_full()
+        .px(px(12.))
+        .py(px(6.))
         .bg(rgb(row_bg))
         .when(!selected, |d| d.hover(move |s| s.bg(hover_bg)))
         .cursor_pointer()
@@ -152,54 +194,76 @@ fn quotation_row(q: &QuotationRow, selected: bool, store: Entity<QuotationStore>
             move |event: &MouseDownEvent, _: &mut Window, cx: &mut App| {
                 store.update(cx, |s, cx| s.select_quotation(id, cx));
                 if event.click_count == 2 {
-                    store.update(cx, |s, cx| { s.detail_requested = true; cx.notify(); });
+                    store.update(cx, |s, cx| {
+                        s.detail_requested = true;
+                        cx.notify();
+                    });
                 }
             },
         )
         // Status badge dot
-        .child(div().w(px(8.)).h(px(8.)).rounded_full().bg(rgb(badge_col)).mr(px(8.)))
+        .child(
+            div()
+                .w(px(8.))
+                .h(px(8.))
+                .rounded_full()
+                .bg(rgb(badge_col))
+                .mr(px(8.)),
+        )
         // Reference number
         .child(
-            div().w(px(130.)).text_size(rems(0.923)).text_color(rgb(c.text_default))
-                .child(q.reference_number.clone())
+            div()
+                .w(px(130.))
+                .text_size(rems(0.923))
+                .text_color(rgb(c.text_default))
+                .child(q.reference_number.clone()),
         )
         // Project + client
         .child(
-            div().flex_1().text_size(rems(0.923)).text_color(rgb(c.text_muted))
+            div()
+                .flex_1()
+                .text_size(rems(0.923))
+                .text_color(rgb(c.text_muted))
                 .overflow_hidden()
                 .whitespace_nowrap()
                 .text_ellipsis()
-                .child(format!("{} / {}", q.project_name, q.client_name))
+                .child(format!("{} / {}", q.project_name, q.client_name)),
         )
         // Total
         .child(
-            div().w(px(90.)).text_size(rems(0.923)).text_color(rgb(c.text_default))
-                .child(format_total(q.total_usd))
+            div()
+                .w(px(90.))
+                .text_size(rems(0.923))
+                .text_color(rgb(c.text_default))
+                .child(format_total(q.total_usd)),
         )
         // Date
         .child(
-            div().w(px(90.)).text_size(rems(0.846)).text_color(rgb(c.text_muted))
-                .child(date_str)
+            div()
+                .w(px(90.))
+                .text_size(rems(0.846))
+                .text_color(rgb(c.text_muted))
+                .child(date_str),
         )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vassl_core::QuotationStatus;
     use crate::db::QuotationRow;
+    use vassl_core::QuotationStatus;
 
     fn make_row(id: i64, ref_num: &str, total: f64) -> QuotationRow {
         QuotationRow {
             id,
             reference_number: ref_num.to_string(),
-            status:       QuotationStatus::Draft,
-            project_id:   1,
+            status: QuotationStatus::Draft,
+            project_id: 1,
             project_name: "Test Project".to_string(),
-            client_name:  "Client A".to_string(),
-            total_usd:    total,
-            created_at:   "2026-01-01T00:00:00Z".to_string(),
-            notes:        None,
+            client_name: "Client A".to_string(),
+            total_usd: total,
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            notes: None,
         }
     }
 

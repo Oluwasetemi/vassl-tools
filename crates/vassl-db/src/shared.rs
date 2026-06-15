@@ -60,8 +60,7 @@ impl sqlez::domain::Domain for SharedDomain {
 /// Read a setting from the `settings` table.
 pub fn get_setting(conn: &Connection, key: &str) -> Result<Option<String>> {
     conn.select_row_bound::<&str, String>("SELECT value FROM settings WHERE key = (?)")
-        .context("failed to prepare settings SELECT")?
-        (key)
+        .context("failed to prepare settings SELECT")?(key)
 }
 
 /// Write (upsert) a setting into the `settings` table.
@@ -69,8 +68,7 @@ pub fn set_setting(conn: &Connection, key: &str, value: &str) -> Result<()> {
     conn.exec_bound::<(&str, &str)>(
         "INSERT OR REPLACE INTO settings (key, value) VALUES ((?), (?))",
     )
-    .context("failed to prepare settings UPSERT")?
-    ((key, value))
+    .context("failed to prepare settings UPSERT")?((key, value))
 }
 
 /// Read the `current_user` setting (returns `None` when not yet set).
@@ -87,11 +85,8 @@ pub fn set_current_user(conn: &Connection, name: &str) -> Result<()> {
 /// the "in-progress" name-change entry as the user keeps typing, so only one
 /// row is produced per editing session rather than one row per keystroke).
 pub fn update_audit_new_value(conn: &Connection, id: i64, new_value: &str) -> Result<()> {
-    conn.exec_bound::<(&str, i64)>(
-        "UPDATE audit_log SET new_value = (?) WHERE id = (?)",
-    )
-    .context("failed to prepare audit_log UPDATE")?
-    ((new_value, id))
+    conn.exec_bound::<(&str, i64)>("UPDATE audit_log SET new_value = (?) WHERE id = (?)")
+        .context("failed to prepare audit_log UPDATE")?((new_value, id))
 }
 
 /// Append a row to the `audit_log` table. Returns the new row's id.
@@ -111,12 +106,19 @@ pub fn log_audit(
             (table_name, record_id, action, changed_by, changed_at, old_value, new_value) \
             VALUES ((?), (?), (?), (?), (?), (?), (?))",
     )
-    .context("failed to prepare audit_log INSERT")?
-    ((table_name, record_id, action, changed_by, &changed_at, old_value, new_value))?;
+    .context("failed to prepare audit_log INSERT")?((
+        table_name,
+        record_id,
+        action,
+        changed_by,
+        &changed_at,
+        old_value,
+        new_value,
+    ))?;
     conn.select_row::<i64>("SELECT last_insert_rowid()")
         .context("failed to prepare last_insert_rowid")?()
-        .context("failed to execute last_insert_rowid")?
-        .context("last_insert_rowid returned None")
+    .context("failed to execute last_insert_rowid")?
+    .context("last_insert_rowid returned None")
 }
 
 // ---------------------------------------------------------------------------
@@ -166,12 +168,19 @@ mod tests {
     fn test_audit_log_insert() {
         let conn = open_test_conn("shared_audit_test");
 
-        log_audit(&conn, "projects", 1, "CREATE", "Alice", None, Some("{\"name\":\"Proj\"}")).unwrap();
+        log_audit(
+            &conn,
+            "projects",
+            1,
+            "CREATE",
+            "Alice",
+            None,
+            Some("{\"name\":\"Proj\"}"),
+        )
+        .unwrap();
 
-        let count: Option<i64> = conn
-            .select_row("SELECT COUNT(*) FROM audit_log")
-            .unwrap()()
-            .unwrap();
+        let count: Option<i64> =
+            conn.select_row("SELECT COUNT(*) FROM audit_log").unwrap()().unwrap();
         assert_eq!(count, Some(1));
 
         // Also verify the stored column values
@@ -181,7 +190,7 @@ mod tests {
             )
             .context("prepare audit select")
             .unwrap()(1)
-            .unwrap();
+        .unwrap();
         assert_eq!(
             row,
             Some((
@@ -204,10 +213,8 @@ mod tests {
         .unwrap()(("Test Project", "Test Client", "active", now.as_str()))
         .unwrap();
 
-        let count: Option<i64> = conn
-            .select_row("SELECT COUNT(*) FROM projects")
-            .unwrap()()
-            .unwrap();
+        let count: Option<i64> =
+            conn.select_row("SELECT COUNT(*) FROM projects").unwrap()().unwrap();
         assert_eq!(count, Some(1));
     }
 }

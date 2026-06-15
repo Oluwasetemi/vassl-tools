@@ -1,7 +1,9 @@
-use gpui::{Context, Entity, EventEmitter, Focusable, IntoElement, MouseButton, MouseDownEvent,
-           Render, Subscription, Window, div, prelude::*, px, rems, rgb};
+use gpui::{
+    div, prelude::*, px, rems, rgb, Context, Entity, EventEmitter, Focusable, IntoElement,
+    MouseButton, MouseDownEvent, Render, Subscription, Window,
+};
 use vassl_inventory::InventoryStoreHandle;
-use vassl_ui::{AppSettings, TextInput, ThemeHandle, text_field, tooltip};
+use vassl_ui::{text_field, tooltip, AppSettings, TextInput, ThemeHandle};
 
 use crate::price_form::{PriceEntryForm, PriceFormEvent};
 use crate::price_table::PriceTable;
@@ -16,16 +18,19 @@ pub enum PriceBookPanelEvent {
 impl EventEmitter<PriceBookPanelEvent> for PriceBookPanel {}
 
 #[derive(Clone, Copy, PartialEq)]
-enum Tab { PriceBook, History }
+enum Tab {
+    PriceBook,
+    History,
+}
 
 pub struct PriceBookPanel {
-    pub store:      Entity<PriceBookStore>,
-    price_table:    Entity<PriceTable>,
-    active_tab:     Tab,
-    form:           Option<Entity<PriceEntryForm>>,
-    _form_sub:      Option<Subscription>,
-    search_input:   Entity<TextInput>,
-    detail_open:    bool,
+    pub store: Entity<PriceBookStore>,
+    price_table: Entity<PriceTable>,
+    active_tab: Tab,
+    form: Option<Entity<PriceEntryForm>>,
+    _form_sub: Option<Subscription>,
+    search_input: Entity<TextInput>,
+    detail_open: bool,
     last_detail_gen: u32,
 }
 
@@ -39,38 +44,46 @@ impl PriceBookPanel {
         cx.observe(&search_input, |this, input, cx| {
             let q = input.read(cx).text().to_string();
             this.store.update(cx, |s, cx| s.set_search_query(q, cx));
-        }).detach();
+        })
+        .detach();
 
         cx.observe(&store, |this, _, cx| {
             let gen = this.store.read(cx).detail_generation;
             if gen > this.last_detail_gen {
                 this.last_detail_gen = gen;
-                this.detail_open     = true;
+                this.detail_open = true;
                 cx.notify();
             }
-        }).detach();
+        })
+        .detach();
 
         Self {
             store,
             price_table,
-            active_tab:      Tab::PriceBook,
-            form:            None,
-            _form_sub:       None,
+            active_tab: Tab::PriceBook,
+            form: None,
+            _form_sub: None,
             search_input,
-            detail_open:     false,
+            detail_open: false,
             last_detail_gen: 0,
         }
     }
 
     pub fn select_next(&mut self, cx: &mut Context<Self>) {
         if let Some(idx) = self.store.update(cx, |s, cx| s.select_next(cx)) {
-            self.price_table.update(cx, |t, _| t.scroll_handle.scroll_to_item(idx, gpui::ScrollStrategy::Top));
+            self.price_table.update(cx, |t, _| {
+                t.scroll_handle
+                    .scroll_to_item(idx, gpui::ScrollStrategy::Top)
+            });
         }
     }
 
     pub fn select_prev(&mut self, cx: &mut Context<Self>) {
         if let Some(idx) = self.store.update(cx, |s, cx| s.select_prev(cx)) {
-            self.price_table.update(cx, |t, _| t.scroll_handle.scroll_to_item(idx, gpui::ScrollStrategy::Top));
+            self.price_table.update(cx, |t, _| {
+                t.scroll_handle
+                    .scroll_to_item(idx, gpui::ScrollStrategy::Top)
+            });
         }
     }
 
@@ -82,8 +95,10 @@ impl PriceBookPanel {
     pub fn create_form(&mut self, cx: &mut Context<Self>) -> Option<gpui::FocusHandle> {
         let (pid, name) = {
             let store = self.store.read(cx);
-            let pid   = store.selected_product_id?;
-            let name  = store.product_prices.iter()
+            let pid = store.selected_product_id?;
+            let name = store
+                .product_prices
+                .iter()
                 .find(|p| p.product_id == pid)
                 .map(|p| p.name.clone())
                 .unwrap_or_default();
@@ -95,75 +110,118 @@ impl PriceBookPanel {
 
     fn open_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(fh) = self.create_form(cx) {
-            window.defer(cx, move |window, cx| { window.focus(&fh, cx); });
+            window.defer(cx, move |window, cx| {
+                window.focus(&fh, cx);
+            });
         }
     }
 
-    pub fn open_edit_form_for(&mut self, product_id: i64, name: String, entry: vassl_core::PriceEntry, cx: &mut Context<Self>) {
-        if self.form.is_some() { return; }
+    pub fn open_edit_form_for(
+        &mut self,
+        product_id: i64,
+        name: String,
+        entry: vassl_core::PriceEntry,
+        cx: &mut Context<Self>,
+    ) {
+        if self.form.is_some() {
+            return;
+        }
         let inv_store = cx.global::<InventoryStoreHandle>().0.read(cx);
-        let current_stock = inv_store.products.iter()
+        let current_stock = inv_store
+            .products
+            .iter()
             .find(|p| p.product.id == product_id)
             .map(|p| p.current_stock)
             .unwrap_or(0.0);
-        let duty_percent = inv_store.products.iter()
+        let duty_percent = inv_store
+            .products
+            .iter()
             .find(|p| p.product.id == product_id)
             .map(|p| p.product.duty_percent)
             .unwrap_or_else(|| {
-                self.store.read(cx).product_prices.iter()
+                self.store
+                    .read(cx)
+                    .product_prices
+                    .iter()
                     .find(|pp| pp.product_id == product_id)
                     .map(|pp| pp.duty_percent)
                     .unwrap_or(0.0)
             });
         let _ = inv_store;
-        let form = cx.new(|cx| crate::price_form::PriceEntryForm::edit_for(
-            self.store.clone(), product_id, name, current_stock, duty_percent, entry, cx,
-        ));
-        let sub = cx.subscribe(&form, |this, _form, ev: &crate::price_form::PriceFormEvent, cx| {
-            match ev {
-                crate::price_form::PriceFormEvent::Submitted | crate::price_form::PriceFormEvent::Cancelled => {
+        let form = cx.new(|cx| {
+            crate::price_form::PriceEntryForm::edit_for(
+                self.store.clone(),
+                product_id,
+                name,
+                current_stock,
+                duty_percent,
+                entry,
+                cx,
+            )
+        });
+        let sub = cx.subscribe(
+            &form,
+            |this, _form, ev: &crate::price_form::PriceFormEvent, cx| match ev {
+                crate::price_form::PriceFormEvent::Submitted
+                | crate::price_form::PriceFormEvent::Cancelled => {
                     this._form_sub = None;
-                    this.form      = None;
+                    this.form = None;
                     cx.notify();
                 }
-            }
-        });
-        self.form      = Some(form);
+            },
+        );
+        self.form = Some(form);
         self._form_sub = Some(sub);
         cx.notify();
     }
 
     pub fn open_form_for(&mut self, product_id: i64, name: String, cx: &mut Context<Self>) {
-        if self.form.is_some() { return; }
+        if self.form.is_some() {
+            return;
+        }
         let inv_store = cx.global::<InventoryStoreHandle>().0.read(cx);
-        let current_stock = inv_store.products.iter()
+        let current_stock = inv_store
+            .products
+            .iter()
             .find(|p| p.product.id == product_id)
             .map(|p| p.current_stock)
             .unwrap_or(0.0);
         let duty_percent = {
             // Use product's duty from store; fall back to pricebook's own product_prices
-            let from_inv = inv_store.products.iter()
+            let from_inv = inv_store
+                .products
+                .iter()
                 .find(|p| p.product.id == product_id)
                 .map(|p| p.product.duty_percent);
             from_inv.unwrap_or_else(|| {
-                self.store.read(cx).product_prices.iter()
+                self.store
+                    .read(cx)
+                    .product_prices
+                    .iter()
                     .find(|pp| pp.product_id == product_id)
                     .map(|pp| pp.duty_percent)
                     .unwrap_or(0.0)
             })
         };
         let _ = inv_store; // release borrow before cx.new
-        let form  = cx.new(|cx| PriceEntryForm::new(self.store.clone(), product_id, name, duty_percent, current_stock, cx));
-        let sub   = cx.subscribe(&form, |this, _form, ev: &PriceFormEvent, cx| {
-            match ev {
-                PriceFormEvent::Submitted | PriceFormEvent::Cancelled => {
-                    this._form_sub = None;
-                    this.form      = None;
-                    cx.notify();
-                }
+        let form = cx.new(|cx| {
+            PriceEntryForm::new(
+                self.store.clone(),
+                product_id,
+                name,
+                duty_percent,
+                current_stock,
+                cx,
+            )
+        });
+        let sub = cx.subscribe(&form, |this, _form, ev: &PriceFormEvent, cx| match ev {
+            PriceFormEvent::Submitted | PriceFormEvent::Cancelled => {
+                this._form_sub = None;
+                this.form = None;
+                cx.notify();
             }
         });
-        self.form      = Some(form);
+        self.form = Some(form);
         self._form_sub = Some(sub);
         cx.notify();
     }
@@ -172,23 +230,30 @@ impl PriceBookPanel {
 impl Render for PriceBookPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = cx.global::<ThemeHandle>().0.clone();
-        let active_tab    = self.active_tab;
+        let active_tab = self.active_tab;
         let has_selection = self.store.read(cx).selected_product_id.is_some();
 
         let has_query = !self.search_input.read(cx).text().is_empty();
 
         let history_rows: Vec<_> = {
             let store = self.store.read(cx);
-            store.history.iter().map(|e| {
-                (
-                    e.effective_date.get(..10).unwrap_or(&e.effective_date).to_string(),
-                    e.cost_price_usd,
-                    e.duty_cost_usd,
-                    e.markup_percent,
-                    e.selling_price_usd,
-                    e.currency.clone(),
-                )
-            }).collect()
+            store
+                .history
+                .iter()
+                .map(|e| {
+                    (
+                        e.effective_date
+                            .get(..10)
+                            .unwrap_or(&e.effective_date)
+                            .to_string(),
+                        e.cost_price_usd,
+                        e.duty_cost_usd,
+                        e.markup_percent,
+                        e.selling_price_usd,
+                        e.currency.clone(),
+                    )
+                })
+                .collect()
         };
         let history_is_empty = history_rows.is_empty();
 
@@ -196,7 +261,11 @@ impl Render for PriceBookPanel {
         let selected_product = if detail_open {
             let store = self.store.read(cx);
             store.selected_product_id.and_then(|pid| {
-                store.product_prices.iter().find(|pp| pp.product_id == pid).cloned()
+                store
+                    .product_prices
+                    .iter()
+                    .find(|pp| pp.product_id == pid)
+                    .cloned()
             })
         } else {
             None
@@ -209,36 +278,81 @@ impl Render for PriceBookPanel {
                 if !has_selection {
                     content.child(
                         div()
-                            .flex_1().flex().items_center().justify_center()
+                            .flex_1()
+                            .flex()
+                            .items_center()
+                            .justify_center()
                             .text_color(rgb(c.text_muted))
-                            .child("Select a product row to view pricing history.")
+                            .child("Select a product row to view pricing history."),
                     )
                 } else if history_is_empty {
                     content.child(
                         div()
-                            .flex_1().flex().items_center().justify_center()
+                            .flex_1()
+                            .flex()
+                            .items_center()
+                            .justify_center()
                             .text_color(rgb(c.text_muted))
-                            .child("No price history for this product.")
+                            .child("No price history for this product."),
                     )
                 } else {
-                    let rows: Vec<_> = history_rows.iter().map(|(date, cost, duty, markup, sell, currency)| {
-                        let sym = if currency == "JMD" { "J$" } else { "$" };
-                        div()
-                            .flex().flex_row().items_center().w_full()
-                            .px(px(12.)).py(px(6.))
-                            .child(div().w(px(100.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child(date.clone()))
-                            .child(div().w(px(90.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child(format!("{sym}{cost:.2}")))
-                            .child(div().w(px(80.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child(format!("+{sym}{duty:.2}")))
-                            .child(div().w(px(70.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child(format!("{markup:.0}%")))
-                            .child(div().flex_1().text_size(rems(1.)).text_color(rgb(c.status_green)).child(format!("{sym}{sell:.2}")))
-                    }).collect();
+                    let rows: Vec<_> = history_rows
+                        .iter()
+                        .map(|(date, cost, duty, markup, sell, currency)| {
+                            let sym = if currency == "JMD" { "J$" } else { "$" };
+                            div()
+                                .flex()
+                                .flex_row()
+                                .items_center()
+                                .w_full()
+                                .px(px(12.))
+                                .py(px(6.))
+                                .child(
+                                    div()
+                                        .w(px(100.))
+                                        .text_size(rems(0.923))
+                                        .text_color(rgb(c.text_muted))
+                                        .child(date.clone()),
+                                )
+                                .child(
+                                    div()
+                                        .w(px(90.))
+                                        .text_size(rems(0.923))
+                                        .text_color(rgb(c.text_default))
+                                        .child(format!("{sym}{cost:.2}")),
+                                )
+                                .child(
+                                    div()
+                                        .w(px(80.))
+                                        .text_size(rems(0.923))
+                                        .text_color(rgb(c.text_muted))
+                                        .child(format!("+{sym}{duty:.2}")),
+                                )
+                                .child(
+                                    div()
+                                        .w(px(70.))
+                                        .text_size(rems(0.923))
+                                        .text_color(rgb(c.text_muted))
+                                        .child(format!("{markup:.0}%")),
+                                )
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .text_size(rems(1.))
+                                        .text_color(rgb(c.status_green))
+                                        .child(format!("{sym}{sell:.2}")),
+                                )
+                        })
+                        .collect();
 
                     content.child(
                         div()
                             .id("history-scroll")
-                            .flex_1().flex().flex_col()
+                            .flex_1()
+                            .flex()
+                            .flex_col()
                             .overflow_y_scroll()
-                            .children(rows)
+                            .children(rows),
                     )
                 }
             }
@@ -412,40 +526,44 @@ impl Render for PriceBookPanel {
         }
 
         // Context menu overlay
-        let allow_delete     = cx.global::<AppSettings>().allow_delete;
+        let allow_delete = cx.global::<AppSettings>().allow_delete;
         let allow_price_edit = cx.global::<AppSettings>().allow_price_edit;
         let ctx_menu = self.store.read(cx).context_menu.clone();
         if let Some(target) = ctx_menu {
             let viewport = window.viewport_size();
             const MENU_W: f32 = 220.0;
             const MENU_H: f32 = 300.0;
-            let menu_x = target.x.min((viewport.width.as_f32()  - MENU_W).max(0.0));
+            let menu_x = target.x.min((viewport.width.as_f32() - MENU_W).max(0.0));
             let menu_y = target.y.min((viewport.height.as_f32() - MENU_H).max(0.0));
             let info_line = {
                 let store = self.store.read(cx);
-                store.product_prices
+                store
+                    .product_prices
                     .iter()
                     .find(|pp| pp.product_id == target.product_id)
-                    .map(|pp| {
-                        match &pp.latest {
-                            None    => "No price set".to_string(),
-                            Some(e) => {
-                                let sym = if e.currency == "JMD" { "J$" } else { "$" };
-                                format!(
-                                    "{sym}{:.2} + {sym}{:.2} → {:.0}% → {sym}{:.2}",
-                                    e.cost_price_usd, e.duty_cost_usd, e.markup_percent, e.selling_price_usd
-                                )
-                            }
+                    .map(|pp| match &pp.latest {
+                        None => "No price set".to_string(),
+                        Some(e) => {
+                            let sym = if e.currency == "JMD" { "J$" } else { "$" };
+                            format!(
+                                "{sym}{:.2} + {sym}{:.2} → {:.0}% → {sym}{:.2}",
+                                e.cost_price_usd,
+                                e.duty_cost_usd,
+                                e.markup_percent,
+                                e.selling_price_usd
+                            )
                         }
                     })
                     .unwrap_or_default()
             };
 
-            let pid  = target.product_id;
+            let pid = target.product_id;
             let name = target.product_name.clone();
             let latest_entry = {
                 let store = self.store.read(cx);
-                store.product_prices.iter()
+                store
+                    .product_prices
+                    .iter()
                     .find(|pp| pp.product_id == pid)
                     .and_then(|pp| pp.latest.clone())
             };
@@ -453,16 +571,12 @@ impl Render for PriceBookPanel {
             let product_name_clone = name.clone();
 
             root = root
-                .child(
-                    div()
-                        .absolute().inset_0()
-                        .on_mouse_down(
-                            MouseButton::Left,
-                            cx.listener(|this, _: &MouseDownEvent, _: &mut Window, cx| {
-                                this.store.update(cx, |s, cx| s.clear_context_menu(cx));
-                            }),
-                        )
-                )
+                .child(div().absolute().inset_0().on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|this, _: &MouseDownEvent, _: &mut Window, cx| {
+                        this.store.update(cx, |s, cx| s.clear_context_menu(cx));
+                    }),
+                ))
                 .child(
                     div()
                         .absolute()
@@ -474,24 +588,28 @@ impl Render for PriceBookPanel {
                         .shadow_md()
                         .child(
                             div()
-                                .px(px(12.)).pt(px(10.)).pb(px(4.))
+                                .px(px(12.))
+                                .pt(px(10.))
+                                .pb(px(4.))
                                 .text_size(rems(1.))
                                 .text_color(rgb(c.text_default))
                                 .font_weight(gpui::FontWeight::BOLD)
-                                .child(target.product_name.clone())
+                                .child(target.product_name.clone()),
                         )
                         .child(
                             div()
-                                .px(px(12.)).pb(px(8.))
+                                .px(px(12.))
+                                .pb(px(8.))
                                 .text_size(rems(0.846))
                                 .text_color(rgb(c.text_muted))
-                                .child(info_line)
+                                .child(info_line),
                         )
                         .child({
                             let hover_bg = rgb(c.surface_hover);
                             div()
                                 .id("ctx-pb-view-details")
-                                .px(px(12.)).py(px(8.))
+                                .px(px(12.))
+                                .py(px(8.))
                                 .cursor_pointer()
                                 .hover(move |s| s.bg(hover_bg))
                                 .text_size(rems(1.))
@@ -515,7 +633,8 @@ impl Render for PriceBookPanel {
                             let hover_bg = rgb(c.surface_hover);
                             div()
                                 .id("ctx-pb-price-history")
-                                .px(px(12.)).py(px(8.))
+                                .px(px(12.))
+                                .py(px(8.))
                                 .cursor_pointer()
                                 .hover(move |s| s.bg(hover_bg))
                                 .text_size(rems(1.))
@@ -523,13 +642,15 @@ impl Render for PriceBookPanel {
                                 .child("Price History")
                                 .on_mouse_down(
                                     MouseButton::Left,
-                                    cx.listener(move |this, _: &MouseDownEvent, _: &mut Window, cx| {
-                                        this.store.update(cx, |s, cx| s.clear_context_menu(cx));
-                                        cx.emit(PriceBookPanelEvent::ShowPriceHistory {
-                                            product_id: pid,
-                                            name:       n.clone(),
-                                        });
-                                    }),
+                                    cx.listener(
+                                        move |this, _: &MouseDownEvent, _: &mut Window, cx| {
+                                            this.store.update(cx, |s, cx| s.clear_context_menu(cx));
+                                            cx.emit(PriceBookPanelEvent::ShowPriceHistory {
+                                                product_id: pid,
+                                                name: n.clone(),
+                                            });
+                                        },
+                                    ),
                                 )
                         })
                         .child({
@@ -537,7 +658,8 @@ impl Render for PriceBookPanel {
                             let name_for_add = name.clone();
                             div()
                                 .id("ctx-pb-add-price")
-                                .px(px(12.)).py(px(8.))
+                                .px(px(12.))
+                                .py(px(8.))
                                 .cursor_pointer()
                                 .hover(move |s| s.bg(hover_bg))
                                 .text_size(rems(1.))
@@ -545,67 +667,96 @@ impl Render for PriceBookPanel {
                                 .child("Add Price Entry")
                                 .on_mouse_down(
                                     MouseButton::Left,
-                                    cx.listener(move |this, _: &MouseDownEvent, window: &mut Window, cx| {
-                                        this.store.update(cx, |s, cx| s.clear_context_menu(cx));
-                                        this.open_form_for(pid, name_for_add.clone(), cx);
-                                        if let Some(fh) = this.form.as_ref().map(|f| f.read(cx).focus_handle(cx)) {
-                                            window.defer(cx, move |window, cx| { window.focus(&fh, cx); });
-                                        }
-                                    }),
+                                    cx.listener(
+                                        move |this, _: &MouseDownEvent, window: &mut Window, cx| {
+                                            this.store.update(cx, |s, cx| s.clear_context_menu(cx));
+                                            this.open_form_for(pid, name_for_add.clone(), cx);
+                                            if let Some(fh) = this
+                                                .form
+                                                .as_ref()
+                                                .map(|f| f.read(cx).focus_handle(cx))
+                                            {
+                                                window.defer(cx, move |window, cx| {
+                                                    window.focus(&fh, cx);
+                                                });
+                                            }
+                                        },
+                                    ),
                                 )
                         })
                         .when(allow_price_edit && has_latest, |menu| {
-                            let hover_bg    = rgb(c.surface_hover);
-                            let entry       = latest_entry.clone();
+                            let hover_bg = rgb(c.surface_hover);
+                            let entry = latest_entry.clone();
                             let pname_clone = product_name_clone.clone();
                             menu.child(div().h(px(1.)).bg(rgb(c.surface_default)))
                                 .child(
-                                    div()
-                                        .id("ctx-pb-edit-price")
-                                        .px(px(12.)).py(px(8.))
-                                        .cursor_pointer()
-                                        .hover(move |s| s.bg(hover_bg))
-                                        .text_size(rems(1.))
-                                        .text_color(rgb(c.text_default))
-                                        .child("Edit Latest Price Entry")
-                                        .on_mouse_down(
-                                            MouseButton::Left,
-                                            cx.listener(move |this, _: &MouseDownEvent, window: &mut Window, cx| {
-                                                this.store.update(cx, |s, cx| s.clear_context_menu(cx));
+                                div()
+                                    .id("ctx-pb-edit-price")
+                                    .px(px(12.))
+                                    .py(px(8.))
+                                    .cursor_pointer()
+                                    .hover(move |s| s.bg(hover_bg))
+                                    .text_size(rems(1.))
+                                    .text_color(rgb(c.text_default))
+                                    .child("Edit Latest Price Entry")
+                                    .on_mouse_down(
+                                        MouseButton::Left,
+                                        cx.listener(
+                                            move |this,
+                                                  _: &MouseDownEvent,
+                                                  window: &mut Window,
+                                                  cx| {
+                                                this.store
+                                                    .update(cx, |s, cx| s.clear_context_menu(cx));
                                                 if let Some(entry) = entry.clone() {
-                                                    this.open_edit_form_for(pid, pname_clone.clone(), entry, cx);
-                                                    if let Some(fh) = this.form.as_ref().map(|f| f.read(cx).focus_handle(cx)) {
-                                                        window.defer(cx, move |window, cx| { window.focus(&fh, cx); });
+                                                    this.open_edit_form_for(
+                                                        pid,
+                                                        pname_clone.clone(),
+                                                        entry,
+                                                        cx,
+                                                    );
+                                                    if let Some(fh) = this
+                                                        .form
+                                                        .as_ref()
+                                                        .map(|f| f.read(cx).focus_handle(cx))
+                                                    {
+                                                        window.defer(cx, move |window, cx| {
+                                                            window.focus(&fh, cx);
+                                                        });
                                                     }
                                                 }
-                                            }),
-                                        )
-                                )
+                                            },
+                                        ),
+                                    ),
+                            )
                         })
                         .when(allow_delete && has_latest, |menu| {
                             let hover_bg = rgb(c.surface_hover);
                             let entry_id = latest_entry.as_ref().map(|e| e.id).unwrap_or(0);
                             menu.child(div().h(px(1.)).bg(rgb(c.surface_default)))
                                 .child(
-                                    div()
-                                        .id("ctx-pb-delete-price")
-                                        .px(px(12.)).py(px(8.))
-                                        .cursor_pointer()
-                                        .hover(move |s| s.bg(hover_bg))
-                                        .text_size(rems(1.))
-                                        .text_color(rgb(c.status_red))
-                                        .child("Delete Latest Price Entry")
-                                        .on_mouse_down(
-                                            MouseButton::Left,
-                                            cx.listener(move |this, _: &MouseDownEvent, _: &mut Window, cx| {
+                                div()
+                                    .id("ctx-pb-delete-price")
+                                    .px(px(12.))
+                                    .py(px(8.))
+                                    .cursor_pointer()
+                                    .hover(move |s| s.bg(hover_bg))
+                                    .text_size(rems(1.))
+                                    .text_color(rgb(c.status_red))
+                                    .child("Delete Latest Price Entry")
+                                    .on_mouse_down(
+                                        MouseButton::Left,
+                                        cx.listener(
+                                            move |this, _: &MouseDownEvent, _: &mut Window, cx| {
                                                 this.store.update(cx, |s, cx| {
                                                     s.clear_context_menu(cx);
                                                     s.delete_price_entry(entry_id, pid, cx);
                                                 });
-                                            }),
-                                        )
-                                )
-                        })
+                                            },
+                                        ),
+                                    ),
+                            )
+                        }),
                 );
         }
 
@@ -613,17 +764,30 @@ impl Render for PriceBookPanel {
     }
 }
 
-fn pb_detail_field(label: impl Into<String>, value: impl Into<String>, c: &vassl_ui::ThemeColors) -> impl gpui::IntoElement {
+fn pb_detail_field(
+    label: impl Into<String>,
+    value: impl Into<String>,
+    c: &vassl_ui::ThemeColors,
+) -> impl gpui::IntoElement {
     div()
-        .flex().flex_col().px(px(12.)).py(px(8.))
-        .border_b_1().border_color(rgb(c.surface_default))
+        .flex()
+        .flex_col()
+        .px(px(12.))
+        .py(px(8.))
+        .border_b_1()
+        .border_color(rgb(c.surface_default))
         .child(
-            div().text_size(rems(0.769)).text_color(rgb(c.text_muted)).mb(px(2.))
-                .child(label.into())
+            div()
+                .text_size(rems(0.769))
+                .text_color(rgb(c.text_muted))
+                .mb(px(2.))
+                .child(label.into()),
         )
         .child(
-            div().text_size(rems(0.923)).text_color(rgb(c.text_default))
-                .child(value.into())
+            div()
+                .text_size(rems(0.923))
+                .text_color(rgb(c.text_default))
+                .child(value.into()),
         )
 }
 
@@ -635,7 +799,7 @@ mod tests {
     fn pricebook_panel_event_show_price_history_carries_data() {
         let ev = PriceBookPanelEvent::ShowPriceHistory {
             product_id: 3,
-            name:       "DVR System".to_string(),
+            name: "DVR System".to_string(),
         };
         match ev {
             PriceBookPanelEvent::ShowPriceHistory { product_id, name } => {

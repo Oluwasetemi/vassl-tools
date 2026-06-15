@@ -1,11 +1,13 @@
-use gpui::{AnyView, App, BoxShadow, Context, IntoElement, Render, SharedString, Window,
-           div, hsla, point, prelude::*, px, rems, rgb};
+use gpui::{
+    div, hsla, point, prelude::*, px, rems, rgb, AnyView, App, BoxShadow, Context, IntoElement,
+    Render, SharedString, Window,
+};
 
 use crate::ThemeHandle;
 
 /// A styled tooltip view.  Create and attach with the [`tooltip`] or [`tooltip_keyed`] helpers.
 pub struct Tooltip {
-    title:    SharedString,
+    title: SharedString,
     key_hint: Option<SharedString>,
 }
 
@@ -14,11 +16,11 @@ impl Render for Tooltip {
         let c = cx.global::<ThemeHandle>().0.clone();
 
         let shadow = vec![BoxShadow {
-            color:         hsla(0., 0., 0., 0.28),
-            offset:        point(px(0.), px(3.)),
-            blur_radius:   px(10.),
+            color: hsla(0., 0., 0., 0.28),
+            offset: point(px(0.), px(3.)),
+            blur_radius: px(10.),
             spread_radius: px(0.),
-            inset:         false,
+            inset: false,
         }];
 
         div()
@@ -62,7 +64,11 @@ pub fn tooltip(
 ) -> impl Fn(&mut Window, &mut App) -> AnyView {
     let title: SharedString = title.into();
     move |_window, cx| {
-        cx.new(|_| Tooltip { title: title.clone(), key_hint: None }).into()
+        cx.new(|_| Tooltip {
+            title: title.clone(),
+            key_hint: None,
+        })
+        .into()
     }
 }
 
@@ -72,12 +78,16 @@ pub fn tooltip(
 /// div().id("btn").tooltip(tooltip_keyed("Inventory", "Ctrl+1"))
 /// ```
 pub fn tooltip_keyed(
-    title:    impl Into<SharedString> + 'static,
+    title: impl Into<SharedString> + 'static,
     key_hint: impl Into<SharedString> + 'static,
 ) -> impl Fn(&mut Window, &mut App) -> AnyView {
-    let title:    SharedString = title.into();
+    let title: SharedString = title.into();
     let key_hint: SharedString = key_hint.into();
     move |_window, cx| {
-        cx.new(|_| Tooltip { title: title.clone(), key_hint: Some(key_hint.clone()) }).into()
+        cx.new(|_| Tooltip {
+            title: title.clone(),
+            key_hint: Some(key_hint.clone()),
+        })
+        .into()
     }
 }

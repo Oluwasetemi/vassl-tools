@@ -8,8 +8,11 @@ fn main() {
         let version = std::env::var("CARGO_PKG_VERSION").unwrap_or_default();
         let pre = version.split_once('-').map(|(_, p)| p).unwrap_or("");
         let known = ["alpha", "beta", "preview", "nightly"];
-        let major: u32 = version.split('.').next()
-            .and_then(|s| s.parse().ok()).unwrap_or(0);
+        let major: u32 = version
+            .split('.')
+            .next()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
         let is_stable = pre.is_empty() && major >= 1;
         let is_known_pre = known.iter().any(|k| pre.starts_with(k));
         if !is_stable && !is_known_pre {
@@ -41,8 +44,14 @@ fn main() {
         let mut res = winres::WindowsResource::new();
         res.set_icon("../../assets/icons/vassl.ico");
         res.set("ProductName", "VASSL");
-        res.set("FileDescription", "VASSL — Video Access Security Solutions Ltd.");
-        res.set("LegalCopyright", "Copyright \u{00a9} 2026 Video Access Security Solutions Ltd.");
+        res.set(
+            "FileDescription",
+            "VASSL — Video Access Security Solutions Ltd.",
+        );
+        res.set(
+            "LegalCopyright",
+            "Copyright \u{00a9} 2026 Video Access Security Solutions Ltd.",
+        );
         res.set("CompanyName", "Video Access Security Solutions Ltd.");
         res.compile().expect("failed to embed Windows resources");
         println!("cargo:rerun-if-changed=../../assets/icons/vassl.ico");

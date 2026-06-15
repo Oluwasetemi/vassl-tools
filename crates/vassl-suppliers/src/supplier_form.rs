@@ -1,7 +1,9 @@
-use gpui::{Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Window,
-           actions, div, prelude::*, px, rems, rgb, rgba, SharedString};
+use gpui::{
+    actions, div, prelude::*, px, rems, rgb, rgba, Context, Entity, EventEmitter, FocusHandle,
+    Focusable, IntoElement, Render, SharedString, Window,
+};
 use vassl_core::Supplier;
-use vassl_ui::{TextInput, ThemeHandle, text_field};
+use vassl_ui::{text_field, TextInput, ThemeHandle};
 
 use crate::db::SupplierDb;
 use crate::store::SupplierStore;
@@ -9,27 +11,32 @@ use crate::store::SupplierStore;
 actions!(supplier_form, [EscapeForm, TabField, BackTabField]);
 
 #[derive(Debug)]
-pub enum SupplierFormEvent { Submitted, Cancelled }
+pub enum SupplierFormEvent {
+    Submitted,
+    Cancelled,
+}
 impl EventEmitter<SupplierFormEvent> for SupplierForm {}
 
 pub struct SupplierForm {
-    store:          Entity<SupplierStore>,
-    editing_id:     Option<i64>,
-    pub name:       Entity<TextInput>,
+    store: Entity<SupplierStore>,
+    editing_id: Option<i64>,
+    pub name: Entity<TextInput>,
     contact_person: Entity<TextInput>,
-    email:          Entity<TextInput>,
-    phone:          Entity<TextInput>,
-    address:        Entity<TextInput>,
-    notes:          Entity<TextInput>,
-    cancel_focus:   FocusHandle,
-    save_focus:     FocusHandle,
-    error:          Option<String>,
-    name_error:     bool,
+    email: Entity<TextInput>,
+    phone: Entity<TextInput>,
+    address: Entity<TextInput>,
+    notes: Entity<TextInput>,
+    cancel_focus: FocusHandle,
+    save_focus: FocusHandle,
+    error: Option<String>,
+    name_error: bool,
 }
 
 fn validate_supplier_name(name: &str) -> Result<String, String> {
     let name = name.trim().to_string();
-    if name.is_empty() { return Err("Name is required.".to_string()); }
+    if name.is_empty() {
+        return Err("Name is required.".to_string());
+    }
     Ok(name)
 }
 
@@ -37,27 +44,27 @@ impl SupplierForm {
     pub fn new(store: Entity<SupplierStore>, cx: &mut Context<Self>) -> Self {
         Self {
             store,
-            editing_id:     None,
-            name:           cx.new(|cx| TextInput::with_placeholder("e.g. Sony Electronics", cx)),
+            editing_id: None,
+            name: cx.new(|cx| TextInput::with_placeholder("e.g. Sony Electronics", cx)),
             contact_person: cx.new(|cx| TextInput::with_placeholder("optional", cx)),
-            email:          cx.new(|cx| TextInput::with_placeholder("optional", cx)),
-            phone:          cx.new(|cx| TextInput::with_placeholder("optional", cx)),
-            address:        cx.new(|cx| TextInput::with_placeholder("optional", cx)),
-            notes:          cx.new(|cx| TextInput::with_placeholder("optional", cx)),
-            cancel_focus:   cx.focus_handle(),
-            save_focus:     cx.focus_handle(),
-            error:          None,
-            name_error:     false,
+            email: cx.new(|cx| TextInput::with_placeholder("optional", cx)),
+            phone: cx.new(|cx| TextInput::with_placeholder("optional", cx)),
+            address: cx.new(|cx| TextInput::with_placeholder("optional", cx)),
+            notes: cx.new(|cx| TextInput::with_placeholder("optional", cx)),
+            cancel_focus: cx.focus_handle(),
+            save_focus: cx.focus_handle(),
+            error: None,
+            name_error: false,
         }
     }
 
     pub fn edit(store: Entity<SupplierStore>, supplier: &Supplier, cx: &mut Context<Self>) -> Self {
-        let name_f    = cx.new(|cx| TextInput::with_placeholder("e.g. Sony Electronics", cx));
+        let name_f = cx.new(|cx| TextInput::with_placeholder("e.g. Sony Electronics", cx));
         let contact_f = cx.new(|cx| TextInput::with_placeholder("optional", cx));
-        let email_f   = cx.new(|cx| TextInput::with_placeholder("optional", cx));
-        let phone_f   = cx.new(|cx| TextInput::with_placeholder("optional", cx));
+        let email_f = cx.new(|cx| TextInput::with_placeholder("optional", cx));
+        let phone_f = cx.new(|cx| TextInput::with_placeholder("optional", cx));
         let address_f = cx.new(|cx| TextInput::with_placeholder("optional", cx));
-        let notes_f   = cx.new(|cx| TextInput::with_placeholder("optional", cx));
+        let notes_f = cx.new(|cx| TextInput::with_placeholder("optional", cx));
 
         name_f.update(cx, |t, cx| t.set_text(supplier.name.clone(), cx));
         if let Some(v) = &supplier.contact_person {
@@ -78,51 +85,79 @@ impl SupplierForm {
 
         Self {
             store,
-            editing_id:     Some(supplier.id),
-            name:           name_f,
+            editing_id: Some(supplier.id),
+            name: name_f,
             contact_person: contact_f,
-            email:          email_f,
-            phone:          phone_f,
-            address:        address_f,
-            notes:          notes_f,
-            cancel_focus:   cx.focus_handle(),
-            save_focus:     cx.focus_handle(),
-            error:          None,
-            name_error:     false,
+            email: email_f,
+            phone: phone_f,
+            address: address_f,
+            notes: notes_f,
+            cancel_focus: cx.focus_handle(),
+            save_focus: cx.focus_handle(),
+            error: None,
+            name_error: false,
         }
     }
 
     fn submit(&mut self, cx: &mut Context<Self>) {
-        let name_raw   = self.name.read(cx).text().to_string();
-        let contact    = self.contact_person.read(cx).text().trim().to_string();
-        let email      = self.email.read(cx).text().trim().to_string();
-        let phone      = self.phone.read(cx).text().trim().to_string();
-        let address    = self.address.read(cx).text().trim().to_string();
-        let notes      = self.notes.read(cx).text().trim().to_string();
-        let contact_op = if contact.is_empty() { None } else { Some(contact) };
-        let email_op   = if email.is_empty()   { None } else { Some(email) };
-        let phone_op   = if phone.is_empty()   { None } else { Some(phone) };
-        let address_op = if address.is_empty() { None } else { Some(address) };
-        let notes_op   = if notes.is_empty()   { None } else { Some(notes) };
+        let name_raw = self.name.read(cx).text().to_string();
+        let contact = self.contact_person.read(cx).text().trim().to_string();
+        let email = self.email.read(cx).text().trim().to_string();
+        let phone = self.phone.read(cx).text().trim().to_string();
+        let address = self.address.read(cx).text().trim().to_string();
+        let notes = self.notes.read(cx).text().trim().to_string();
+        let contact_op = if contact.is_empty() {
+            None
+        } else {
+            Some(contact)
+        };
+        let email_op = if email.is_empty() { None } else { Some(email) };
+        let phone_op = if phone.is_empty() { None } else { Some(phone) };
+        let address_op = if address.is_empty() {
+            None
+        } else {
+            Some(address)
+        };
+        let notes_op = if notes.is_empty() { None } else { Some(notes) };
 
         self.name_error = name_raw.trim().is_empty();
 
         match validate_supplier_name(&name_raw) {
-            Err(msg) => { self.error = Some(msg); cx.notify(); }
+            Err(msg) => {
+                self.error = Some(msg);
+                cx.notify();
+            }
             Ok(name) => {
                 self.error = None;
                 cx.notify();
-                let db         = SupplierDb::global(&**cx);
-                let store      = self.store.clone();
+                let db = SupplierDb::global(&**cx);
+                let store = self.store.clone();
                 let editing_id = self.editing_id;
 
                 cx.spawn(async move |this, cx| {
                     let result = if let Some(id) = editing_id {
-                        db.update_supplier(id, &name, contact_op.as_deref(), email_op.as_deref(), phone_op.as_deref(), address_op.as_deref(), notes_op.as_deref()).await
-                            .map(|_| ())
+                        db.update_supplier(
+                            id,
+                            &name,
+                            contact_op.as_deref(),
+                            email_op.as_deref(),
+                            phone_op.as_deref(),
+                            address_op.as_deref(),
+                            notes_op.as_deref(),
+                        )
+                        .await
+                        .map(|_| ())
                     } else {
-                        db.insert_supplier(&name, contact_op.as_deref(), email_op.as_deref(), phone_op.as_deref(), address_op.as_deref(), notes_op.as_deref()).await
-                            .map(|_| ())
+                        db.insert_supplier(
+                            &name,
+                            contact_op.as_deref(),
+                            email_op.as_deref(),
+                            phone_op.as_deref(),
+                            address_op.as_deref(),
+                            notes_op.as_deref(),
+                        )
+                        .await
+                        .map(|_| ())
                     };
 
                     match result {
@@ -132,7 +167,10 @@ impl SupplierForm {
                             } else {
                                 format!("Save failed: {e}")
                             };
-                            let _ = this.update(cx, |form, cx| { form.error = Some(msg); cx.notify(); });
+                            let _ = this.update(cx, |form, cx| {
+                                form.error = Some(msg);
+                                cx.notify();
+                            });
                         }
                         Ok(()) => {
                             let _ = store.update(cx, |s, cx| s.load_suppliers(cx));
@@ -140,33 +178,50 @@ impl SupplierForm {
                         }
                     }
                     Ok::<(), anyhow::Error>(())
-                }).detach();
+                })
+                .detach();
             }
         }
     }
 }
 
 impl Focusable for SupplierForm {
-    fn focus_handle(&self, cx: &gpui::App) -> FocusHandle { self.name.read(cx).focus_handle.clone() }
+    fn focus_handle(&self, cx: &gpui::App) -> FocusHandle {
+        self.name.read(cx).focus_handle.clone()
+    }
 }
 
 impl Render for SupplierForm {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let c          = cx.global::<ThemeHandle>().0.clone();
-        let name_f     = self.name.read(cx).focus_handle.is_focused(window);
-        let contact_f  = self.contact_person.read(cx).focus_handle.is_focused(window);
-        let email_f    = self.email.read(cx).focus_handle.is_focused(window);
-        let phone_f    = self.phone.read(cx).focus_handle.is_focused(window);
-        let address_f  = self.address.read(cx).focus_handle.is_focused(window);
-        let notes_f    = self.notes.read(cx).focus_handle.is_focused(window);
-        let cancel_f   = self.cancel_focus.is_focused(window);
-        let save_f     = self.save_focus.is_focused(window);
-        let title      = if self.editing_id.is_some() { "Edit Supplier" } else { "New Supplier" };
-        let save_label = if self.editing_id.is_some() { "Save Changes" } else { "Save Supplier" };
+        let c = cx.global::<ThemeHandle>().0.clone();
+        let name_f = self.name.read(cx).focus_handle.is_focused(window);
+        let contact_f = self.contact_person.read(cx).focus_handle.is_focused(window);
+        let email_f = self.email.read(cx).focus_handle.is_focused(window);
+        let phone_f = self.phone.read(cx).focus_handle.is_focused(window);
+        let address_f = self.address.read(cx).focus_handle.is_focused(window);
+        let notes_f = self.notes.read(cx).focus_handle.is_focused(window);
+        let cancel_f = self.cancel_focus.is_focused(window);
+        let save_f = self.save_focus.is_focused(window);
+        let title = if self.editing_id.is_some() {
+            "Edit Supplier"
+        } else {
+            "New Supplier"
+        };
+        let save_label = if self.editing_id.is_some() {
+            "Save Changes"
+        } else {
+            "Save Supplier"
+        };
 
         div()
-            .absolute().top_0().left_0().right_0().bottom_0()
-            .flex().items_center().justify_center()
+            .absolute()
+            .top_0()
+            .left_0()
+            .right_0()
+            .bottom_0()
+            .flex()
+            .items_center()
+            .justify_center()
             .bg(rgba(0x00000099))
             .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .key_context("SupplierForm")
@@ -202,7 +257,8 @@ impl Render for SupplierForm {
                     this.save_focus.clone(),
                 ];
                 let current = handles.iter().position(|h| h.is_focused(window));
-                let prev = handles[(current.unwrap_or(0) + handles.len() - 1) % handles.len()].clone();
+                let prev =
+                    handles[(current.unwrap_or(0) + handles.len() - 1) % handles.len()].clone();
                 window.focus(&prev, cx);
             }))
             .child(
@@ -212,91 +268,246 @@ impl Render for SupplierForm {
                     .rounded(px(10.))
                     .border_1()
                     .border_color(rgb(c.surface_default))
-                    .flex().flex_col()
+                    .flex()
+                    .flex_col()
                     .child(
                         div()
-                            .px(px(20.)).py(px(14.))
+                            .px(px(20.))
+                            .py(px(14.))
                             .rounded_t(px(10.))
                             .bg(rgb(c.sidebar_bg))
-                            .flex().flex_row().items_center()
-                            .child(div().flex_1().text_size(rems(1.)).text_color(rgb(c.text_default)).child(title))
-                            .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted)).child("Esc to cancel"))
-                    )
-                    .child(
-                        div().flex().flex_col().px(px(20.)).pt(px(8.)).pb(px(4.))
+                            .flex()
+                            .flex_row()
+                            .items_center()
                             .child(
-                                div().flex().flex_row().items_center().py(px(10.))
-                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_default)).child("Name"))
-                                    .child(div().flex_1().child(text_field("", self.name.clone(), name_f, self.name_error, cx)))
-                            )
-                            .child(div().h(px(1.)).bg(rgb(c.surface_default)))
-                            .child(
-                                div().flex().flex_row().items_center().py(px(10.))
-                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child("Contact Person"))
-                                    .child(div().flex_1().child(text_field("", self.contact_person.clone(), contact_f, false, cx)))
-                            )
-                            .child(div().h(px(1.)).bg(rgb(c.surface_default)))
-                            .child(
-                                div().flex().flex_row().items_center().py(px(10.))
-                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child("Email"))
-                                    .child(div().flex_1().child(text_field("", self.email.clone(), email_f, false, cx)))
-                            )
-                            .child(div().h(px(1.)).bg(rgb(c.surface_default)))
-                            .child(
-                                div().flex().flex_row().items_center().py(px(10.))
-                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child("Phone"))
-                                    .child(div().flex_1().child(text_field("", self.phone.clone(), phone_f, false, cx)))
-                            )
-                            .child(div().h(px(1.)).bg(rgb(c.surface_default)))
-                            .child(
-                                div().flex().flex_row().items_center().py(px(10.))
-                                    .child(div().w(px(160.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child("Address"))
-                                    .child(div().flex_1().child(text_field("", self.address.clone(), address_f, false, cx)))
-                            )
-                            .child(div().h(px(1.)).bg(rgb(c.surface_default)))
-                            .child(
-                                div().flex().flex_row().items_start().py(px(10.))
-                                    .child(div().w(px(160.)).pt(px(6.)).text_size(rems(0.923)).text_color(rgb(c.text_muted)).child("Notes"))
-                                    .child(div().flex_1().h(px(64.)).child(text_field("", self.notes.clone(), notes_f, false, cx)))
+                                div()
+                                    .flex_1()
+                                    .text_size(rems(1.))
+                                    .text_color(rgb(c.text_default))
+                                    .child(title),
                             )
                             .child(
-                                div().h(px(18.)).flex().items_center()
-                                    .child(div().text_size(rems(0.846)).text_color(rgb(c.status_red))
-                                        .child(self.error.as_deref().map(SharedString::from).unwrap_or_default()))
-                            )
+                                div()
+                                    .text_size(rems(0.846))
+                                    .text_color(rgb(c.text_muted))
+                                    .child("Esc to cancel"),
+                            ),
                     )
                     .child(
                         div()
-                            .px(px(20.)).py(px(14.))
-                            .border_t_1().border_color(rgb(c.surface_default))
-                            .flex().flex_row().justify_end().gap(px(8.))
+                            .flex()
+                            .flex_col()
+                            .px(px(20.))
+                            .pt(px(8.))
+                            .pb(px(4.))
                             .child(
-                                div().id("sup-btn-cancel")
-                                    .track_focus(&self.cancel_focus)
-                                    .px(px(18.)).py(px(7.)).rounded(px(5.))
-                                    .bg(rgb(c.surface_default)).text_size(rems(0.923)).text_color(rgb(c.text_default))
-                                    .cursor_pointer()
-                                    .when(cancel_f, |d| d.border_2().border_color(rgb(c.surface_active)))
-                                    .when(!cancel_f, |d| d.border_1().border_color(rgb(c.surface_default)))
-                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, window, cx| {
-                                        let root = cx.global::<vassl_ui::RootFocusHandle>().0.clone();
-                                        window.focus(&root, cx);
-                                        cx.emit(SupplierFormEvent::Cancelled);
-                                    }))
-                                    .child("Cancel")
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .items_center()
+                                    .py(px(10.))
+                                    .child(
+                                        div()
+                                            .w(px(160.))
+                                            .text_size(rems(0.923))
+                                            .text_color(rgb(c.text_default))
+                                            .child("Name"),
+                                    )
+                                    .child(div().flex_1().child(text_field(
+                                        "",
+                                        self.name.clone(),
+                                        name_f,
+                                        self.name_error,
+                                        cx,
+                                    ))),
+                            )
+                            .child(div().h(px(1.)).bg(rgb(c.surface_default)))
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .items_center()
+                                    .py(px(10.))
+                                    .child(
+                                        div()
+                                            .w(px(160.))
+                                            .text_size(rems(0.923))
+                                            .text_color(rgb(c.text_muted))
+                                            .child("Contact Person"),
+                                    )
+                                    .child(div().flex_1().child(text_field(
+                                        "",
+                                        self.contact_person.clone(),
+                                        contact_f,
+                                        false,
+                                        cx,
+                                    ))),
+                            )
+                            .child(div().h(px(1.)).bg(rgb(c.surface_default)))
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .items_center()
+                                    .py(px(10.))
+                                    .child(
+                                        div()
+                                            .w(px(160.))
+                                            .text_size(rems(0.923))
+                                            .text_color(rgb(c.text_muted))
+                                            .child("Email"),
+                                    )
+                                    .child(div().flex_1().child(text_field(
+                                        "",
+                                        self.email.clone(),
+                                        email_f,
+                                        false,
+                                        cx,
+                                    ))),
+                            )
+                            .child(div().h(px(1.)).bg(rgb(c.surface_default)))
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .items_center()
+                                    .py(px(10.))
+                                    .child(
+                                        div()
+                                            .w(px(160.))
+                                            .text_size(rems(0.923))
+                                            .text_color(rgb(c.text_muted))
+                                            .child("Phone"),
+                                    )
+                                    .child(div().flex_1().child(text_field(
+                                        "",
+                                        self.phone.clone(),
+                                        phone_f,
+                                        false,
+                                        cx,
+                                    ))),
+                            )
+                            .child(div().h(px(1.)).bg(rgb(c.surface_default)))
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .items_center()
+                                    .py(px(10.))
+                                    .child(
+                                        div()
+                                            .w(px(160.))
+                                            .text_size(rems(0.923))
+                                            .text_color(rgb(c.text_muted))
+                                            .child("Address"),
+                                    )
+                                    .child(div().flex_1().child(text_field(
+                                        "",
+                                        self.address.clone(),
+                                        address_f,
+                                        false,
+                                        cx,
+                                    ))),
+                            )
+                            .child(div().h(px(1.)).bg(rgb(c.surface_default)))
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .items_start()
+                                    .py(px(10.))
+                                    .child(
+                                        div()
+                                            .w(px(160.))
+                                            .pt(px(6.))
+                                            .text_size(rems(0.923))
+                                            .text_color(rgb(c.text_muted))
+                                            .child("Notes"),
+                                    )
+                                    .child(div().flex_1().h(px(64.)).child(text_field(
+                                        "",
+                                        self.notes.clone(),
+                                        notes_f,
+                                        false,
+                                        cx,
+                                    ))),
                             )
                             .child(
-                                div().id("sup-btn-save")
-                                    .track_focus(&self.save_focus)
-                                    .px(px(18.)).py(px(7.)).rounded(px(5.))
-                                    .bg(rgb(c.surface_active)).text_size(rems(0.923)).text_color(rgb(c.text_default))
-                                    .cursor_pointer()
-                                    .when(save_f, |d| d.border_2().border_color(rgb(c.text_default)))
-                                    .when(!save_f, |d| d.border_1().border_color(rgb(c.surface_active)))
-                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| this.submit(cx)))
-                                    .child(save_label)
-                            )
+                                div().h(px(18.)).flex().items_center().child(
+                                    div()
+                                        .text_size(rems(0.846))
+                                        .text_color(rgb(c.status_red))
+                                        .child(
+                                            self.error
+                                                .as_deref()
+                                                .map(SharedString::from)
+                                                .unwrap_or_default(),
+                                        ),
+                                ),
+                            ),
                     )
+                    .child(
+                        div()
+                            .px(px(20.))
+                            .py(px(14.))
+                            .border_t_1()
+                            .border_color(rgb(c.surface_default))
+                            .flex()
+                            .flex_row()
+                            .justify_end()
+                            .gap(px(8.))
+                            .child(
+                                div()
+                                    .id("sup-btn-cancel")
+                                    .track_focus(&self.cancel_focus)
+                                    .px(px(18.))
+                                    .py(px(7.))
+                                    .rounded(px(5.))
+                                    .bg(rgb(c.surface_default))
+                                    .text_size(rems(0.923))
+                                    .text_color(rgb(c.text_default))
+                                    .cursor_pointer()
+                                    .when(cancel_f, |d| {
+                                        d.border_2().border_color(rgb(c.surface_active))
+                                    })
+                                    .when(!cancel_f, |d| {
+                                        d.border_1().border_color(rgb(c.surface_default))
+                                    })
+                                    .on_mouse_down(
+                                        gpui::MouseButton::Left,
+                                        cx.listener(|_, _, window, cx| {
+                                            let root =
+                                                cx.global::<vassl_ui::RootFocusHandle>().0.clone();
+                                            window.focus(&root, cx);
+                                            cx.emit(SupplierFormEvent::Cancelled);
+                                        }),
+                                    )
+                                    .child("Cancel"),
+                            )
+                            .child(
+                                div()
+                                    .id("sup-btn-save")
+                                    .track_focus(&self.save_focus)
+                                    .px(px(18.))
+                                    .py(px(7.))
+                                    .rounded(px(5.))
+                                    .bg(rgb(c.surface_active))
+                                    .text_size(rems(0.923))
+                                    .text_color(rgb(c.text_default))
+                                    .cursor_pointer()
+                                    .when(save_f, |d| {
+                                        d.border_2().border_color(rgb(c.text_default))
+                                    })
+                                    .when(!save_f, |d| {
+                                        d.border_1().border_color(rgb(c.surface_active))
+                                    })
+                                    .on_mouse_down(
+                                        gpui::MouseButton::Left,
+                                        cx.listener(|this, _, _, cx| this.submit(cx)),
+                                    )
+                                    .child(save_label),
+                            ),
+                    ),
             )
     }
 }

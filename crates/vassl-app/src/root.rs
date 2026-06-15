@@ -1,25 +1,30 @@
-use gpui::{Context, Entity, FocusHandle, Focusable, IntoElement, PathPromptOptions, Render,
-           Subscription, Window, div, prelude::*, px, rgb, rems};
 #[cfg(not(target_os = "macos"))]
-use gpui::{MouseButton, MouseDownEvent, OwnedMenuItem, deferred};
+use gpui::{deferred, MouseButton, MouseDownEvent, OwnedMenuItem};
+use gpui::{
+    div, prelude::*, px, rems, rgb, Context, Entity, FocusHandle, Focusable, IntoElement,
+    PathPromptOptions, Render, Subscription, Window,
+};
 #[cfg(not(target_os = "macos"))]
 use vassl_ui::tooltip;
-use vassl_ui::{TextContextMenuHandle, TextContextMenuState, ThemeColors, ThemeHandle, RootFocusHandle};
+use vassl_ui::{
+    RootFocusHandle, TextContextMenuHandle, TextContextMenuState, ThemeColors, ThemeHandle,
+};
 
 use crate::about_dialog::{AboutDialog, AboutEvent};
-use crate::actions::{About, CheckForUpdates, DecreaseFontSize, EscapeModal, FocusSearch,
-                     IncreaseFontSize, InstallUpdate, Logout, Minimize, OpenAuditLog, OpenChangelog,
-                     OpenGlobalSearch, OpenInventory, OpenPriceBook, OpenProjects, OpenQuotations,
-                     OpenSuppliers, OpenSettings, SelectNext, SelectPrev, Zoom};
-use crate::changelog::{ChangelogPanel, ChangelogEvent};
-use crate::license_dialog::{LicenseDialog, LicenseDialogEvent};
-use crate::auto_update::{AutoUpdateEvent, AutoUpdater, UpdateStatus};
-use vassl_ui::NewRecord;
-use crate::global_search::{GlobalSearch, GlobalSearchEvent, SearchResultKind};
-use crate::settings_panel::{SettingsPanel, SettingsPanelEvent};
+use crate::actions::{
+    About, CheckForUpdates, DecreaseFontSize, EscapeModal, FocusSearch, IncreaseFontSize,
+    InstallUpdate, Logout, Minimize, OpenAuditLog, OpenChangelog, OpenGlobalSearch, OpenInventory,
+    OpenPriceBook, OpenProjects, OpenQuotations, OpenSettings, OpenSuppliers, SelectNext,
+    SelectPrev, Zoom,
+};
 use crate::audit_log::AuditLogPanel;
-use crate::command_palette::{CommandPalette, PaletteEvent, PaletteCommand};
+use crate::auto_update::{AutoUpdateEvent, AutoUpdater, UpdateStatus};
+use crate::changelog::{ChangelogEvent, ChangelogPanel};
+use crate::command_palette::{CommandPalette, PaletteCommand, PaletteEvent};
+use crate::global_search::{GlobalSearch, GlobalSearchEvent, SearchResultKind};
+use crate::license_dialog::{LicenseDialog, LicenseDialogEvent};
 use crate::login_panel::{LoginPanel, LoginPanelEvent};
+use crate::settings_panel::{SettingsPanel, SettingsPanelEvent};
 use crate::sidebar::{ActiveModule, Sidebar};
 use crate::status_bar::StatusBar;
 use vassl_inventory::panel::{InventoryPanel, InventoryPanelEvent};
@@ -28,82 +33,98 @@ use vassl_pricebook::panel::{PriceBookPanel, PriceBookPanelEvent};
 use vassl_pricebook::price_history::{PriceHistoryEvent, PriceHistoryPanel};
 use vassl_quotations::{panel::QuotationPanel, ProjectPanel};
 use vassl_suppliers::{panel::SupplierPanel, store::SupplierStoreHandle};
+use vassl_ui::NewRecord;
 
 pub struct VasslRoot {
-    sidebar:          Entity<Sidebar>,
-    status_bar:       Entity<StatusBar>,
-    inventory_panel:  Entity<InventoryPanel>,
-    pricebook_panel:  Entity<PriceBookPanel>,
-    quotation_panel:  Entity<QuotationPanel>,
-    suppliers_panel:  Entity<SupplierPanel>,
-    projects_panel:   Entity<ProjectPanel>,
-    settings_panel:   Entity<SettingsPanel>,
-    login_panel:           Entity<LoginPanel>,
-    _login_sub:            Subscription,
-    authenticated:         bool,
-    audit_log:             Option<Entity<AuditLogPanel>>,
-    palette:               Option<Entity<CommandPalette>>,
-    _palette_sub:          Option<Subscription>,
-    price_history:         Option<Entity<PriceHistoryPanel>>,
-    _price_history_sub:    Option<Subscription>,
-    global_search:         Option<Entity<GlobalSearch>>,
-    _global_search_sub:    Option<Subscription>,
-    about_dialog:          Option<Entity<AboutDialog>>,
-    _about_sub:            Option<Subscription>,
-    changelog_panel:       Option<Entity<ChangelogPanel>>,
-    _changelog_sub:        Option<Subscription>,
-    license_dialog:        Option<Entity<LicenseDialog>>,
-    _license_sub:          Option<Subscription>,
-    build_expired:         bool,
-    updater:               Entity<AutoUpdater>,
-    _updater_sub:          Subscription,
-    _inventory_panel_sub:  Subscription,
-    _pricebook_panel_sub:  Subscription,
-    _settings_panel_sub:   Subscription,
-    focus_handle:          FocusHandle,
+    sidebar: Entity<Sidebar>,
+    status_bar: Entity<StatusBar>,
+    inventory_panel: Entity<InventoryPanel>,
+    pricebook_panel: Entity<PriceBookPanel>,
+    quotation_panel: Entity<QuotationPanel>,
+    suppliers_panel: Entity<SupplierPanel>,
+    projects_panel: Entity<ProjectPanel>,
+    settings_panel: Entity<SettingsPanel>,
+    login_panel: Entity<LoginPanel>,
+    _login_sub: Subscription,
+    authenticated: bool,
+    audit_log: Option<Entity<AuditLogPanel>>,
+    palette: Option<Entity<CommandPalette>>,
+    _palette_sub: Option<Subscription>,
+    price_history: Option<Entity<PriceHistoryPanel>>,
+    _price_history_sub: Option<Subscription>,
+    global_search: Option<Entity<GlobalSearch>>,
+    _global_search_sub: Option<Subscription>,
+    about_dialog: Option<Entity<AboutDialog>>,
+    _about_sub: Option<Subscription>,
+    changelog_panel: Option<Entity<ChangelogPanel>>,
+    _changelog_sub: Option<Subscription>,
+    license_dialog: Option<Entity<LicenseDialog>>,
+    _license_sub: Option<Subscription>,
+    build_expired: bool,
+    updater: Entity<AutoUpdater>,
+    _updater_sub: Subscription,
+    _inventory_panel_sub: Subscription,
+    _pricebook_panel_sub: Subscription,
+    _settings_panel_sub: Subscription,
+    focus_handle: FocusHandle,
     /// Which top-level menu is open in the Windows custom menu bar (None = all closed).
     #[cfg(not(target_os = "macos"))]
-    open_menu_index:       Option<usize>,
+    open_menu_index: Option<usize>,
 }
 
 impl Focusable for VasslRoot {
-    fn focus_handle(&self, _: &gpui::App) -> FocusHandle { self.focus_handle.clone() }
+    fn focus_handle(&self, _: &gpui::App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
 }
 
 impl VasslRoot {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let login_panel = cx.new(LoginPanel::new);
-        let _login_sub  = cx.subscribe(&login_panel, |this, _panel, ev: &LoginPanelEvent, cx| {
+        let _login_sub = cx.subscribe(&login_panel, |this, _panel, ev: &LoginPanelEvent, cx| {
             match ev {
                 LoginPanelEvent::Authenticated(user) => {
                     this.authenticated = true;
                     // Sync the login username into the settings panel display name field.
-                    let name  = user.username.clone();
+                    let name = user.username.clone();
                     let input = this.settings_panel.read(cx).user_name.clone();
                     input.update(cx, |inp, cx| inp.set_text(name.clone(), cx));
                     // Persist as current_user so audit log changed_by is correct.
                     let db = vassl_db::AppDatabase::global(&**cx).clone();
                     let name_for_db = name.clone();
                     cx.spawn(async move |_, _cx| {
-                        let _ = db.write(move |conn| vassl_db::shared::set_current_user(conn, &name_for_db)).await;
+                        let _ = db
+                            .write(move |conn| {
+                                vassl_db::shared::set_current_user(conn, &name_for_db)
+                            })
+                            .await;
                         Ok::<(), anyhow::Error>(())
-                    }).detach();
+                    })
+                    .detach();
                     cx.set_global(vassl_ui::AppSettings {
                         logged_in_user_id: user.id,
-                        username:          user.username.clone(),
-                        is_admin:          user.is_admin,
-                        can_inventory:     user.can_inventory,
-                        can_pricebook:     user.can_pricebook,
-                        can_quotations:    user.can_quotations,
-                        allow_delete:      user.allow_delete,
-                        allow_price_edit:  user.allow_price_edit,
+                        username: user.username.clone(),
+                        is_admin: user.is_admin,
+                        can_inventory: user.can_inventory,
+                        can_pricebook: user.can_pricebook,
+                        can_quotations: user.can_quotations,
+                        allow_delete: user.allow_delete,
+                        allow_price_edit: user.allow_price_edit,
                     });
                     // Default sidebar to first accessible module.
-                    let first = if user.can_inventory || user.is_admin { ActiveModule::Inventory }
-                        else if user.can_quotations  { ActiveModule::Quotations }
-                        else if user.can_pricebook   { ActiveModule::PriceBook }
-                        else                         { ActiveModule::Settings };
-                    this.sidebar.update(cx, |s, cx| { s.active = first; cx.notify(); });
+                    let first = if user.can_inventory || user.is_admin {
+                        ActiveModule::Inventory
+                    } else if user.can_quotations {
+                        ActiveModule::Quotations
+                    } else if user.can_pricebook {
+                        ActiveModule::PriceBook
+                    } else {
+                        ActiveModule::Settings
+                    };
+                    this.sidebar.update(cx, |s, cx| {
+                        s.active = first;
+                        cx.notify();
+                    });
                     cx.notify();
                 }
             }
@@ -118,10 +139,12 @@ impl VasslRoot {
                 }
             }
             let font_family = vassl_db::shared::get_setting(db, "appearance.font_family")
-                .ok().flatten()
+                .ok()
+                .flatten()
                 .unwrap_or_else(|| "system-ui".into());
             let theme = vassl_db::shared::get_setting(db, "appearance.theme")
-                .ok().flatten()
+                .ok()
+                .flatten()
                 .unwrap_or_else(|| "dark".into());
             let colors = if theme == "light" {
                 ThemeColors::light()
@@ -150,12 +173,10 @@ impl VasslRoot {
         cx.set_global(vassl_ui::AppSettings::default());
         let _settings_panel_sub = cx.subscribe(
             &settings_panel,
-            |_this, panel, ev: &SettingsPanelEvent, cx| {
-                match ev {
-                    SettingsPanelEvent::KeymapChanged => {
-                        let overrides = panel.read(cx).keymap_overrides.clone();
-                        crate::apply_keybindings(&mut **cx, &overrides);
-                    }
+            |_this, panel, ev: &SettingsPanelEvent, cx| match ev {
+                SettingsPanelEvent::KeymapChanged => {
+                    let overrides = panel.read(cx).keymap_overrides.clone();
+                    crate::apply_keybindings(&mut **cx, &overrides);
                 }
             },
         );
@@ -166,7 +187,8 @@ impl VasslRoot {
             let needs_license = {
                 let db = vassl_db::AppDatabase::global(&**cx);
                 let stored_key = vassl_db::shared::get_setting(db, "license.key")
-                    .ok().flatten();
+                    .ok()
+                    .flatten();
                 match stored_key {
                     None => true,
                     Some(key) => crate::license::validate_key(&key).is_err(),
@@ -177,7 +199,7 @@ impl VasslRoot {
                 let fh = dialog.read(cx).focus_handle(cx);
                 window.focus(&fh, cx);
                 let sub = cx.subscribe(&dialog, |this, _, _ev: &LicenseDialogEvent, cx| {
-                    this._license_sub  = None;
+                    this._license_sub = None;
                     this.license_dialog = None;
                     cx.notify();
                 });
@@ -189,8 +211,8 @@ impl VasslRoot {
             (None, None)
         };
 
-        let inventory_panel  = cx.new(InventoryPanel::new);
-        let pricebook_panel  = cx.new(PriceBookPanel::new);
+        let inventory_panel = cx.new(InventoryPanel::new);
+        let pricebook_panel = cx.new(PriceBookPanel::new);
 
         let _inventory_panel_sub = cx.subscribe(
             &inventory_panel,
@@ -264,30 +286,26 @@ impl VasslRoot {
 
         let _pricebook_panel_sub = cx.subscribe(
             &pricebook_panel,
-            |this, _panel, ev: &PriceBookPanelEvent, cx| {
-                match ev {
-                    PriceBookPanelEvent::ShowPriceHistory { product_id, name } => {
-                        let ph  = cx.new(|cx| PriceHistoryPanel::new(*product_id, name.clone(), cx));
-                        let sub = cx.subscribe(&ph, |this, _, ev: &PriceHistoryEvent, cx| {
-                            match ev {
-                                PriceHistoryEvent::Dismissed => {
-                                    this._price_history_sub = None;
-                                    this.price_history      = None;
-                                    cx.notify();
-                                }
-                            }
-                        });
-                        this.price_history      = Some(ph);
-                        this._price_history_sub = Some(sub);
-                        cx.notify();
-                    }
+            |this, _panel, ev: &PriceBookPanelEvent, cx| match ev {
+                PriceBookPanelEvent::ShowPriceHistory { product_id, name } => {
+                    let ph = cx.new(|cx| PriceHistoryPanel::new(*product_id, name.clone(), cx));
+                    let sub = cx.subscribe(&ph, |this, _, ev: &PriceHistoryEvent, cx| match ev {
+                        PriceHistoryEvent::Dismissed => {
+                            this._price_history_sub = None;
+                            this.price_history = None;
+                            cx.notify();
+                        }
+                    });
+                    this.price_history = Some(ph);
+                    this._price_history_sub = Some(sub);
+                    cx.notify();
                 }
             },
         );
 
-        let supplier_store  = cx.global::<SupplierStoreHandle>().0.clone();
+        let supplier_store = cx.global::<SupplierStoreHandle>().0.clone();
         let suppliers_panel = cx.new(|cx| SupplierPanel::new(supplier_store, cx));
-        let projects_panel  = cx.new(ProjectPanel::new);
+        let projects_panel = cx.new(ProjectPanel::new);
 
         // Auto-updater — kick off a background check on startup.
         let updater = cx.new(|_| AutoUpdater::new());
@@ -300,28 +318,28 @@ impl VasslRoot {
         status_bar.update(cx, |bar, _| bar.set_updater(updater.clone()));
 
         Self {
-            sidebar:          cx.new(Sidebar::new),
+            sidebar: cx.new(Sidebar::new),
             status_bar,
             inventory_panel,
             pricebook_panel,
-            quotation_panel:  cx.new(QuotationPanel::new),
+            quotation_panel: cx.new(QuotationPanel::new),
             suppliers_panel,
             projects_panel,
             settings_panel,
             login_panel,
             _login_sub,
-            authenticated:    false,
-            audit_log:        None,
-            palette:              None,
-            _palette_sub:         None,
-            price_history:        None,
-            _price_history_sub:   None,
-            global_search:        None,
-            _global_search_sub:   None,
-            about_dialog:         None,
-            _about_sub:           None,
-            changelog_panel:      None,
-            _changelog_sub:       None,
+            authenticated: false,
+            audit_log: None,
+            palette: None,
+            _palette_sub: None,
+            price_history: None,
+            _price_history_sub: None,
+            global_search: None,
+            _global_search_sub: None,
+            about_dialog: None,
+            _about_sub: None,
+            changelog_panel: None,
+            _changelog_sub: None,
             license_dialog,
             _license_sub,
             build_expired,
@@ -337,100 +355,118 @@ impl VasslRoot {
     }
 
     fn open_global_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.global_search.is_some() { return; }
-        let gs  = cx.new(|cx| GlobalSearch::new(cx));
-        let qf  = gs.read(cx).query.read(cx).focus_handle.clone();
+        if self.global_search.is_some() {
+            return;
+        }
+        let gs = cx.new(|cx| GlobalSearch::new(cx));
+        let qf = gs.read(cx).query.read(cx).focus_handle.clone();
         window.focus(&qf, cx);
-        let sub = cx.subscribe(&gs, |this, _, ev: &GlobalSearchEvent, cx| {
-            match ev {
-                GlobalSearchEvent::Dismissed => {
-                    this._global_search_sub = None;
-                    this.global_search      = None;
+        let sub = cx.subscribe(&gs, |this, _, ev: &GlobalSearchEvent, cx| match ev {
+            GlobalSearchEvent::Dismissed => {
+                this._global_search_sub = None;
+                this.global_search = None;
+                cx.notify();
+            }
+            GlobalSearchEvent::Navigate(hit) => {
+                this.sidebar.update(cx, |s, cx| {
+                    s.active = hit.module;
                     cx.notify();
-                }
-                GlobalSearchEvent::Navigate(hit) => {
-                    this.sidebar.update(cx, |s, cx| { s.active = hit.module; cx.notify(); });
-                    match &hit.kind {
-                        SearchResultKind::Product  { id, .. } => {
-                            let pid = *id;
-                            cx.global::<InventoryStoreHandle>().0.clone()
-                                .update(cx, |s, cx| s.select_product(pid, cx));
-                        }
-                        SearchResultKind::Supplier { id, .. } => {
-                            let sid = *id;
-                            cx.global::<SupplierStoreHandle>().0.clone()
-                                .update(cx, |s, cx| s.select_supplier(sid, cx));
-                        }
-                        SearchResultKind::Project { id, .. } => {
-                            let pid = *id;
-                            cx.global::<vassl_quotations::QuotationStoreHandle>().0.clone()
-                                .update(cx, |s, cx| s.select_project(pid, cx));
-                        }
+                });
+                match &hit.kind {
+                    SearchResultKind::Product { id, .. } => {
+                        let pid = *id;
+                        cx.global::<InventoryStoreHandle>()
+                            .0
+                            .clone()
+                            .update(cx, |s, cx| s.select_product(pid, cx));
                     }
-                    this._global_search_sub = None;
-                    this.global_search      = None;
-                    cx.notify();
+                    SearchResultKind::Supplier { id, .. } => {
+                        let sid = *id;
+                        cx.global::<SupplierStoreHandle>()
+                            .0
+                            .clone()
+                            .update(cx, |s, cx| s.select_supplier(sid, cx));
+                    }
+                    SearchResultKind::Project { id, .. } => {
+                        let pid = *id;
+                        cx.global::<vassl_quotations::QuotationStoreHandle>()
+                            .0
+                            .clone()
+                            .update(cx, |s, cx| s.select_project(pid, cx));
+                    }
                 }
+                this._global_search_sub = None;
+                this.global_search = None;
+                cx.notify();
             }
         });
-        self.global_search      = Some(gs);
+        self.global_search = Some(gs);
         self._global_search_sub = Some(sub);
         cx.notify();
     }
 
     fn open_about(&mut self, cx: &mut Context<Self>) {
-        if self.about_dialog.is_some() { return; }
+        if self.about_dialog.is_some() {
+            return;
+        }
         let updater = self.updater.clone();
-        let dialog  = cx.new(|cx| AboutDialog::new(updater, cx));
+        let dialog = cx.new(|cx| AboutDialog::new(updater, cx));
         let sub = cx.subscribe(&dialog, |this, _, ev: &AboutEvent, cx| {
             if matches!(ev, AboutEvent::Copied) {
                 cx.write_to_clipboard(gpui::ClipboardItem::new_string(
-                    AboutDialog::full_version_static()
+                    AboutDialog::full_version_static(),
                 ));
             }
-            this._about_sub   = None;
+            this._about_sub = None;
             this.about_dialog = None;
             cx.notify();
         });
         self.about_dialog = Some(dialog);
-        self._about_sub   = Some(sub);
+        self._about_sub = Some(sub);
         cx.notify();
     }
 
     fn open_palette(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.palette.is_some() { return; }
+        if self.palette.is_some() {
+            return;
+        }
         let pal = cx.new(|cx| CommandPalette::new(cx));
         // Auto-focus the query text input so the user can type immediately.
         let query_focus = pal.read(cx).query.read(cx).focus_handle.clone();
         window.focus(&query_focus, cx);
-        let sub = cx.subscribe(&pal, |this, _pal, ev: &PaletteEvent, cx| {
-            match ev {
-                PaletteEvent::Dismissed => {
-                    this._palette_sub = None;
-                    this.palette = None;
-                    cx.notify();
-                }
-                PaletteEvent::Execute(cmd) => {
-                    match cmd {
-                        PaletteCommand::OpenInventory =>
-                            this.sidebar.update(cx, |s, cx| { s.active = ActiveModule::Inventory; cx.notify(); }),
-                        PaletteCommand::OpenQuotations =>
-                            this.sidebar.update(cx, |s, cx| { s.active = ActiveModule::Quotations; cx.notify(); }),
-                        PaletteCommand::OpenPriceBook =>
-                            this.sidebar.update(cx, |s, cx| { s.active = ActiveModule::PriceBook; cx.notify(); }),
-                        PaletteCommand::OpenAuditLog => {
-                            if cx.global::<vassl_ui::AppSettings>().is_admin && this.audit_log.is_none() {
-                                this.audit_log = Some(cx.new(|cx| AuditLogPanel::new(cx)));
-                            }
+        let sub = cx.subscribe(&pal, |this, _pal, ev: &PaletteEvent, cx| match ev {
+            PaletteEvent::Dismissed => {
+                this._palette_sub = None;
+                this.palette = None;
+                cx.notify();
+            }
+            PaletteEvent::Execute(cmd) => {
+                match cmd {
+                    PaletteCommand::OpenInventory => this.sidebar.update(cx, |s, cx| {
+                        s.active = ActiveModule::Inventory;
+                        cx.notify();
+                    }),
+                    PaletteCommand::OpenQuotations => this.sidebar.update(cx, |s, cx| {
+                        s.active = ActiveModule::Quotations;
+                        cx.notify();
+                    }),
+                    PaletteCommand::OpenPriceBook => this.sidebar.update(cx, |s, cx| {
+                        s.active = ActiveModule::PriceBook;
+                        cx.notify();
+                    }),
+                    PaletteCommand::OpenAuditLog => {
+                        if cx.global::<vassl_ui::AppSettings>().is_admin && this.audit_log.is_none()
+                        {
+                            this.audit_log = Some(cx.new(|cx| AuditLogPanel::new(cx)));
                         }
                     }
-                    this._palette_sub = None;
-                    this.palette = None;
-                    cx.notify();
                 }
+                this._palette_sub = None;
+                this.palette = None;
+                cx.notify();
             }
         });
-        self.palette      = Some(pal);
+        self.palette = Some(pal);
         self._palette_sub = Some(sub);
         cx.notify();
     }
@@ -452,9 +488,13 @@ impl VasslRoot {
         let mut menu_buttons: Vec<gpui::AnyElement> = Vec::new();
         for (menu_ix, menu) in menus.into_iter().enumerate() {
             let menu_name = menu.name.clone();
-            let is_open   = self.open_menu_index == Some(menu_ix);
-            let btn_bg    = rgb(if is_open { c.surface_active } else { c.surface_default });
-            let hover_bg  = rgb(c.surface_hover);
+            let is_open = self.open_menu_index == Some(menu_ix);
+            let btn_bg = rgb(if is_open {
+                c.surface_active
+            } else {
+                c.surface_default
+            });
+            let hover_bg = rgb(c.surface_hover);
 
             let dropdown: Option<gpui::AnyElement> = if is_open {
                 let mut rows: Vec<gpui::AnyElement> = Vec::new();
@@ -466,29 +506,43 @@ impl VasslRoot {
                                     .id(format!("msep-{menu_ix}-{item_ix}"))
                                     .h(px(1.))
                                     .bg(rgb(c.surface_hover))
-                                    .mx(px(4.)).my(px(2.))
+                                    .mx(px(4.))
+                                    .my(px(2.))
                                     .into_any_element(),
                             );
                         }
-                        OwnedMenuItem::Action { name, action, disabled, .. } => {
-                            let text_col   = rgb(if disabled { c.text_muted } else { c.text_default });
+                        OwnedMenuItem::Action {
+                            name,
+                            action,
+                            disabled,
+                            ..
+                        } => {
+                            let text_col = rgb(if disabled {
+                                c.text_muted
+                            } else {
+                                c.text_default
+                            });
                             let item_hover = rgb(c.surface_hover);
                             let item_el = div()
                                 .id(format!("mitem-{menu_ix}-{item_ix}"))
-                                .px(px(16.)).py(px(5.))
+                                .px(px(16.))
+                                .py(px(5.))
                                 .text_size(rems(0.923))
                                 .text_color(text_col)
                                 .when(!disabled, |d| {
                                     d.hover(move |s| s.bg(item_hover))
-                                     .cursor_pointer()
-                                     .on_mouse_down(
-                                         MouseButton::Left,
-                                         cx.listener(move |this, _: &MouseDownEvent, window, cx| {
-                                             this.open_menu_index = None;
-                                             window.dispatch_action(action.boxed_clone(), cx);
-                                             cx.notify();
-                                         }),
-                                     )
+                                        .cursor_pointer()
+                                        .on_mouse_down(
+                                            MouseButton::Left,
+                                            cx.listener(
+                                                move |this, _: &MouseDownEvent, window, cx| {
+                                                    this.open_menu_index = None;
+                                                    window
+                                                        .dispatch_action(action.boxed_clone(), cx);
+                                                    cx.notify();
+                                                },
+                                            ),
+                                        )
                                 })
                                 .child(name);
                             rows.push(item_el.into_any_element());
@@ -560,9 +614,12 @@ impl VasslRoot {
 
         let is_maximized = window.is_maximized();
 
-        let caption_btn = |id: &'static str, icon: &'static str, area: WindowControlArea,
-                           is_close: bool, tip: &'static str| {
-            let close_hover  = rgb(0xE81120u32);
+        let caption_btn = |id: &'static str,
+                           icon: &'static str,
+                           area: WindowControlArea,
+                           is_close: bool,
+                           tip: &'static str| {
+            let close_hover = rgb(0xE81120u32);
             let close_active = rgb(0xBF0E1Au32);
             let normal_hover = rgb(c.surface_hover);
             div()
@@ -577,11 +634,9 @@ impl VasslRoot {
                 .font_family(icon_font)
                 .when(is_close, |d| {
                     d.hover(move |s| s.bg(close_hover).text_color(rgb(0xFFFFFF)))
-                     .active(move |s| s.bg(close_active).text_color(rgb(0xFFFFFF)))
+                        .active(move |s| s.bg(close_active).text_color(rgb(0xFFFFFF)))
                 })
-                .when(!is_close, |d| {
-                    d.hover(move |s| s.bg(normal_hover))
-                })
+                .when(!is_close, |d| d.hover(move |s| s.bg(normal_hover)))
                 .cursor_pointer()
                 .window_control_area(area)
                 .tooltip(tooltip(tip))
@@ -605,18 +660,34 @@ impl VasslRoot {
                     .id("title-drag")
                     .flex_1()
                     .h_full()
-                    .window_control_area(WindowControlArea::Drag)
+                    .window_control_area(WindowControlArea::Drag),
             )
             // Caption buttons on the right
-            .child(caption_btn("btn-min",
-                "\u{e921}", WindowControlArea::Min, false, "Minimize"))
             .child(caption_btn(
-                if is_maximized { "btn-restore" } else { "btn-max" },
+                "btn-min",
+                "\u{e921}",
+                WindowControlArea::Min,
+                false,
+                "Minimize",
+            ))
+            .child(caption_btn(
+                if is_maximized {
+                    "btn-restore"
+                } else {
+                    "btn-max"
+                },
                 if is_maximized { "\u{e923}" } else { "\u{e922}" },
-                WindowControlArea::Max, false,
-                if is_maximized { "Restore" } else { "Maximize" }))
-            .child(caption_btn("btn-close",
-                "\u{e8bb}", WindowControlArea::Close, true, "Close"))
+                WindowControlArea::Max,
+                false,
+                if is_maximized { "Restore" } else { "Maximize" },
+            ))
+            .child(caption_btn(
+                "btn-close",
+                "\u{e8bb}",
+                WindowControlArea::Close,
+                true,
+                "Close",
+            ))
     }
 }
 
@@ -627,7 +698,11 @@ impl Render for VasslRoot {
         // Not authenticated — render the login/setup screen.
         if !self.authenticated {
             return div()
-                .relative().flex().flex_col().w_full().h_full()
+                .relative()
+                .flex()
+                .flex_col()
+                .w_full()
+                .h_full()
                 .font_family(gpui::SharedString::from(c.font_family.clone()))
                 .bg(rgb(c.canvas_bg))
                 .child(self.login_panel.clone());
@@ -636,18 +711,42 @@ impl Render for VasslRoot {
         // Build expiry blocks the entire app — render a static dead-end screen.
         if self.build_expired {
             return div()
-                .relative().flex().flex_col().w_full().h_full()
+                .relative()
+                .flex()
+                .flex_col()
+                .w_full()
+                .h_full()
                 .font_family(gpui::SharedString::from(c.font_family.clone()))
                 .bg(rgb(c.canvas_bg))
-                .flex().items_center().justify_center()
+                .flex()
+                .items_center()
+                .justify_center()
                 .child(
-                    div().flex().flex_col().items_center().gap(px(12.))
-                        .child(div().text_size(rems(1.385)).text_color(rgb(c.text_default))
-                            .child("This VASSL build has expired"))
-                        .child(div().text_size(rems(0.923)).text_color(rgb(c.text_muted))
-                            .child("Please contact your VASSL administrator for an updated version."))
-                        .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted))
-                            .child(format!("Version {}", env!("CARGO_PKG_VERSION"))))
+                    div()
+                        .flex()
+                        .flex_col()
+                        .items_center()
+                        .gap(px(12.))
+                        .child(
+                            div()
+                                .text_size(rems(1.385))
+                                .text_color(rgb(c.text_default))
+                                .child("This VASSL build has expired"),
+                        )
+                        .child(
+                            div()
+                                .text_size(rems(0.923))
+                                .text_color(rgb(c.text_muted))
+                                .child(
+                                "Please contact your VASSL administrator for an updated version.",
+                            ),
+                        )
+                        .child(
+                            div()
+                                .text_size(rems(0.846))
+                                .text_color(rgb(c.text_muted))
+                                .child(format!("Version {}", env!("CARGO_PKG_VERSION"))),
+                        ),
                 );
         }
 
@@ -655,56 +754,82 @@ impl Render for VasslRoot {
 
         let content = div().flex_1().h_full().flex().flex_col();
         let content = match active {
-            ActiveModule::Inventory  => content.child(self.inventory_panel.clone()),
+            ActiveModule::Inventory => content.child(self.inventory_panel.clone()),
             ActiveModule::Quotations => content.child(self.quotation_panel.clone()),
-            ActiveModule::PriceBook  => content.child(self.pricebook_panel.clone()),
-            ActiveModule::Suppliers  => content.child(self.suppliers_panel.clone()),
-            ActiveModule::Projects   => content.child(self.projects_panel.clone()),
-            ActiveModule::Settings   => content.child(self.settings_panel.clone()),
+            ActiveModule::PriceBook => content.child(self.pricebook_panel.clone()),
+            ActiveModule::Suppliers => content.child(self.suppliers_panel.clone()),
+            ActiveModule::Projects => content.child(self.projects_panel.clone()),
+            ActiveModule::Settings => content.child(self.settings_panel.clone()),
         };
 
         let root = div()
             .key_context("VasslRoot")
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(|this, _: &OpenInventory, _w, cx| {
-                this.sidebar.update(cx, |s, cx| { s.active = ActiveModule::Inventory; cx.notify(); });
+                this.sidebar.update(cx, |s, cx| {
+                    s.active = ActiveModule::Inventory;
+                    cx.notify();
+                });
             }))
             .on_action(cx.listener(|this, _: &OpenQuotations, _w, cx| {
-                this.sidebar.update(cx, |s, cx| { s.active = ActiveModule::Quotations; cx.notify(); });
+                this.sidebar.update(cx, |s, cx| {
+                    s.active = ActiveModule::Quotations;
+                    cx.notify();
+                });
             }))
             .on_action(cx.listener(|this, _: &OpenPriceBook, _w, cx| {
-                this.sidebar.update(cx, |s, cx| { s.active = ActiveModule::PriceBook; cx.notify(); });
+                this.sidebar.update(cx, |s, cx| {
+                    s.active = ActiveModule::PriceBook;
+                    cx.notify();
+                });
             }))
             .on_action(cx.listener(|this, _: &OpenSuppliers, _w, cx| {
-                this.sidebar.update(cx, |s, cx| { s.active = ActiveModule::Suppliers; cx.notify(); });
+                this.sidebar.update(cx, |s, cx| {
+                    s.active = ActiveModule::Suppliers;
+                    cx.notify();
+                });
             }))
             .on_action(cx.listener(|this, _: &OpenProjects, _w, cx| {
-                this.sidebar.update(cx, |s, cx| { s.active = ActiveModule::Projects; cx.notify(); });
+                this.sidebar.update(cx, |s, cx| {
+                    s.active = ActiveModule::Projects;
+                    cx.notify();
+                });
             }))
             .on_action(cx.listener(|this, _: &NewRecord, window, cx| {
                 let active = this.sidebar.read(cx).active;
                 let fh = match active {
-                    ActiveModule::Inventory  => this.inventory_panel.update(cx, |p, cx| p.create_product_form(cx)),
-                    ActiveModule::Suppliers  => this.suppliers_panel.update(cx, |p, cx| p.create_new_form(cx)),
-                    ActiveModule::Quotations => this.quotation_panel.update(cx, |p, cx| p.create_form(cx)),
-                    ActiveModule::PriceBook  => this.pricebook_panel.update(cx, |p, cx| p.create_form(cx)),
-                    ActiveModule::Projects   => None,
-                    ActiveModule::Settings   => None,
+                    ActiveModule::Inventory => this
+                        .inventory_panel
+                        .update(cx, |p, cx| p.create_product_form(cx)),
+                    ActiveModule::Suppliers => this
+                        .suppliers_panel
+                        .update(cx, |p, cx| p.create_new_form(cx)),
+                    ActiveModule::Quotations => {
+                        this.quotation_panel.update(cx, |p, cx| p.create_form(cx))
+                    }
+                    ActiveModule::PriceBook => {
+                        this.pricebook_panel.update(cx, |p, cx| p.create_form(cx))
+                    }
+                    ActiveModule::Projects => None,
+                    ActiveModule::Settings => None,
                 };
-                if let Some(fh) = fh { window.focus(&fh, cx); }
+                if let Some(fh) = fh {
+                    window.focus(&fh, cx);
+                }
             }))
             .on_action(cx.listener(|this, _: &Logout, w, cx| {
                 let username = cx.global::<vassl_ui::AppSettings>().username.clone();
-                let uid      = cx.global::<vassl_ui::AppSettings>().logged_in_user_id;
+                let uid = cx.global::<vassl_ui::AppSettings>().logged_in_user_id;
                 if !username.is_empty() {
                     let db = crate::users_db::UsersDb::global(&**cx);
                     cx.spawn(async move |_, _cx| {
                         let _ = db.log_auth_event(uid, "LOGOUT", &username).await;
                         Ok::<(), anyhow::Error>(())
-                    }).detach();
+                    })
+                    .detach();
                 }
                 this.authenticated = false;
-                this.audit_log     = None;
+                this.audit_log = None;
                 cx.set_global(vassl_ui::AppSettings::default());
                 // Reset login panel inputs
                 this.login_panel.update(cx, |p, cx| p.reset(cx));
@@ -712,7 +837,9 @@ impl Render for VasslRoot {
                 cx.notify();
             }))
             .on_action(cx.listener(|this, _: &OpenAuditLog, _w, cx| {
-                if !cx.global::<vassl_ui::AppSettings>().is_admin { return; }
+                if !cx.global::<vassl_ui::AppSettings>().is_admin {
+                    return;
+                }
                 if this.audit_log.is_some() {
                     this.audit_log = None;
                 } else {
@@ -721,7 +848,10 @@ impl Render for VasslRoot {
                 cx.notify();
             }))
             .on_action(cx.listener(|this, _: &OpenSettings, _w, cx| {
-                this.sidebar.update(cx, |s, cx| { s.active = ActiveModule::Settings; cx.notify(); });
+                this.sidebar.update(cx, |s, cx| {
+                    s.active = ActiveModule::Settings;
+                    cx.notify();
+                });
             }))
             .on_action(cx.listener(|this, _: &IncreaseFontSize, window, cx| {
                 this.settings_panel.update(cx, |sp, cx| {
@@ -758,17 +888,17 @@ impl Render for VasslRoot {
             }))
             .on_action(cx.listener(|this, _: &OpenChangelog, _w, cx| {
                 if this.changelog_panel.is_some() {
-                    this._changelog_sub  = None;
+                    this._changelog_sub = None;
                     this.changelog_panel = None;
                 } else {
                     let panel = cx.new(ChangelogPanel::new);
-                    let sub   = cx.subscribe(&panel, |this, _, _ev: &ChangelogEvent, cx| {
-                        this._changelog_sub  = None;
+                    let sub = cx.subscribe(&panel, |this, _, _ev: &ChangelogEvent, cx| {
+                        this._changelog_sub = None;
                         this.changelog_panel = None;
                         cx.notify();
                     });
                     this.changelog_panel = Some(panel);
-                    this._changelog_sub  = Some(sub);
+                    this._changelog_sub = Some(sub);
                 }
                 cx.notify();
             }))
@@ -778,7 +908,8 @@ impl Render for VasslRoot {
             .on_action(cx.listener(|this, _: &InstallUpdate, _, cx| {
                 let status = this.updater.read(cx).status.clone();
                 if let UpdateStatus::ReadyToInstall(zip) = status {
-                    this.updater.update(cx, |u, cx| u.install_and_restart(zip, cx));
+                    this.updater
+                        .update(cx, |u, cx| u.install_and_restart(zip, cx));
                 } else if let UpdateStatus::Available(info) = status {
                     this.updater.update(cx, |u, cx| u.download(info, cx));
                 }
@@ -786,33 +917,53 @@ impl Render for VasslRoot {
             .on_action(cx.listener(|this, _: &SelectNext, _, cx| {
                 let active = this.sidebar.read(cx).active;
                 match active {
-                    ActiveModule::Inventory  => { this.inventory_panel.update(cx, |p, cx| p.select_next(cx)); }
-                    ActiveModule::PriceBook  => { this.pricebook_panel.update(cx, |p, cx| p.select_next(cx)); }
-                    ActiveModule::Suppliers  => { this.suppliers_panel.update(cx, |p, cx| p.select_next(cx)); }
-                    ActiveModule::Quotations => { this.quotation_panel.update(cx, |p, cx| p.select_next(cx)); }
-                    ActiveModule::Projects   => { this.projects_panel.update(cx, |p, cx| p.select_next(cx)); }
-                    ActiveModule::Settings   => {}
+                    ActiveModule::Inventory => {
+                        this.inventory_panel.update(cx, |p, cx| p.select_next(cx));
+                    }
+                    ActiveModule::PriceBook => {
+                        this.pricebook_panel.update(cx, |p, cx| p.select_next(cx));
+                    }
+                    ActiveModule::Suppliers => {
+                        this.suppliers_panel.update(cx, |p, cx| p.select_next(cx));
+                    }
+                    ActiveModule::Quotations => {
+                        this.quotation_panel.update(cx, |p, cx| p.select_next(cx));
+                    }
+                    ActiveModule::Projects => {
+                        this.projects_panel.update(cx, |p, cx| p.select_next(cx));
+                    }
+                    ActiveModule::Settings => {}
                 }
             }))
             .on_action(cx.listener(|this, _: &SelectPrev, _, cx| {
                 let active = this.sidebar.read(cx).active;
                 match active {
-                    ActiveModule::Inventory  => { this.inventory_panel.update(cx, |p, cx| p.select_prev(cx)); }
-                    ActiveModule::PriceBook  => { this.pricebook_panel.update(cx, |p, cx| p.select_prev(cx)); }
-                    ActiveModule::Suppliers  => { this.suppliers_panel.update(cx, |p, cx| p.select_prev(cx)); }
-                    ActiveModule::Quotations => { this.quotation_panel.update(cx, |p, cx| p.select_prev(cx)); }
-                    ActiveModule::Projects   => { this.projects_panel.update(cx, |p, cx| p.select_prev(cx)); }
-                    ActiveModule::Settings   => {}
+                    ActiveModule::Inventory => {
+                        this.inventory_panel.update(cx, |p, cx| p.select_prev(cx));
+                    }
+                    ActiveModule::PriceBook => {
+                        this.pricebook_panel.update(cx, |p, cx| p.select_prev(cx));
+                    }
+                    ActiveModule::Suppliers => {
+                        this.suppliers_panel.update(cx, |p, cx| p.select_prev(cx));
+                    }
+                    ActiveModule::Quotations => {
+                        this.quotation_panel.update(cx, |p, cx| p.select_prev(cx));
+                    }
+                    ActiveModule::Projects => {
+                        this.projects_panel.update(cx, |p, cx| p.select_prev(cx));
+                    }
+                    ActiveModule::Settings => {}
                 }
             }))
             .on_action(cx.listener(|this, _: &EscapeModal, w, cx| {
                 if this.changelog_panel.is_some() {
-                    this._changelog_sub  = None;
+                    this._changelog_sub = None;
                     this.changelog_panel = None;
                     w.focus(&this.focus_handle, cx);
                     cx.notify();
                 } else if this.about_dialog.is_some() {
-                    this._about_sub   = None;
+                    this._about_sub = None;
                     this.about_dialog = None;
                     w.focus(&this.focus_handle, cx);
                     cx.notify();
@@ -823,12 +974,12 @@ impl Render for VasslRoot {
                     cx.notify();
                 } else if this.global_search.is_some() {
                     this._global_search_sub = None;
-                    this.global_search      = None;
+                    this.global_search = None;
                     w.focus(&this.focus_handle, cx);
                     cx.notify();
                 } else if this.price_history.is_some() {
                     this._price_history_sub = None;
-                    this.price_history      = None;
+                    this.price_history = None;
                     w.focus(&this.focus_handle, cx);
                     cx.notify();
                 } else if this.audit_log.is_some() {
@@ -841,10 +992,13 @@ impl Render for VasslRoot {
             // next keypress here (root always holds focus) and forward it as the
             // new binding.  Escape cancels without capturing.
             .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, _w, cx| {
-                if this.settings_panel.read(cx).listening_for.is_none() { return; }
+                if this.settings_panel.read(cx).listening_for.is_none() {
+                    return;
+                }
                 // Ignore bare modifier keys — wait for the actual key
                 match event.keystroke.key.as_str() {
-                    "shift" | "alt" | "control" | "platform" | "function" | "cmd" | "win" | "super" => return,
+                    "shift" | "alt" | "control" | "platform" | "function" | "cmd" | "win"
+                    | "super" => return,
                     _ => {}
                 }
                 if event.keystroke.key == "escape" {
@@ -856,13 +1010,16 @@ impl Render for VasslRoot {
                     return;
                 }
                 let keystroke = crate::keybindings::normalize_for_keybinding(&event.keystroke);
-                this.settings_panel.update(cx, |sp, cx| sp.capture_key_for_listening(keystroke, cx));
+                this.settings_panel
+                    .update(cx, |sp, cx| sp.capture_key_for_listening(keystroke, cx));
             }))
             .relative()
-            .flex().flex_col().w_full().h_full()
+            .flex()
+            .flex_col()
+            .w_full()
+            .h_full()
             .font_family(gpui::SharedString::from(c.font_family.clone()))
             .bg(rgb(c.canvas_bg));
-
 
         // Windows/Linux: render menus as a custom bar; macOS uses the native system menu bar.
         #[cfg(not(target_os = "macos"))]
@@ -870,7 +1027,12 @@ impl Render for VasslRoot {
 
         let mut root = root
             .child(
-                div().flex().flex_row().flex_1().min_h(px(0.)).overflow_hidden()
+                div()
+                    .flex()
+                    .flex_row()
+                    .flex_1()
+                    .min_h(px(0.))
+                    .overflow_hidden()
                     .child(self.sidebar.clone())
                     .child(content),
             )
@@ -879,17 +1041,19 @@ impl Render for VasslRoot {
         // Click-away capture: covers the full window so clicking outside the open menu closes it.
         #[cfg(not(target_os = "macos"))]
         if self.open_menu_index.is_some() {
-            root = root.child(
-                deferred(
-                    div()
-                        .id("menu-clickaway")
-                        .absolute().inset_0()
-                        .on_mouse_down(MouseButton::Left, cx.listener(|this, _: &MouseDownEvent, _, cx| {
+            root = root.child(deferred(
+                div()
+                    .id("menu-clickaway")
+                    .absolute()
+                    .inset_0()
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(|this, _: &MouseDownEvent, _, cx| {
                             this.open_menu_index = None;
                             cx.notify();
-                        }))
-                )
-            );
+                        }),
+                    ),
+            ));
         }
 
         if let Some(panel) = &self.audit_log {
@@ -916,93 +1080,144 @@ impl Render for VasslRoot {
 
         // TextInput right-click context menu overlay
         // Read all state upfront before the borrow is held across listener captures.
-        let tcm_handle = cx.try_global::<TextContextMenuHandle>().map(|h| h.0.clone());
-        let tcm_pos    = tcm_handle.as_ref().and_then(|h| h.read(cx).position);
-        let tcm_input  = tcm_handle.as_ref().and_then(|h| h.read(cx).input.clone());
-        let tcm_sel    = tcm_handle.as_ref().map(|h| h.read(cx).has_selection).unwrap_or(false);
+        let tcm_handle = cx
+            .try_global::<TextContextMenuHandle>()
+            .map(|h| h.0.clone());
+        let tcm_pos = tcm_handle.as_ref().and_then(|h| h.read(cx).position);
+        let tcm_input = tcm_handle.as_ref().and_then(|h| h.read(cx).input.clone());
+        let tcm_sel = tcm_handle
+            .as_ref()
+            .map(|h| h.read(cx).has_selection)
+            .unwrap_or(false);
 
         if let (Some(pos), Some(input_entity)) = (tcm_pos, tcm_input) {
-            let vp    = window.viewport_size();
+            let vp = window.viewport_size();
             const MENU_W: f32 = 160.0;
             const ITEM_H: f32 = 28.0;
             const MENU_H: f32 = ITEM_H * 3.0 + 8.0;
-            let menu_x = pos.x.as_f32().min((vp.width.as_f32()  - MENU_W).max(0.0));
+            let menu_x = pos.x.as_f32().min((vp.width.as_f32() - MENU_W).max(0.0));
             let menu_y = pos.y.as_f32().min((vp.height.as_f32() - MENU_H).max(0.0));
 
             let has_clipboard = cx.read_from_clipboard().and_then(|i| i.text()).is_some();
 
             let h_dismiss = tcm_handle.clone();
-            let h_copy    = tcm_handle.clone();
-            let h_cut     = tcm_handle.clone();
-            let h_paste   = tcm_handle.clone();
-            let input_copy  = input_entity.clone();
-            let input_cut   = input_entity.clone();
+            let h_copy = tcm_handle.clone();
+            let h_cut = tcm_handle.clone();
+            let h_paste = tcm_handle.clone();
+            let input_copy = input_entity.clone();
+            let input_cut = input_entity.clone();
             let input_paste = input_entity.clone();
 
             let hover_bg = rgb(c.surface_hover);
 
             fn clear_menu(h: &Option<gpui::Entity<TextContextMenuState>>, cx: &mut gpui::App) {
                 if let Some(h) = h {
-                    h.update(cx, |s, cx| { s.position = None; s.input = None; cx.notify(); });
+                    h.update(cx, |s, cx| {
+                        s.position = None;
+                        s.input = None;
+                        cx.notify();
+                    });
                 }
             }
 
             root = root
+                .child(gpui::div().absolute().inset_0().on_mouse_down(
+                    gpui::MouseButton::Left,
+                    cx.listener(move |_, _: &gpui::MouseDownEvent, _, cx| {
+                        clear_menu(&h_dismiss, cx);
+                    }),
+                ))
                 .child(
                     gpui::div()
-                        .absolute().inset_0()
-                        .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |_, _: &gpui::MouseDownEvent, _, cx| {
-                            clear_menu(&h_dismiss, cx);
-                        }))
-                )
-                .child(
-                    gpui::div()
-                        .absolute().left(px(menu_x)).top(px(menu_y))
+                        .absolute()
+                        .left(px(menu_x))
+                        .top(px(menu_y))
                         .w(px(MENU_W))
                         .bg(rgb(c.surface_default))
-                        .rounded(px(6.)).shadow_md().py(px(4.))
+                        .rounded(px(6.))
+                        .shadow_md()
+                        .py(px(4.))
                         .child({
                             let mut item = gpui::div()
-                                .id("ctx-ti-copy").px(px(12.)).h(px(ITEM_H))
-                                .flex().items_center().text_size(rems(0.923))
-                                .text_color(rgb(if tcm_sel { c.text_default } else { c.text_muted }));
+                                .id("ctx-ti-copy")
+                                .px(px(12.))
+                                .h(px(ITEM_H))
+                                .flex()
+                                .items_center()
+                                .text_size(rems(0.923))
+                                .text_color(rgb(if tcm_sel {
+                                    c.text_default
+                                } else {
+                                    c.text_muted
+                                }));
                             if tcm_sel {
-                                item = item.cursor_pointer().hover(move |s| s.bg(hover_bg))
-                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |_, _: &gpui::MouseDownEvent, _, cx| {
-                                        input_copy.update(cx, |t, cx| t.do_copy(cx));
-                                        clear_menu(&h_copy, cx);
-                                    }));
+                                item = item
+                                    .cursor_pointer()
+                                    .hover(move |s| s.bg(hover_bg))
+                                    .on_mouse_down(
+                                        gpui::MouseButton::Left,
+                                        cx.listener(move |_, _: &gpui::MouseDownEvent, _, cx| {
+                                            input_copy.update(cx, |t, cx| t.do_copy(cx));
+                                            clear_menu(&h_copy, cx);
+                                        }),
+                                    );
                             }
                             item.child("Copy")
                         })
                         .child({
                             let mut item = gpui::div()
-                                .id("ctx-ti-cut").px(px(12.)).h(px(ITEM_H))
-                                .flex().items_center().text_size(rems(0.923))
-                                .text_color(rgb(if tcm_sel { c.text_default } else { c.text_muted }));
+                                .id("ctx-ti-cut")
+                                .px(px(12.))
+                                .h(px(ITEM_H))
+                                .flex()
+                                .items_center()
+                                .text_size(rems(0.923))
+                                .text_color(rgb(if tcm_sel {
+                                    c.text_default
+                                } else {
+                                    c.text_muted
+                                }));
                             if tcm_sel {
-                                item = item.cursor_pointer().hover(move |s| s.bg(hover_bg))
-                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |_, _: &gpui::MouseDownEvent, _, cx| {
-                                        input_cut.update(cx, |t, cx| t.do_cut(cx));
-                                        clear_menu(&h_cut, cx);
-                                    }));
+                                item = item
+                                    .cursor_pointer()
+                                    .hover(move |s| s.bg(hover_bg))
+                                    .on_mouse_down(
+                                        gpui::MouseButton::Left,
+                                        cx.listener(move |_, _: &gpui::MouseDownEvent, _, cx| {
+                                            input_cut.update(cx, |t, cx| t.do_cut(cx));
+                                            clear_menu(&h_cut, cx);
+                                        }),
+                                    );
                             }
                             item.child("Cut")
                         })
                         .child({
                             let mut item = gpui::div()
-                                .id("ctx-ti-paste").px(px(12.)).h(px(ITEM_H))
-                                .flex().items_center().text_size(rems(0.923))
-                                .text_color(rgb(if has_clipboard { c.text_default } else { c.text_muted }));
+                                .id("ctx-ti-paste")
+                                .px(px(12.))
+                                .h(px(ITEM_H))
+                                .flex()
+                                .items_center()
+                                .text_size(rems(0.923))
+                                .text_color(rgb(if has_clipboard {
+                                    c.text_default
+                                } else {
+                                    c.text_muted
+                                }));
                             if has_clipboard {
-                                item = item.cursor_pointer().hover(move |s| s.bg(hover_bg))
-                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |_, _: &gpui::MouseDownEvent, _, cx| {
-                                        input_paste.update(cx, |t, cx| t.do_paste(cx));
-                                        clear_menu(&h_paste, cx);
-                                    }));
+                                item = item
+                                    .cursor_pointer()
+                                    .hover(move |s| s.bg(hover_bg))
+                                    .on_mouse_down(
+                                        gpui::MouseButton::Left,
+                                        cx.listener(move |_, _: &gpui::MouseDownEvent, _, cx| {
+                                            input_paste.update(cx, |t, cx| t.do_paste(cx));
+                                            clear_menu(&h_paste, cx);
+                                        }),
+                                    );
                             }
                             item.child("Paste")
-                        })
+                        }),
                 );
         }
 
@@ -1019,7 +1234,7 @@ mod tests {
     fn inventory_panel_event_variants_are_accessible() {
         let ev = InventoryPanelEvent::ShowPriceHistory {
             product_id: 1,
-            name:       "Test".to_string(),
+            name: "Test".to_string(),
         };
         assert!(matches!(ev, InventoryPanelEvent::ShowPriceHistory { .. }));
     }
@@ -1028,7 +1243,7 @@ mod tests {
     fn pricebook_panel_event_variants_are_accessible() {
         let ev = PriceBookPanelEvent::ShowPriceHistory {
             product_id: 2,
-            name:       "Test".to_string(),
+            name: "Test".to_string(),
         };
         assert!(matches!(ev, PriceBookPanelEvent::ShowPriceHistory { .. }));
     }
@@ -1036,7 +1251,7 @@ mod tests {
     #[test]
     fn open_global_search_action_is_distinct_from_focus_search() {
         use crate::actions::{FocusSearch, OpenGlobalSearch};
-        let _a: FocusSearch      = FocusSearch;
+        let _a: FocusSearch = FocusSearch;
         let _b: OpenGlobalSearch = OpenGlobalSearch;
     }
 }

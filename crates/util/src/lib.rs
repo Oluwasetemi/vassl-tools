@@ -1,6 +1,5 @@
 /// Minimal stub of the Zed `util` crate.
 /// Provides only the surface area needed by sqlez and db.
-
 pub mod paths;
 
 /// `maybe!({ block })` — wraps a block in an immediately-called closure.

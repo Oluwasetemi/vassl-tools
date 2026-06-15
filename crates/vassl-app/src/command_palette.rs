@@ -1,6 +1,8 @@
-use gpui::{Context, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Window,
-           div, prelude::*, px, rems, rgb, rgba};
-use vassl_ui::{TextInput, ThemeHandle, text_field};
+use gpui::{
+    div, prelude::*, px, rems, rgb, rgba, Context, EventEmitter, FocusHandle, Focusable,
+    IntoElement, Render, Window,
+};
+use vassl_ui::{text_field, TextInput, ThemeHandle};
 
 use crate::actions::{ConfirmSelection, EscapeModal, SelectNext, SelectPrev};
 
@@ -16,10 +18,10 @@ pub enum PaletteCommand {
 impl PaletteCommand {
     fn label(&self) -> &'static str {
         match self {
-            PaletteCommand::OpenInventory  => "Open Inventory",
+            PaletteCommand::OpenInventory => "Open Inventory",
             PaletteCommand::OpenQuotations => "Open Quotations",
-            PaletteCommand::OpenPriceBook  => "Open Price Book",
-            PaletteCommand::OpenAuditLog   => "Open Audit Log",
+            PaletteCommand::OpenPriceBook => "Open Price Book",
+            PaletteCommand::OpenAuditLog => "Open Audit Log",
         }
     }
 
@@ -42,7 +44,7 @@ pub enum PaletteEvent {
 impl EventEmitter<PaletteEvent> for CommandPalette {}
 
 pub struct CommandPalette {
-    pub query:    gpui::Entity<TextInput>,
+    pub query: gpui::Entity<TextInput>,
     selected_idx: usize,
     focus_handle: FocusHandle,
 }
@@ -63,7 +65,7 @@ pub fn filter_commands(query: &str) -> Vec<&'static PaletteCommand> {
 impl CommandPalette {
     pub fn new(cx: &mut Context<Self>) -> Self {
         Self {
-            query:        cx.new(|cx| TextInput::with_placeholder("Search commands…", cx)),
+            query: cx.new(|cx| TextInput::with_placeholder("Search commands…", cx)),
             selected_idx: 0,
             focus_handle: cx.focus_handle(),
         }
@@ -71,14 +73,16 @@ impl CommandPalette {
 }
 
 impl Focusable for CommandPalette {
-    fn focus_handle(&self, _: &gpui::App) -> FocusHandle { self.focus_handle.clone() }
+    fn focus_handle(&self, _: &gpui::App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
 }
 
 impl Render for CommandPalette {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = cx.global::<ThemeHandle>().0.clone();
         let query_text = self.query.read(cx).text().to_string();
-        let matches    = filter_commands(&query_text);
+        let matches = filter_commands(&query_text);
 
         // Clamp selected_idx to valid range.
         if self.selected_idx >= matches.len() && !matches.is_empty() {
@@ -88,13 +92,21 @@ impl Render for CommandPalette {
         let query_focused = self.query.read(cx).focus_handle.is_focused(window);
 
         div()
-            .absolute().top_0().left_0().right_0().bottom_0()
-            .flex().justify_center()
+            .absolute()
+            .top_0()
+            .left_0()
+            .right_0()
+            .bottom_0()
+            .flex()
+            .justify_center()
             .pt(px(100.))
             .bg(rgba(0x00000099))
-            .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| {
-                cx.emit(PaletteEvent::Dismissed);
-            }))
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(|_, _, _, cx| {
+                    cx.emit(PaletteEvent::Dismissed);
+                }),
+            )
             .child(
                 div()
                     .id("palette-popup")
@@ -103,11 +115,19 @@ impl Render for CommandPalette {
                         cx.emit(PaletteEvent::Dismissed);
                     }))
                     .on_action(cx.listener(|this, _: &SelectNext, _, cx| {
-                        let max = filter_commands(this.query.read(cx).text()).len().saturating_sub(1);
-                        if this.selected_idx < max { this.selected_idx += 1; cx.notify(); }
+                        let max = filter_commands(this.query.read(cx).text())
+                            .len()
+                            .saturating_sub(1);
+                        if this.selected_idx < max {
+                            this.selected_idx += 1;
+                            cx.notify();
+                        }
                     }))
                     .on_action(cx.listener(|this, _: &SelectPrev, _, cx| {
-                        if this.selected_idx > 0 { this.selected_idx -= 1; cx.notify(); }
+                        if this.selected_idx > 0 {
+                            this.selected_idx -= 1;
+                            cx.notify();
+                        }
                     }))
                     .on_action(cx.listener(|this, _: &ConfirmSelection, _, cx| {
                         let matches = filter_commands(this.query.read(cx).text());
@@ -116,41 +136,62 @@ impl Render for CommandPalette {
                         }
                     }))
                     .w(px(480.))
-                    .bg(rgb(c.canvas_bg)).rounded(px(8.)).p(px(12.))
-                    .flex().flex_col().gap(px(8.))
+                    .bg(rgb(c.canvas_bg))
+                    .rounded(px(8.))
+                    .p(px(12.))
+                    .flex()
+                    .flex_col()
+                    .gap(px(8.))
                     // Prevent click-through to the backdrop dismiss handler.
                     .on_mouse_down(gpui::MouseButton::Left, |_, _, _| {})
                     .child(text_field("", self.query.clone(), query_focused, false, cx))
                     .child({
-                        let results = div().id("palette-results")
-                            .flex().flex_col().gap(px(2.))
-                            .max_h(px(240.)).overflow_y_scroll();
+                        let results = div()
+                            .id("palette-results")
+                            .flex()
+                            .flex_col()
+                            .gap(px(2.))
+                            .max_h(px(240.))
+                            .overflow_y_scroll();
                         if matches.is_empty() {
                             results.child(
-                                div().px(px(10.)).py(px(8.))
-                                    .text_size(rems(0.923)).text_color(rgb(c.text_muted))
-                                    .child("No commands match.")
+                                div()
+                                    .px(px(10.))
+                                    .py(px(8.))
+                                    .text_size(rems(0.923))
+                                    .text_color(rgb(c.text_muted))
+                                    .child("No commands match."),
                             )
                         } else {
                             let hover_bg = rgb(c.surface_hover);
                             results.children(matches.iter().enumerate().map(|(idx, cmd)| {
                                 let selected = idx == self.selected_idx;
-                                let bg = if selected { c.surface_active } else { c.surface_default };
+                                let bg = if selected {
+                                    c.surface_active
+                                } else {
+                                    c.surface_default
+                                };
                                 let cmd_clone = (*cmd).clone();
                                 div()
                                     .id(format!("palette-item-{idx}"))
-                                    .px(px(10.)).py(px(7.)).rounded(px(4.))
+                                    .px(px(10.))
+                                    .py(px(7.))
+                                    .rounded(px(4.))
                                     .bg(rgb(bg))
                                     .when(!selected, |d| d.hover(move |s| s.bg(hover_bg)))
-                                    .text_size(rems(1.)).text_color(rgb(c.text_default))
+                                    .text_size(rems(1.))
+                                    .text_color(rgb(c.text_default))
                                     .cursor_pointer()
-                                    .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |_, _, _, cx| {
-                                        cx.emit(PaletteEvent::Execute(cmd_clone.clone()));
-                                    }))
+                                    .on_mouse_down(
+                                        gpui::MouseButton::Left,
+                                        cx.listener(move |_, _, _, cx| {
+                                            cx.emit(PaletteEvent::Execute(cmd_clone.clone()));
+                                        }),
+                                    )
                                     .child(cmd.label())
                             }))
                         }
-                    })
+                    }),
             )
     }
 }

@@ -25,16 +25,32 @@ pub fn format_keystroke(raw: &str) -> String {
 /// Returns all remappable app-level bindings as (action_name, default_keystroke, human_label).
 pub fn default_app_bindings() -> Vec<(&'static str, &'static str, &'static str)> {
     vec![
-        ("vassl::OpenInventory",    "secondary-1",       "Open Inventory"),
-        ("vassl::OpenQuotations",   "secondary-2",       "Open Quotations"),
-        ("vassl::OpenPriceBook",    "secondary-3",       "Open Price Book"),
-        ("vassl::OpenSuppliers",    "secondary-4",       "Open Suppliers"),
-        ("vassl::OpenAuditLog",     "secondary-shift-a", "Open Audit Log"),
-        ("vassl::OpenSettings",     "secondary-,",       "Open Settings"),
-        ("vassl::OpenGlobalSearch", "secondary-shift-f", "Global Search"),
-        ("vassl::FocusSearch",      "secondary-f",       "Focus Search / Command Palette"),
-        ("vassl::NewRecord",        "secondary-n",       "New Record"),
-        ("vassl::IncreaseFontSize", "secondary-=",       "Increase Font Size"),
-        ("vassl::DecreaseFontSize", "secondary--",       "Decrease Font Size"),
+        ("vassl::OpenInventory", "secondary-1", "Open Inventory"),
+        ("vassl::OpenQuotations", "secondary-2", "Open Quotations"),
+        ("vassl::OpenPriceBook", "secondary-3", "Open Price Book"),
+        ("vassl::OpenSuppliers", "secondary-4", "Open Suppliers"),
+        ("vassl::OpenAuditLog", "secondary-shift-a", "Open Audit Log"),
+        ("vassl::OpenSettings", "secondary-,", "Open Settings"),
+        (
+            "vassl::OpenGlobalSearch",
+            "secondary-shift-f",
+            "Global Search",
+        ),
+        (
+            "vassl::FocusSearch",
+            "secondary-f",
+            "Focus Search / Command Palette",
+        ),
+        ("vassl::NewRecord", "secondary-n", "New Record"),
+        (
+            "vassl::IncreaseFontSize",
+            "secondary-=",
+            "Increase Font Size",
+        ),
+        (
+            "vassl::DecreaseFontSize",
+            "secondary--",
+            "Decrease Font Size",
+        ),
     ]
 }

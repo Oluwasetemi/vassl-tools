@@ -2,8 +2,8 @@ use gpui::{Menu, MenuItem, OsAction, SystemMenuType};
 
 use crate::actions::{
     About, DecreaseFontSize, FocusSearch, Hide, HideOthers, IncreaseFontSize, Minimize,
-    OpenAuditLog, OpenChangelog, OpenDocumentation, OpenGlobalSearch, OpenInventory, OpenPriceBook, OpenQuotations,
-    OpenSettings, Quit, ShowAll, Zoom,
+    OpenAuditLog, OpenChangelog, OpenDocumentation, OpenGlobalSearch, OpenInventory, OpenPriceBook,
+    OpenQuotations, OpenSettings, Quit, ShowAll, Zoom,
 };
 use vassl_ui::NewRecord;
 
@@ -48,20 +48,24 @@ pub fn app_menus() -> Vec<Menu> {
             name: "Edit".into(),
             disabled: false,
             items: vec![
-                MenuItem::os_action("Cut",        vassl_ui::text_input::Cut,       OsAction::Cut),
-                MenuItem::os_action("Copy",       vassl_ui::text_input::Copy,      OsAction::Copy),
-                MenuItem::os_action("Paste",      vassl_ui::text_input::Paste,     OsAction::Paste),
-                MenuItem::os_action("Select All", vassl_ui::text_input::SelectAll, OsAction::SelectAll),
+                MenuItem::os_action("Cut", vassl_ui::text_input::Cut, OsAction::Cut),
+                MenuItem::os_action("Copy", vassl_ui::text_input::Copy, OsAction::Copy),
+                MenuItem::os_action("Paste", vassl_ui::text_input::Paste, OsAction::Paste),
+                MenuItem::os_action(
+                    "Select All",
+                    vassl_ui::text_input::SelectAll,
+                    OsAction::SelectAll,
+                ),
             ],
         },
         Menu {
             name: "View".into(),
             disabled: false,
             items: vec![
-                MenuItem::action("Zoom In",  IncreaseFontSize),
+                MenuItem::action("Zoom In", IncreaseFontSize),
                 MenuItem::action("Zoom Out", DecreaseFontSize),
                 MenuItem::separator(),
-                MenuItem::action("Search",        FocusSearch),
+                MenuItem::action("Search", FocusSearch),
                 MenuItem::action("Global Search", OpenGlobalSearch),
             ],
         },
@@ -70,7 +74,7 @@ pub fn app_menus() -> Vec<Menu> {
             disabled: false,
             items: vec![
                 MenuItem::action("Minimize", Minimize),
-                MenuItem::action("Zoom",     Zoom),
+                MenuItem::action("Zoom", Zoom),
             ],
         },
         Menu {

@@ -1,23 +1,28 @@
-use gpui::{Context, Entity, IntoElement, MouseButton, Render, SharedString, Window,
-           div, prelude::*, px, relative, rems, rgb};
-use vassl_ui::ThemeHandle;
-use crate::auto_update::{AutoUpdater, UpdateStatus};
 use crate::actions::{CheckForUpdates, InstallUpdate};
+use crate::auto_update::{AutoUpdater, UpdateStatus};
+use gpui::{
+    div, prelude::*, px, relative, rems, rgb, Context, Entity, IntoElement, MouseButton, Render,
+    SharedString, Window,
+};
+use vassl_ui::ThemeHandle;
 
 // Shared palette — must match about_dialog.rs constants.
-pub const BADGE_BLUE:  u32 = 0x2d6fce;
+pub const BADGE_BLUE: u32 = 0x2d6fce;
 pub const BADGE_AMBER: u32 = 0xd97706;
-pub const BADGE_RED:   u32 = 0xe05252;
+pub const BADGE_RED: u32 = 0xe05252;
 pub const BADGE_GREEN: u32 = 0x2a7a3b;
 
 pub struct StatusBar {
     pub last_action: Option<String>,
-    pub updater:     Option<Entity<AutoUpdater>>,
+    pub updater: Option<Entity<AutoUpdater>>,
 }
 
 impl StatusBar {
     pub fn new(_cx: &mut Context<Self>) -> Self {
-        Self { last_action: None, updater: None }
+        Self {
+            last_action: None,
+            updater: None,
+        }
     }
 
     pub fn set_updater(&mut self, updater: Entity<AutoUpdater>) {
@@ -53,39 +58,66 @@ impl Render for StatusBar {
                         .child(
                             // relative(frac) = CSS width: X% — always proportional to
                             // the actual window width regardless of window size.
-                            div().h_full().w(relative(frac)).bg(rgb(BADGE_BLUE))
+                            div().h_full().w(relative(frac)).bg(rgb(BADGE_BLUE)),
                         )
-                        .into_any_element()
+                        .into_any_element(),
                 )
             }
-            Some(UpdateStatus::Installing) => {
-                Some(
-                    div()
-                        .w_full()
-                        .h(px(3.))
-                        .bg(rgb(BADGE_AMBER))
-                        .into_any_element()
-                )
-            }
+            Some(UpdateStatus::Installing) => Some(
+                div()
+                    .w_full()
+                    .h(px(3.))
+                    .bg(rgb(BADGE_AMBER))
+                    .into_any_element(),
+            ),
             _ => None,
         };
 
         // ── Right-side badge ──────────────────────────────────────────────────
-        enum Badge { Text { msg: SharedString, color: u32, clickable: bool, action_install: bool }, Download { pct: u8 } }
+        enum Badge {
+            Text {
+                msg: SharedString,
+                color: u32,
+                clickable: bool,
+                action_install: bool,
+            },
+            Download {
+                pct: u8,
+            },
+        }
 
         let badge: Option<Badge> = match &update_status {
-            Some(UpdateStatus::Checking) =>
-                Some(Badge::Text { msg: "Checking for updates…".into(), color: c.text_muted, clickable: false, action_install: false }),
-            Some(UpdateStatus::Available(info)) =>
-                Some(Badge::Text { msg: format!("↓  Update v{} available", info.version).into(), color: BADGE_BLUE, clickable: true, action_install: false }),
-            Some(UpdateStatus::Downloading { pct }) =>
-                Some(Badge::Download { pct: *pct }),
-            Some(UpdateStatus::ReadyToInstall(_)) =>
-                Some(Badge::Text { msg: "↻  Restart to install update".into(), color: BADGE_AMBER, clickable: true, action_install: true }),
-            Some(UpdateStatus::Installing) =>
-                Some(Badge::Text { msg: "Installing update…".into(), color: c.text_muted, clickable: false, action_install: false }),
-            Some(UpdateStatus::Error(e)) =>
-                Some(Badge::Text { msg: format!("Update error: {e}").into(), color: 0xe05252, clickable: false, action_install: false }),
+            Some(UpdateStatus::Checking) => Some(Badge::Text {
+                msg: "Checking for updates…".into(),
+                color: c.text_muted,
+                clickable: false,
+                action_install: false,
+            }),
+            Some(UpdateStatus::Available(info)) => Some(Badge::Text {
+                msg: format!("↓  Update v{} available", info.version).into(),
+                color: BADGE_BLUE,
+                clickable: true,
+                action_install: false,
+            }),
+            Some(UpdateStatus::Downloading { pct }) => Some(Badge::Download { pct: *pct }),
+            Some(UpdateStatus::ReadyToInstall(_)) => Some(Badge::Text {
+                msg: "↻  Restart to install update".into(),
+                color: BADGE_AMBER,
+                clickable: true,
+                action_install: true,
+            }),
+            Some(UpdateStatus::Installing) => Some(Badge::Text {
+                msg: "Installing update…".into(),
+                color: c.text_muted,
+                clickable: false,
+                action_install: false,
+            }),
+            Some(UpdateStatus::Error(e)) => Some(Badge::Text {
+                msg: format!("Update error: {e}").into(),
+                color: 0xe05252,
+                clickable: false,
+                action_install: false,
+            }),
             _ => None,
         };
 
@@ -106,7 +138,12 @@ impl Render for StatusBar {
                     .child(SharedString::from(format!("Downloading update  {pct}%")))
                     .into_any_element()
             }
-            Badge::Text { msg, color, clickable, action_install } => {
+            Badge::Text {
+                msg,
+                color,
+                clickable,
+                action_install,
+            } => {
                 let mut el = div()
                     .flex()
                     .items_center()
@@ -121,15 +158,19 @@ impl Render for StatusBar {
                     .child(msg);
                 if clickable {
                     if action_install {
-                        el = el.cursor_pointer()
-                            .on_mouse_down(MouseButton::Left, cx.listener(|_, _, _, cx| {
+                        el = el.cursor_pointer().on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(|_, _, _, cx| {
                                 cx.dispatch_action(&InstallUpdate);
-                            }));
+                            }),
+                        );
                     } else {
-                        el = el.cursor_pointer()
-                            .on_mouse_down(MouseButton::Left, cx.listener(|_, _, _, cx| {
+                        el = el.cursor_pointer().on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(|_, _, _, cx| {
                                 cx.dispatch_action(&CheckForUpdates);
-                            }));
+                            }),
+                        );
                     }
                 }
                 el.into_any_element()
@@ -170,7 +211,10 @@ mod tests {
 
     #[test]
     fn initial_last_action_is_none() {
-        let bar = StatusBar { last_action: None, updater: None };
+        let bar = StatusBar {
+            last_action: None,
+            updater: None,
+        };
         assert!(bar.last_action.is_none());
     }
 

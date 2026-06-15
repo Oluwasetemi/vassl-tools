@@ -13,7 +13,7 @@ pub use db::write_and_log;
 pub use db::static_connection;
 
 use anyhow::Context as _;
-use db::{GlobalDbScope, open_db};
+use db::{open_db, GlobalDbScope};
 use gpui::{App, Global};
 use sqlez::thread_safe_connection::ThreadSafeConnection;
 use std::path::PathBuf;
@@ -107,7 +107,13 @@ mod tests {
     fn db_path_contains_vassl() {
         let path = db_path();
         let s = path.to_string_lossy();
-        assert!(s.contains("VASSL"), "db_path should contain VASSL, got: {s}");
-        assert!(s.ends_with("db.sqlite"), "db_path should end with db.sqlite, got: {s}");
+        assert!(
+            s.contains("VASSL"),
+            "db_path should contain VASSL, got: {s}"
+        );
+        assert!(
+            s.ends_with("db.sqlite"),
+            "db_path should end with db.sqlite, got: {s}"
+        );
     }
 }
