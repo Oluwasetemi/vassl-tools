@@ -1,8 +1,23 @@
-use gpui::{Context, EventEmitter, IntoElement, MouseButton, MouseDownEvent, Render, Window,
-           div, prelude::*, px, rems, rgb, rgba};
+use gpui::{
+    div, prelude::*, px, rems, rgb, rgba, Context, EventEmitter, IntoElement, MouseButton,
+    MouseDownEvent, Render, Window,
+};
 use vassl_ui::ThemeHandle;
 
 const CHANGELOG: &str = r#"
+## v0.1.0-beta.4  —  2026-06-15
+
+### Added
+- Auto-updater now logs every step to the log file — channel, version comparison, GitHub response, download progress, and errors. Log: %LOCALAPPDATA%\VASSL\logs\vassl.<date>.log (Windows).
+
+### Fixed
+- "Check for updates" button now stays visible while checking (shown dimmed) instead of disappearing.
+- Tab order in Product form (create mode): Initial Stock now follows Replacement visually. End of Life checkbox is now keyboard-reachable (Tab to focus, Space to toggle).
+- Tab order in Line Item form: Product dropdown is now the first tab stop, matching its visual position.
+- Auto-updater internal: replaced unused update_url() with supports_updates() — removes misleading placeholder URLs.
+
+---
+
 ## v0.1.0-beta.3  —  2026-06-14
 
 ### Added
@@ -85,14 +100,18 @@ const CHANGELOG: &str = r#"
 - Database migration ordering issues on fresh installs.
 "#;
 
-pub enum ChangelogEvent { Dismissed }
+pub enum ChangelogEvent {
+    Dismissed,
+}
 
 impl EventEmitter<ChangelogEvent> for ChangelogPanel {}
 
 pub struct ChangelogPanel;
 
 impl ChangelogPanel {
-    pub fn new(_cx: &mut Context<Self>) -> Self { Self }
+    pub fn new(_cx: &mut Context<Self>) -> Self {
+        Self
+    }
 }
 
 impl Render for ChangelogPanel {
@@ -101,93 +120,144 @@ impl Render for ChangelogPanel {
 
         // Backdrop — covers the whole window, click-away closes the panel
         div()
-            .absolute().inset_0()
-            .flex().items_center().justify_center()
+            .absolute()
+            .inset_0()
+            .flex()
+            .items_center()
+            .justify_center()
             .bg(rgba(0x000000CC))
-            .on_mouse_down(MouseButton::Left, cx.listener(|_, _: &MouseDownEvent, _, cx| {
-                cx.emit(ChangelogEvent::Dismissed);
-            }))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|_, _: &MouseDownEvent, _, cx| {
+                    cx.emit(ChangelogEvent::Dismissed);
+                }),
+            )
             .child(
                 // Panel — stops click propagation so clicking inside doesn't dismiss
                 div()
                     .id("changelog-panel")
-                    .w(px(600.)).h(px(520.))
+                    .w(px(600.))
+                    .h(px(520.))
                     .bg(rgb(c.canvas_bg))
                     .rounded(px(10.))
-                    .border_1().border_color(rgb(c.surface_default))
-                    .flex().flex_col()
+                    .border_1()
+                    .border_color(rgb(c.surface_default))
+                    .flex()
+                    .flex_col()
                     .overflow_hidden()
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     // Header
                     .child(
                         div()
-                            .px(px(24.)).pt(px(20.)).pb(px(14.))
+                            .px(px(24.))
+                            .pt(px(20.))
+                            .pb(px(14.))
                             .bg(rgb(c.sidebar_bg))
                             .rounded_t(px(10.))
-                            .flex().flex_row().items_center()
+                            .flex()
+                            .flex_row()
+                            .items_center()
                             .child(
-                                div().flex_1().flex().flex_col().gap(px(3.))
-                                    .child(div().text_size(rems(1.154)).text_color(rgb(c.text_default))
-                                        .font_weight(gpui::FontWeight::BOLD)
-                                        .child("Changelog"))
-                                    .child(div().text_size(rems(0.846)).text_color(rgb(c.text_muted))
-                                        .child("What's new in VASSL"))
+                                div()
+                                    .flex_1()
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(3.))
+                                    .child(
+                                        div()
+                                            .text_size(rems(1.154))
+                                            .text_color(rgb(c.text_default))
+                                            .font_weight(gpui::FontWeight::BOLD)
+                                            .child("Changelog"),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_size(rems(0.846))
+                                            .text_color(rgb(c.text_muted))
+                                            .child("What's new in VASSL"),
+                                    ),
                             )
                             .child(
-                                div().id("changelog-close")
-                                    .w(px(28.)).h(px(28.))
-                                    .flex().items_center().justify_center()
+                                div()
+                                    .id("changelog-close")
+                                    .w(px(28.))
+                                    .h(px(28.))
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
                                     .rounded(px(5.))
                                     .bg(rgb(c.surface_default))
-                                    .text_size(rems(1.)).text_color(rgb(c.text_muted))
+                                    .text_size(rems(1.))
+                                    .text_color(rgb(c.text_muted))
                                     .cursor_pointer()
-                                    .on_mouse_down(MouseButton::Left, cx.listener(|_, _: &MouseDownEvent, _, cx| {
-                                        cx.emit(ChangelogEvent::Dismissed);
-                                    }))
-                                    .child("×")
-                            )
+                                    .on_mouse_down(
+                                        MouseButton::Left,
+                                        cx.listener(|_, _: &MouseDownEvent, _, cx| {
+                                            cx.emit(ChangelogEvent::Dismissed);
+                                        }),
+                                    )
+                                    .child("×"),
+                            ),
                     )
                     .child(div().h(px(1.)).bg(rgb(c.surface_default)))
                     // Scrollable content
                     .child(
                         div()
                             .id("changelog-scroll")
-                            .flex_1().min_h(px(0.)).overflow_y_scroll()
-                            .px(px(24.)).pt(px(16.)).pb(px(32.))
-                            .children(render_changelog_lines(&c))
-                    )
+                            .flex_1()
+                            .min_h(px(0.))
+                            .overflow_y_scroll()
+                            .px(px(24.))
+                            .pt(px(16.))
+                            .pb(px(32.))
+                            .children(render_changelog_lines(&c)),
+                    ),
             )
     }
 }
 
 fn render_changelog_lines(c: &vassl_ui::ThemeColors) -> Vec<gpui::AnyElement> {
-    CHANGELOG.lines().map(|line| {
-        let (size, color, bold, indent) = if line.starts_with("## ") {
-            (rems(1.077f32), c.text_default, true, px(0.))
-        } else if line.starts_with("### ") {
-            (rems(0.923f32), c.text_default, true, px(0.))
-        } else if line.starts_with("- ") {
-            (rems(0.923f32), c.text_muted, false, px(16.))
-        } else if line.starts_with("---") {
-            return div().h(px(1.)).my(px(12.)).bg(rgb(c.surface_default)).into_any_element();
-        } else if line.trim().is_empty() {
-            return div().h(px(6.)).into_any_element();
-        } else {
-            (rems(0.923f32), c.text_muted, false, px(0.))
-        };
+    CHANGELOG
+        .lines()
+        .map(|line| {
+            let (size, color, bold, indent) = if line.starts_with("## ") {
+                (rems(1.077f32), c.text_default, true, px(0.))
+            } else if line.starts_with("### ") {
+                (rems(0.923f32), c.text_default, true, px(0.))
+            } else if line.starts_with("- ") {
+                (rems(0.923f32), c.text_muted, false, px(16.))
+            } else if line.starts_with("---") {
+                return div()
+                    .h(px(1.))
+                    .my(px(12.))
+                    .bg(rgb(c.surface_default))
+                    .into_any_element();
+            } else if line.trim().is_empty() {
+                return div().h(px(6.)).into_any_element();
+            } else {
+                (rems(0.923f32), c.text_muted, false, px(0.))
+            };
 
-        let text = if line.starts_with("## ") { line[3..].to_string() }
-            else if line.starts_with("### ") { line[4..].to_string() }
-            else if line.starts_with("- ") { format!("• {}", &line[2..]) }
-            else { line.to_string() };
+            let text = if line.starts_with("## ") {
+                line[3..].to_string()
+            } else if line.starts_with("### ") {
+                line[4..].to_string()
+            } else if line.starts_with("- ") {
+                format!("• {}", &line[2..])
+            } else {
+                line.to_string()
+            };
 
-        let mut el = div()
-            .ml(indent)
-            .text_size(size)
-            .text_color(rgb(color))
-            .mb(px(3.))
-            .child(text);
-        if bold { el = el.font_weight(gpui::FontWeight::BOLD); }
-        el.into_any_element()
-    }).collect()
+            let mut el = div()
+                .ml(indent)
+                .text_size(size)
+                .text_color(rgb(color))
+                .mb(px(3.))
+                .child(text);
+            if bold {
+                el = el.font_weight(gpui::FontWeight::BOLD);
+            }
+            el.into_any_element()
+        })
+        .collect()
 }

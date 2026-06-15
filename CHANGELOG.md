@@ -3,6 +3,19 @@
 All notable changes to VASSL are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.0-beta.4] - 2026-06-15
+
+### Added
+- Auto-updater tracing: every decision point (channel check, GitHub API call, version comparison, download, install) now emits a structured log line to the daily log file.
+
+### Fixed
+- "Check for updates" button stays visible while checking, shown at 50% opacity, instead of disappearing entirely.
+- Product form (create mode): Initial Stock tab stop now follows Replacement, matching visual order. End of Life checkbox is keyboard-reachable via Tab/Space.
+- Line Item form: Product dropdown added as first tab stop.
+- Auto-updater: replaced dead `update_url()` / placeholder `releases.vassl.app` URLs with `supports_updates() -> bool`.
+
+---
+
 ## [0.1.0-beta.3] - 2026-06-14
 
 ### Added
