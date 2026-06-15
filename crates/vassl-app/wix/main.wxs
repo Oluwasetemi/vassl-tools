@@ -22,10 +22,15 @@
       Comments="Internal operations platform for inventory, pricing, and quotations."
       Manufacturer="Video Access Security Solutions Ltd."/>
 
-    <!-- Always remove older versions before installing the new one -->
+    <!-- Always remove the previous installation before installing the new one.
+         AllowSameVersionUpgrades="yes" is required because our pre-release
+         versions (alpha.N, beta.N) all map to the same Windows FILEVERSION
+         0.1.0.0 when the pre-release suffix is stripped. Without this, the
+         installer would not uninstall the previous build and both would
+         coexist, with the old shortcut still launching the old binary. -->
     <MajorUpgrade
       DowngradeErrorMessage="A newer version of VASSL is already installed."
-      AllowSameVersionUpgrades="no"/>
+      AllowSameVersionUpgrades="yes"/>
 
     <MediaTemplate EmbedCab="yes"/>
 

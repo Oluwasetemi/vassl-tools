@@ -3,6 +3,14 @@
 All notable changes to VASSL are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.0-beta.5] - 2026-06-15
+
+### Fixed
+- MSI installer: `AllowSameVersionUpgrades="yes"` added so previous installs are always removed first. Pre-release builds (alpha.N, beta.N) all produced the same Windows FILEVERSION `0.1.0.0`, so the installer couldn't tell them apart and installed alongside the old version instead of replacing it.
+- MSI installer: `build.rs` now encodes a monotonically increasing 4th version component (`alpha.N→1000+N`, `beta.N→2000+N`) into the Windows PE FILEVERSION, so future MSI upgrades work on numeric version comparison alone.
+
+---
+
 ## [0.1.0-beta.4] - 2026-06-15
 
 ### Added

@@ -5,6 +5,13 @@ use gpui::{
 use vassl_ui::ThemeHandle;
 
 const CHANGELOG: &str = r#"
+## v0.1.0-beta.5  —  2026-06-15
+
+### Fixed
+- MSI installer now correctly removes the previous installation before installing the new version. Previously, installing beta.4 over alpha.15 left both versions on disk and the old shortcut kept launching the old binary.
+
+---
+
 ## v0.1.0-beta.4  —  2026-06-15
 
 ### Added

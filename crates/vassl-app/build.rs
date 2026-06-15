@@ -53,6 +53,37 @@ fn main() {
             "Copyright \u{00a9} 2026 Video Access Security Solutions Ltd.",
         );
         res.set("CompanyName", "Video Access Security Solutions Ltd.");
+
+        // Encode a monotonically increasing 4th version component so Windows
+        // FILEVERSION comparisons work correctly across pre-release stages.
+        // winres strips the pre-release suffix, making every 0.1.0-* build
+        // appear as 0.1.0.0 — causing MajorUpgrade to miss previous installs
+        // and leave stale binaries on disk alongside the new one.
+        //
+        // Encoding:  stage * 1000 + N
+        //   alpha.N   → 1000 + N   (alpha.15 → 1015)
+        //   beta.N    → 2000 + N   (beta.4   → 2004)
+        //   preview.N → 3000 + N
+        //   stable    → 4000
+        let pkg_ver = std::env::var("CARGO_PKG_VERSION").unwrap_or_default();
+        let build_num: u64 = if let Some((_, pre)) = pkg_ver.split_once('-') {
+            let (stage, n_str) = pre.split_once('.').unwrap_or((pre, "0"));
+            let n: u64 = n_str.parse().unwrap_or(0);
+            match stage {
+                "alpha"   => 1000 + n,
+                "beta"    => 2000 + n,
+                "preview" => 3000 + n,
+                "rc"      => 3500 + n,
+                _         => n,
+            }
+        } else {
+            4000 // stable
+        };
+        // Pack Major.Minor.Patch.Build — each field is 16 bits
+        let file_ver: u64 = (0u64 << 48) | (1u64 << 32) | (0u64 << 16) | build_num;
+        res.set_version_info(winres::VersionInfo::FILEVERSION, file_ver);
+        res.set_version_info(winres::VersionInfo::PRODUCTVERSION, file_ver);
+
         res.compile().expect("failed to embed Windows resources");
         println!("cargo:rerun-if-changed=../../assets/icons/vassl.ico");
     }
