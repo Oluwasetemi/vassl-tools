@@ -77,7 +77,11 @@ impl AutoUpdater {
     /// Trigger an update check in the background.
     /// No-ops for Dev/Nightly channels.
     pub fn check(&mut self, cx: &mut Context<Self>) {
+        let channel = RELEASE_CHANNEL.dev_name();
+        tracing::info!(version = CURRENT_VERSION, channel, "update check requested");
+
         if !RELEASE_CHANNEL.supports_updates() {
+            tracing::info!(channel, "channel does not support updates — skipping check");
             self.status = UpdateStatus::UpToDate;
             cx.notify();
             return;
@@ -93,9 +97,22 @@ impl AutoUpdater {
 
             this.update(cx, |me, cx| {
                 me.status = match result {
-                    Ok(None) => UpdateStatus::UpToDate,
-                    Ok(Some(info)) => UpdateStatus::Available(info),
-                    Err(e) => UpdateStatus::Error(e.to_string()),
+                    Ok(None) => {
+                        tracing::info!("already on the latest release");
+                        UpdateStatus::UpToDate
+                    }
+                    Ok(Some(ref info)) => {
+                        tracing::info!(
+                            latest = %info.version,
+                            asset = %info.asset_name,
+                            "update available"
+                        );
+                        UpdateStatus::Available(info.clone())
+                    }
+                    Err(ref e) => {
+                        tracing::error!(error = %e, "update check failed");
+                        UpdateStatus::Error(e.to_string())
+                    }
                 };
                 cx.emit(AutoUpdateEvent::StatusChanged);
                 cx.notify();
@@ -107,6 +124,7 @@ impl AutoUpdater {
 
     /// Start downloading the release asset.
     pub fn download(&mut self, info: ReleaseInfo, cx: &mut Context<Self>) {
+        tracing::info!(version = %info.version, asset = %info.asset_name, url = %info.download_url, "starting download");
         self.status = UpdateStatus::Downloading { pct: 0 };
         cx.notify();
 
@@ -115,8 +133,6 @@ impl AutoUpdater {
         let task = cx.spawn({
             let progress = progress.clone();
             async move |this: gpui::WeakEntity<AutoUpdater>, cx| {
-                // Run the blocking download on a real OS thread so we can
-                // track byte progress without blocking the GPUI executor.
                 let (result_tx, result_rx) =
                     std::sync::mpsc::sync_channel::<Result<(PathBuf, ReleaseInfo)>>(1);
                 let p = progress.clone();
@@ -127,15 +143,19 @@ impl AutoUpdater {
                     })
                     .expect("spawn download thread");
 
-                // Poll the progress counter at 200 ms intervals until the
-                // thread signals completion.
                 loop {
                     match result_rx.try_recv() {
                         Ok(result) => {
                             this.update(cx, |me, cx| {
                                 me.status = match result {
-                                    Ok((zip, _)) => UpdateStatus::ReadyToInstall(zip),
-                                    Err(e) => UpdateStatus::Error(e.to_string()),
+                                    Ok((ref zip, _)) => {
+                                        tracing::info!(path = %zip.display(), "download complete");
+                                        UpdateStatus::ReadyToInstall(zip.clone())
+                                    }
+                                    Err(ref e) => {
+                                        tracing::error!(error = %e, "download failed");
+                                        UpdateStatus::Error(e.to_string())
+                                    }
                                 };
                                 cx.emit(AutoUpdateEvent::StatusChanged);
                                 cx.notify();
@@ -144,6 +164,7 @@ impl AutoUpdater {
                             break;
                         }
                         Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                            tracing::error!("download thread crashed unexpectedly");
                             this.update(cx, |me, cx| {
                                 me.status = UpdateStatus::Error("Download thread crashed".into());
                                 cx.emit(AutoUpdateEvent::StatusChanged);
@@ -172,6 +193,7 @@ impl AutoUpdater {
 
     /// Extract the downloaded zip and relaunch the updated binary.
     pub fn install_and_restart(&mut self, zip: PathBuf, cx: &mut Context<Self>) {
+        tracing::info!(zip = %zip.display(), "installing update and restarting");
         self.status = UpdateStatus::Installing;
         cx.notify();
 
@@ -182,15 +204,15 @@ impl AutoUpdater {
                 .await;
 
             match result {
-                Ok(restart_path) => {
-                    // Set the restart path so GPUI relaunches the updated binary, then quit
-                    // gracefully — flushing writes and closing windows before exit.
+                Ok(ref restart_path) => {
+                    tracing::info!(restart_path = %restart_path.display(), "update applied — restarting");
                     cx.update(|cx| {
-                        cx.set_restart_path(restart_path);
+                        cx.set_restart_path(restart_path.clone());
                         cx.quit();
                     });
                 }
-                Err(e) => {
+                Err(ref e) => {
+                    tracing::error!(error = %e, "install failed");
                     this.update(cx, |me, cx| {
                         me.status = UpdateStatus::Error(e.to_string());
                         cx.emit(AutoUpdateEvent::StatusChanged);
@@ -231,7 +253,13 @@ fn query_latest_release() -> Result<Option<ReleaseInfo>> {
 
     let channel = &*RELEASE_CHANNEL;
 
-    // per_page=100 ensures we don't miss the latest after 30+ releases exist.
+    tracing::info!(
+        current_version = CURRENT_VERSION,
+        channel = channel.dev_name(),
+        platform_asset = PLATFORM_ASSET,
+        "querying GitHub releases"
+    );
+
     let url = format!("https://api.github.com/repos/{GITHUB_REPO}/releases?per_page=100");
     let releases: Vec<GhRelease> = ureq::get(&url)
         .set("User-Agent", &format!("VASSL-Updater/{CURRENT_VERSION}"))
@@ -241,12 +269,11 @@ fn query_latest_release() -> Result<Option<ReleaseInfo>> {
         .into_json()
         .context("Failed to parse GitHub releases JSON")?;
 
+    tracing::debug!(count = releases.len(), "fetched releases from GitHub");
+
     let best = releases
         .iter()
         .filter(|r| {
-            // For Stable channel, respect the GitHub prerelease flag as an extra guard.
-            // Alpha/Beta/Preview identify themselves via tag suffix, so prerelease flag
-            // is redundant for them but harmless to also check.
             let stable_ok = !matches!(channel, ReleaseChannel::Stable) || !r.prerelease;
             !r.draft && stable_ok && channel_matches(channel, &r.tag_name)
         })
@@ -257,10 +284,14 @@ fn query_latest_release() -> Result<Option<ReleaseInfo>> {
         .max_by(|(a, _), (b, _)| a.cmp(b));
 
     let Some((latest_ver, release)) = best else {
+        tracing::info!(channel = channel.dev_name(), "no releases found matching channel");
         return Ok(None);
     };
 
+    tracing::info!(latest = %latest_ver, current = %current, "comparing versions");
+
     if latest_ver <= current {
+        tracing::info!(latest = %latest_ver, current = %current, "already on latest release");
         return Ok(None);
     }
 
