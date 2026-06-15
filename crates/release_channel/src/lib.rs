@@ -25,40 +25,33 @@ impl ReleaseChannel {
     /// Returns a short programmatic name for this channel.
     pub fn dev_name(&self) -> &'static str {
         match self {
-            ReleaseChannel::Dev     => "dev",
-            ReleaseChannel::Alpha   => "alpha",
-            ReleaseChannel::Beta    => "beta",
+            ReleaseChannel::Dev => "dev",
+            ReleaseChannel::Alpha => "alpha",
+            ReleaseChannel::Beta => "beta",
             ReleaseChannel::Nightly => "nightly",
             ReleaseChannel::Preview => "preview",
-            ReleaseChannel::Stable  => "stable",
+            ReleaseChannel::Stable => "stable",
         }
     }
 
     /// Display name shown to users (e.g. in the About dialog).
     pub fn display_name(&self) -> &'static str {
         match self {
-            ReleaseChannel::Dev     => "Dev",
-            ReleaseChannel::Alpha   => "Alpha",
-            ReleaseChannel::Beta    => "Beta",
+            ReleaseChannel::Dev => "Dev",
+            ReleaseChannel::Alpha => "Alpha",
+            ReleaseChannel::Beta => "Beta",
             ReleaseChannel::Nightly => "Nightly",
             ReleaseChannel::Preview => "Preview",
-            ReleaseChannel::Stable  => "Stable",
+            ReleaseChannel::Stable => "Stable",
         }
     }
 
-    /// Base URL for the auto-update feed for this channel.
-    ///
-    /// Returns `None` for Dev/Nightly builds where auto-update is not
-    /// expected.  The actual update check is not yet implemented; this
-    /// provides the hook for a future updater.
-    pub fn update_url(&self) -> Option<&'static str> {
-        match self {
-            ReleaseChannel::Alpha   => Some("https://releases.vassl.app/alpha/latest.json"),
-            ReleaseChannel::Beta    => Some("https://releases.vassl.app/beta/latest.json"),
-            ReleaseChannel::Preview => Some("https://releases.vassl.app/preview/latest.json"),
-            ReleaseChannel::Stable  => Some("https://releases.vassl.app/stable/latest.json"),
-            ReleaseChannel::Dev | ReleaseChannel::Nightly => None,
-        }
+    /// Returns true for channels that support auto-update via GitHub releases.
+    /// Dev and Nightly are excluded — Dev has no published release to update
+    /// to, and Nightly is expected to be managed externally.
+    pub fn supports_updates(&self) -> bool {
+        matches!(self, ReleaseChannel::Alpha | ReleaseChannel::Beta
+                     | ReleaseChannel::Preview | ReleaseChannel::Stable)
     }
 }
 
@@ -77,26 +70,30 @@ impl ReleaseChannel {
 pub static RELEASE_CHANNEL: LazyLock<ReleaseChannel> = LazyLock::new(|| {
     if let Some(ch) = option_env!("VASSL_CHANNEL") {
         return match ch {
-            "stable"  => ReleaseChannel::Stable,
+            "stable" => ReleaseChannel::Stable,
             "preview" => ReleaseChannel::Preview,
-            "beta"    => ReleaseChannel::Beta,
-            "alpha"   => ReleaseChannel::Alpha,
+            "beta" => ReleaseChannel::Beta,
+            "alpha" => ReleaseChannel::Alpha,
             "nightly" => ReleaseChannel::Nightly,
-            _         => ReleaseChannel::Dev,
+            _ => ReleaseChannel::Dev,
         };
     }
     let version = env!("CARGO_PKG_VERSION");
     let (base, pre) = match version.split_once('-') {
         Some((b, p)) => (b, Some(p)),
-        None         => (version, None),
+        None => (version, None),
     };
-    let major: u32 = base.split('.').next().and_then(|s| s.parse().ok()).unwrap_or(0);
+    let major: u32 = base
+        .split('.')
+        .next()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
     match pre {
-        Some(p) if p.starts_with("alpha")   => ReleaseChannel::Alpha,
-        Some(p) if p.starts_with("beta")    => ReleaseChannel::Beta,
+        Some(p) if p.starts_with("alpha") => ReleaseChannel::Alpha,
+        Some(p) if p.starts_with("beta") => ReleaseChannel::Beta,
         Some(p) if p.starts_with("preview") => ReleaseChannel::Preview,
         Some(p) if p.starts_with("nightly") => ReleaseChannel::Nightly,
-        None if major >= 1                   => ReleaseChannel::Stable,
-        _                                    => ReleaseChannel::Dev,
+        None if major >= 1 => ReleaseChannel::Stable,
+        _ => ReleaseChannel::Dev,
     }
 });

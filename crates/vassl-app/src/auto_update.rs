@@ -1,12 +1,15 @@
 use std::io::{Read as _, Write as _};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, atomic::{AtomicU8, Ordering}};
+use std::sync::{
+    atomic::{AtomicU8, Ordering},
+    Arc,
+};
 
-use anyhow::{Context as _, Result};
 #[cfg(target_os = "windows")]
 use anyhow::bail;
+use anyhow::{Context as _, Result};
 use gpui::{Context, EventEmitter, Task};
-use release_channel::{RELEASE_CHANNEL, ReleaseChannel};
+use release_channel::{ReleaseChannel, RELEASE_CHANNEL};
 use semver::Version;
 use serde::Deserialize;
 
@@ -31,8 +34,8 @@ const PLATFORM_ASSET: &str = "unsupported";
 
 #[derive(Debug, Clone)]
 pub struct ReleaseInfo {
-    pub version:      String,
-    pub asset_name:   String,
+    pub version: String,
+    pub asset_name: String,
     pub download_url: String,
 }
 
@@ -43,7 +46,9 @@ pub enum UpdateStatus {
     Checking,
     UpToDate,
     Available(ReleaseInfo),
-    Downloading { pct: u8 },
+    Downloading {
+        pct: u8,
+    },
     ReadyToInstall(PathBuf),
     Installing,
     Error(String),
@@ -57,19 +62,22 @@ impl EventEmitter<AutoUpdateEvent> for AutoUpdater {}
 // ── AutoUpdater entity ─────────────────────────────────────────────────────
 
 pub struct AutoUpdater {
-    pub status:  UpdateStatus,
+    pub status: UpdateStatus,
     _task: Option<Task<()>>,
 }
 
 impl AutoUpdater {
     pub fn new() -> Self {
-        Self { status: UpdateStatus::Idle, _task: None }
+        Self {
+            status: UpdateStatus::Idle,
+            _task: None,
+        }
     }
 
     /// Trigger an update check in the background.
     /// No-ops for Dev/Nightly channels.
     pub fn check(&mut self, cx: &mut Context<Self>) {
-        if RELEASE_CHANNEL.update_url().is_none() {
+        if !RELEASE_CHANNEL.supports_updates() {
             self.status = UpdateStatus::UpToDate;
             cx.notify();
             return;
@@ -78,19 +86,21 @@ impl AutoUpdater {
         cx.notify();
 
         let task = cx.spawn(async move |this: gpui::WeakEntity<AutoUpdater>, cx| {
-            let result = cx.background_executor()
+            let result = cx
+                .background_executor()
                 .spawn(async { query_latest_release() })
                 .await;
 
             this.update(cx, |me, cx| {
                 me.status = match result {
-                    Ok(None)       => UpdateStatus::UpToDate,
+                    Ok(None) => UpdateStatus::UpToDate,
                     Ok(Some(info)) => UpdateStatus::Available(info),
-                    Err(e)         => UpdateStatus::Error(e.to_string()),
+                    Err(e) => UpdateStatus::Error(e.to_string()),
                 };
                 cx.emit(AutoUpdateEvent::StatusChanged);
                 cx.notify();
-            }).ok();
+            })
+            .ok();
         });
         self._task = Some(task);
     }
@@ -125,11 +135,12 @@ impl AutoUpdater {
                             this.update(cx, |me, cx| {
                                 me.status = match result {
                                     Ok((zip, _)) => UpdateStatus::ReadyToInstall(zip),
-                                    Err(e)        => UpdateStatus::Error(e.to_string()),
+                                    Err(e) => UpdateStatus::Error(e.to_string()),
                                 };
                                 cx.emit(AutoUpdateEvent::StatusChanged);
                                 cx.notify();
-                            }).ok();
+                            })
+                            .ok();
                             break;
                         }
                         Err(std::sync::mpsc::TryRecvError::Disconnected) => {
@@ -137,7 +148,8 @@ impl AutoUpdater {
                                 me.status = UpdateStatus::Error("Download thread crashed".into());
                                 cx.emit(AutoUpdateEvent::StatusChanged);
                                 cx.notify();
-                            }).ok();
+                            })
+                            .ok();
                             break;
                         }
                         Err(std::sync::mpsc::TryRecvError::Empty) => {
@@ -145,7 +157,8 @@ impl AutoUpdater {
                             this.update(cx, |me, cx| {
                                 me.status = UpdateStatus::Downloading { pct };
                                 cx.notify();
-                            }).ok();
+                            })
+                            .ok();
                             cx.background_executor()
                                 .timer(std::time::Duration::from_millis(200))
                                 .await;
@@ -163,7 +176,8 @@ impl AutoUpdater {
         cx.notify();
 
         let task = cx.spawn(async move |this: gpui::WeakEntity<AutoUpdater>, cx| {
-            let result = cx.background_executor()
+            let result = cx
+                .background_executor()
                 .spawn(async move { apply_update(&zip) })
                 .await;
 
@@ -181,28 +195,28 @@ impl AutoUpdater {
                         me.status = UpdateStatus::Error(e.to_string());
                         cx.emit(AutoUpdateEvent::StatusChanged);
                         cx.notify();
-                    }).ok();
+                    })
+                    .ok();
                 }
             }
         });
         self._task = Some(task);
     }
-
 }
 
 // ── GitHub API types ───────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
 struct GhRelease {
-    tag_name:   String,
-    draft:      bool,
+    tag_name: String,
+    draft: bool,
     prerelease: bool,
-    assets:     Vec<GhAsset>,
+    assets: Vec<GhAsset>,
 }
 
 #[derive(Deserialize)]
 struct GhAsset {
-    name:                 String,
+    name: String,
     browser_download_url: String,
 }
 
@@ -213,8 +227,7 @@ fn query_latest_release() -> Result<Option<ReleaseInfo>> {
         return Ok(None);
     }
 
-    let current = Version::parse(CURRENT_VERSION)
-        .unwrap_or_else(|_| Version::new(0, 0, 0));
+    let current = Version::parse(CURRENT_VERSION).unwrap_or_else(|_| Version::new(0, 0, 0));
 
     let channel = &*RELEASE_CHANNEL;
 
@@ -228,7 +241,8 @@ fn query_latest_release() -> Result<Option<ReleaseInfo>> {
         .into_json()
         .context("Failed to parse GitHub releases JSON")?;
 
-    let best = releases.iter()
+    let best = releases
+        .iter()
         .filter(|r| {
             // For Stable channel, respect the GitHub prerelease flag as an extra guard.
             // Alpha/Beta/Preview identify themselves via tag suffix, so prerelease flag
@@ -242,19 +256,25 @@ fn query_latest_release() -> Result<Option<ReleaseInfo>> {
         })
         .max_by(|(a, _), (b, _)| a.cmp(b));
 
-    let Some((latest_ver, release)) = best else { return Ok(None); };
+    let Some((latest_ver, release)) = best else {
+        return Ok(None);
+    };
 
-    if latest_ver <= current { return Ok(None); }
+    if latest_ver <= current {
+        return Ok(None);
+    }
 
-    let asset = release.assets.iter()
+    let asset = release
+        .assets
+        .iter()
         .find(|a| a.name == PLATFORM_ASSET)
-        .ok_or_else(|| anyhow::anyhow!(
-            "release {} has no asset {PLATFORM_ASSET}", release.tag_name
-        ))?;
+        .ok_or_else(|| {
+            anyhow::anyhow!("release {} has no asset {PLATFORM_ASSET}", release.tag_name)
+        })?;
 
     Ok(Some(ReleaseInfo {
-        version:      latest_ver.to_string(),
-        asset_name:   PLATFORM_ASSET.to_string(),
+        version: latest_ver.to_string(),
+        asset_name: PLATFORM_ASSET.to_string(),
         download_url: asset.browser_download_url.clone(),
     }))
 }
@@ -262,11 +282,11 @@ fn query_latest_release() -> Result<Option<ReleaseInfo>> {
 fn channel_matches(channel: &ReleaseChannel, tag: &str) -> bool {
     let v = tag.strip_prefix('v').unwrap_or(tag);
     match channel {
-        ReleaseChannel::Alpha   => v.contains("-alpha"),
-        ReleaseChannel::Beta    => v.contains("-beta"),
+        ReleaseChannel::Alpha => v.contains("-alpha"),
+        ReleaseChannel::Beta => v.contains("-beta"),
         ReleaseChannel::Preview => v.contains("-preview") || v.contains("-rc"),
-        ReleaseChannel::Stable  => !v.contains('-'),
-        // Dev/Nightly channels have no update_url(), so check() exits early
+        ReleaseChannel::Stable => !v.contains('-'),
+        // Dev/Nightly channels don't support_updates(), so check() exits early
         // before ever reaching this function. The false arms are unreachable
         // in practice but must be exhaustive.
         _ => false,
@@ -286,7 +306,8 @@ fn download_release(info: &ReleaseInfo, progress: Arc<AtomicU8>) -> Result<(Path
     // skip re-downloading if a complete copy is already cached.
     let head = ureq::head(&info.download_url)
         .set("User-Agent", &format!("VASSL-Updater/{CURRENT_VERSION}"))
-        .call().ok();
+        .call()
+        .ok();
     let total_bytes: Option<u64> = head
         .as_ref()
         .and_then(|r| r.header("Content-Length"))
@@ -305,17 +326,18 @@ fn download_release(info: &ReleaseInfo, progress: Arc<AtomicU8>) -> Result<(Path
         .context("download request failed")?;
 
     // Re-read Content-Length from the GET response (HEAD may have differed).
-    let total_bytes: Option<u64> = resp.header("Content-Length")
-        .and_then(|s| s.parse().ok());
+    let total_bytes: Option<u64> = resp.header("Content-Length").and_then(|s| s.parse().ok());
 
-    let mut reader     = resp.into_reader();
-    let mut file       = std::fs::File::create(&dest)?;
+    let mut reader = resp.into_reader();
+    let mut file = std::fs::File::create(&dest)?;
     let mut downloaded = 0u64;
-    let mut buf        = [0u8; 65536];
+    let mut buf = [0u8; 65536];
 
     loop {
         let n = reader.read(&mut buf)?;
-        if n == 0 { break; }
+        if n == 0 {
+            break;
+        }
         file.write_all(&buf[..n])?;
         downloaded += n as u64;
         if let Some(total) = total_bytes {
@@ -347,7 +369,7 @@ fn apply_update(zip_path: &Path) -> Result<PathBuf> {
     }
     std::fs::create_dir_all(&extract_dir)?;
 
-    let file    = std::fs::File::open(zip_path)?;
+    let file = std::fs::File::open(zip_path)?;
     let mut arc = zip::ZipArchive::new(file)?;
     arc.extract(&extract_dir)?;
 
@@ -391,7 +413,10 @@ fn apply_macos(extract_dir: &Path) -> Result<PathBuf> {
         None => {
             // Fallback: bare binary (shouldn't happen with our CI packaging).
             let new_bin = extract_dir.join("vassl");
-            anyhow::ensure!(new_bin.exists(), "neither .app bundle nor bare 'vassl' binary found in extracted update");
+            anyhow::ensure!(
+                new_bin.exists(),
+                "neither .app bundle nor bare 'vassl' binary found in extracted update"
+            );
             let inner = app_bundle.join("Contents/MacOS/vassl");
             (new_bin, inner)
         }
@@ -424,7 +449,7 @@ fn apply_macos(extract_dir: &Path) -> Result<PathBuf> {
 #[cfg(target_os = "windows")]
 fn apply_windows(extract_dir: &Path) -> Result<PathBuf> {
     let current_exe = std::env::current_exe()?;
-    let new_exe     = extract_dir.join("vassl.exe");
+    let new_exe = extract_dir.join("vassl.exe");
 
     if !new_exe.exists() {
         bail!("vassl.exe not found in extracted update");
@@ -439,11 +464,15 @@ fn apply_windows(extract_dir: &Path) -> Result<PathBuf> {
     // If step 2 fails: staging exists but current_exe still runs.
     // If step 3 fails: user can manually rename .new → .exe to recover.
     let staging = current_exe.with_extension("exe.new");
-    let backup  = current_exe.with_extension("exe.bak");
+    let backup = current_exe.with_extension("exe.bak");
 
     // Remove stale staging/backup files from any previous attempt.
-    if staging.exists() { let _ = std::fs::remove_file(&staging); }
-    if backup.exists()  { let _ = std::fs::remove_file(&backup);  }
+    if staging.exists() {
+        let _ = std::fs::remove_file(&staging);
+    }
+    if backup.exists() {
+        let _ = std::fs::remove_file(&backup);
+    }
 
     std::fs::copy(&new_exe, &staging)?;
     std::fs::rename(&current_exe, &backup)?;
@@ -458,7 +487,7 @@ fn apply_windows(extract_dir: &Path) -> Result<PathBuf> {
 fn copy_dir_all(src: &Path, dst: &Path) -> Result<()> {
     std::fs::create_dir_all(dst)?;
     for entry in std::fs::read_dir(src)? {
-        let entry   = entry?;
+        let entry = entry?;
         let src_path = entry.path();
         let dst_path = dst.join(entry.file_name());
         // Use symlink_metadata so is_symlink() reports true for symlink entries
@@ -472,7 +501,9 @@ fn copy_dir_all(src: &Path, dst: &Path) -> Result<()> {
             }
             // Windows symlinks require elevated permissions; skip rather than fail.
             #[cfg(not(target_os = "macos"))]
-            { std::fs::copy(&src_path, &dst_path)?; }
+            {
+                std::fs::copy(&src_path, &dst_path)?;
+            }
         } else if ty.is_dir() {
             copy_dir_all(&src_path, &dst_path)?;
         } else {
@@ -481,4 +512,3 @@ fn copy_dir_all(src: &Path, dst: &Path) -> Result<()> {
     }
     Ok(())
 }
-
