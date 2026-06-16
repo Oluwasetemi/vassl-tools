@@ -5,6 +5,13 @@ use gpui::{
 use vassl_ui::ThemeHandle;
 
 const CHANGELOG: &str = r#"
+## v0.1.0-beta.6  —  2026-06-15
+
+### Fixed
+- Startup crash on alpha databases: products, suppliers, and projects all failed to load with "no such column" errors. Columns added in beta (end_of_life, model_number, part_number, duty_percent, replacement, address, date_started, and others) were never applied to existing databases because the migration system silently skips changed CREATE TABLE steps. Each affected table is now recreated with the full current schema on first launch after upgrade, preserving all existing data.
+
+---
+
 ## v0.1.0-beta.5  —  2026-06-15
 
 ### Fixed

@@ -70,6 +70,32 @@ impl Domain for QuotationDb {
             unit             TEXT,
             discount_percent REAL NOT NULL DEFAULT 0.0
         )",
+        // Alpha databases were created before client_address, client_attn, client_tel,
+        // date_started, date_completed, technicians, client_contact, vassl_contact, and
+        // signedoff_date were added to the projects table in step 0. Recreate the table so
+        // all columns are present; only original alpha columns are copied, new ones get NULL.
+        "ALTER TABLE projects RENAME TO projects_bak;
+        CREATE TABLE projects (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            name           TEXT NOT NULL,
+            client_name    TEXT NOT NULL,
+            description    TEXT,
+            status         TEXT NOT NULL DEFAULT 'active',
+            created_at     TEXT NOT NULL,
+            client_address TEXT,
+            client_attn    TEXT,
+            client_tel     TEXT,
+            date_started   TEXT,
+            date_completed TEXT,
+            technicians    TEXT,
+            client_contact TEXT,
+            vassl_contact  TEXT,
+            signedoff_date TEXT
+        );
+        INSERT INTO projects (id, name, client_name, description, status, created_at)
+        SELECT id, name, client_name, description, status, created_at
+        FROM projects_bak;
+        DROP TABLE projects_bak",
     ];
     fn should_allow_migration_change(_: usize, _: &str, _: &str) -> bool {
         true

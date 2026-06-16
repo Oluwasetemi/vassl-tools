@@ -3,6 +3,13 @@
 All notable changes to VASSL are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.0-beta.6] - 2026-06-15
+
+### Fixed
+- Database schema migration: products, suppliers, and projects tables were missing columns (`end_of_life`, `model_number`, `part_number`, `duty_percent`, `replacement`, `address`, `date_started`, and others) on databases originally created by an alpha build. All three stores now fail to load at startup on affected databases. Root cause: the migration system silently skips changed `CREATE TABLE` steps (`should_allow_migration_change = true`), so columns added to those initial steps were never applied to existing databases. Fix: added new migration steps for each affected domain that recreate the table with the full current schema and copy existing data, so all columns are present after upgrade regardless of which alpha version created the database.
+
+---
+
 ## [0.1.0-beta.5] - 2026-06-15
 
 ### Fixed

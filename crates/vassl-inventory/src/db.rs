@@ -38,6 +38,33 @@ impl Domain for InventoryDb {
             invoice_ref      TEXT,
             notes            TEXT
         )",
+        // Alpha databases were created before model_number, part_number, duty_percent,
+        // end_of_life, and replacement were added to step 0. Because the migration system
+        // silently skips changed steps (should_allow_migration_change = true), those columns
+        // were never applied to existing DBs. This step recreates the table so all columns
+        // are present. Only original alpha columns are copied; new columns receive defaults.
+        "ALTER TABLE products RENAME TO products_bak;
+        CREATE TABLE products (
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            sku                   TEXT UNIQUE NOT NULL,
+            name                  TEXT NOT NULL,
+            category              TEXT,
+            unit                  TEXT NOT NULL,
+            min_stock_level       REAL NOT NULL DEFAULT 0,
+            notes                 TEXT,
+            created_at            TEXT NOT NULL,
+            description           TEXT,
+            preferred_supplier_id INTEGER,
+            model_number          TEXT,
+            part_number           TEXT,
+            duty_percent          REAL NOT NULL DEFAULT 0,
+            end_of_life           INTEGER NOT NULL DEFAULT 0,
+            replacement           TEXT
+        );
+        INSERT INTO products (id, sku, name, category, unit, min_stock_level, notes, created_at, description, preferred_supplier_id)
+        SELECT id, sku, name, category, unit, min_stock_level, notes, created_at, description, preferred_supplier_id
+        FROM products_bak;
+        DROP TABLE products_bak",
     ];
     fn should_allow_migration_change(_: usize, _: &str, _: &str) -> bool {
         true

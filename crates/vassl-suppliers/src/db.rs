@@ -8,7 +8,8 @@ pub struct SupplierDb(pub sqlez::thread_safe_connection::ThreadSafeConnection);
 
 impl Domain for SupplierDb {
     const NAME: &'static str = "suppliers";
-    const MIGRATIONS: &'static [&'static str] = &["CREATE TABLE IF NOT EXISTS suppliers (
+    const MIGRATIONS: &'static [&'static str] = &[
+        "CREATE TABLE IF NOT EXISTS suppliers (
             id             INTEGER PRIMARY KEY AUTOINCREMENT,
             name           TEXT UNIQUE NOT NULL,
             contact_person TEXT,
@@ -17,7 +18,25 @@ impl Domain for SupplierDb {
             notes          TEXT,
             created_at     TEXT NOT NULL,
             address        TEXT
-        )"];
+        )",
+        // Alpha databases were created before address was added to step 0. Recreate the
+        // table so the column is present; original alpha columns are copied, address gets NULL.
+        "ALTER TABLE suppliers RENAME TO suppliers_bak;
+        CREATE TABLE suppliers (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            name           TEXT UNIQUE NOT NULL,
+            contact_person TEXT,
+            email          TEXT,
+            phone          TEXT,
+            notes          TEXT,
+            created_at     TEXT NOT NULL,
+            address        TEXT
+        );
+        INSERT INTO suppliers (id, name, contact_person, email, phone, notes, created_at)
+        SELECT id, name, contact_person, email, phone, notes, created_at
+        FROM suppliers_bak;
+        DROP TABLE suppliers_bak",
+    ];
     fn should_allow_migration_change(_: usize, _: &str, _: &str) -> bool {
         true
     }
