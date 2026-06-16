@@ -96,10 +96,10 @@ impl Render for AboutDialog {
                 UpdateAction::Download,
             ),
             UpdateStatus::Downloading { pct } => (
-                format!("Downloading…  {pct}%").into(),
+                format!("Downloading… {pct}%").into(),
                 BADGE_BLUE,
-                None,
-                0,
+                Some("Downloading…"),
+                c.surface_active,
                 UpdateAction::None,
             ),
             UpdateStatus::ReadyToInstall(_) => (

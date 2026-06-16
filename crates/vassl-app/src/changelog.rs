@@ -5,6 +5,13 @@ use gpui::{
 use vassl_ui::ThemeHandle;
 
 const CHANGELOG: &str = r#"
+## v0.1.0-beta.7  —  2026-06-16
+
+### Fixed
+- "Download" button now stays visible while the update is downloading (shown dimmed), so you can see it was clicked and something is happening.
+
+---
+
 ## v0.1.0-beta.6  —  2026-06-15
 
 ### Fixed

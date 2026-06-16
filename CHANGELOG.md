@@ -3,6 +3,13 @@
 All notable changes to VASSL are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.0-beta.7] - 2026-06-16
+
+### Fixed
+- "Download" button now stays visible while the update is downloading, shown at 50% opacity with the label "Downloading…" — matches the "Checking…" pattern introduced in beta.4.
+
+---
+
 ## [0.1.0-beta.6] - 2026-06-15
 
 ### Fixed
