@@ -3,6 +3,14 @@
 All notable changes to VASSL are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.0-beta.8] - 2026-06-16
+
+### Added
+- Settings → Database: "Load Database" — opens a file picker to select a `.sqlite` backup file; shows an inline confirmation before replacing the current database. The selected file is staged and the app restarts automatically to open it cleanly.
+- Settings → Database: "Reset Database" — shows an inline two-step confirmation (Reset… → Confirm Reset) before permanently deleting all data. The app restarts with an empty database and the first-run setup screen.
+
+---
+
 ## [0.1.0-beta.7] - 2026-06-16
 
 ### Fixed

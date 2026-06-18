@@ -73,6 +73,21 @@ pub fn init(cx: &mut App) -> anyhow::Result<()> {
     // db_dir is now data_local_dir()/VASSL
     std::fs::create_dir_all(&db_dir).context("failed to create VASSL data directory")?;
 
+    // If a pending import file exists (staged by the "Load Database" setting),
+    // swap it in before opening the connection so the new database is used from
+    // the very first query. The WAL/SHM siblings of the old database are removed
+    // so the import file's own WAL state (if any) is authoritative.
+    let import_path = full_path.with_extension("sqlite.import");
+    if import_path.exists() {
+        for suffix in &["", "-shm", "-wal"] {
+            let mut p = full_path.clone();
+            p.set_extension(format!("sqlite{suffix}"));
+            let _ = std::fs::remove_file(&p);
+        }
+        std::fs::rename(&import_path, &full_path)
+            .context("failed to apply pending database import")?;
+    }
+
     // If the DB file (or its WAL/SHM siblings) is corrupted — indicated by
     // ALL_FILE_DB_FAILED being set after open_db — delete the files and retry
     // once so the app gets a fresh database rather than falling back to an

@@ -178,6 +178,75 @@ impl VasslRoot {
                     let overrides = panel.read(cx).keymap_overrides.clone();
                     crate::apply_keybindings(&mut **cx, &overrides);
                 }
+                SettingsPanelEvent::LoadDatabase(src) => {
+                    // Stage the selected file next to the live database. vassl_db::init()
+                    // checks for this file on the next launch and uses it in place of the
+                    // current database before opening any connections.
+                    let pending = vassl_db::db_path().with_extension("sqlite.import");
+                    match std::fs::copy(src, &pending) {
+                        Ok(_) => {
+                            tracing::info!(path = %pending.display(), "database import staged — restarting");
+                            if let Ok(exe) = std::env::current_exe() {
+                                cx.set_restart_path(exe);
+                            }
+                            cx.quit();
+                        }
+                        Err(e) => {
+                            tracing::error!(error = %e, "failed to stage database import");
+                            panel.update(cx, |sp, cx| {
+                                sp.load_db_status =
+                                    crate::settings_panel::LoadDbStatus::Failed(e.to_string());
+                                cx.notify();
+                            });
+                        }
+                    }
+                }
+                SettingsPanelEvent::ResetDatabase => {
+                    // Delete all user data from every domain table while keeping the
+                    // schema and migration records intact. The app then restarts so all
+                    // in-memory caches are rebuilt against the now-empty database.
+                    let db = vassl_db::AppDatabase::global(&**cx).clone();
+                    let exe = std::env::current_exe().ok();
+                    cx.spawn(async move |_this, cx| {
+                        let tables = [
+                            "quotation_items",
+                            "quotations",
+                            "projects",
+                            "price_book_entries",
+                            "stock_entries",
+                            "products",
+                            "suppliers",
+                            "audit_log",
+                            "settings",
+                            "users",
+                        ];
+                        let result = db
+                            .write(move |conn| {
+                                for table in &tables {
+                                    conn.exec(&format!("DELETE FROM {table}"))
+                                        .map_err(|e| anyhow::anyhow!("prepare DELETE {table}: {e}"))?()
+                                        .map_err(|e| anyhow::anyhow!("execute DELETE {table}: {e}"))?;
+                                }
+                                Ok::<(), anyhow::Error>(())
+                            })
+                            .await;
+                        match result {
+                            Ok(()) => {
+                                tracing::info!("database reset complete — restarting");
+                                cx.update(|cx| {
+                                    if let Some(exe) = exe {
+                                        cx.set_restart_path(exe);
+                                    }
+                                    cx.quit();
+                                });
+                            }
+                            Err(e) => {
+                                tracing::error!(error = %e, "database reset failed");
+                            }
+                        }
+                    })
+                    .detach();
+                }
             },
         );
 

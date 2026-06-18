@@ -5,6 +5,14 @@ use gpui::{
 use vassl_ui::ThemeHandle;
 
 const CHANGELOG: &str = r#"
+## v0.1.0-beta.8  —  2026-06-16
+
+### Added
+- Settings → Database → Load Database: replace the current database with any .sqlite backup file. Confirm inline, app restarts automatically.
+- Settings → Database → Reset Database: permanently delete all data and restart with a clean, empty database.
+
+---
+
 ## v0.1.0-beta.7  —  2026-06-16
 
 ### Fixed

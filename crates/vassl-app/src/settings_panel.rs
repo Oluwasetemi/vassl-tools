@@ -30,6 +30,24 @@ actions!(
 pub enum SettingsPanelEvent {
     /// Fired when the user saves a keyboard shortcut override.
     KeymapChanged,
+    /// User confirmed loading a replacement database file. Root will copy the
+    /// file to the pending import path and restart.
+    LoadDatabase(PathBuf),
+    /// User confirmed a factory reset. Root will delete all data and restart.
+    ResetDatabase,
+}
+
+/// State for the "Load Database" operation in the Database settings tab.
+#[derive(Clone, Debug, Default)]
+pub enum LoadDbStatus {
+    #[default]
+    Idle,
+    /// File has been picked; waiting for user to confirm the replacement.
+    Confirm(PathBuf),
+    /// File is being staged (brief async copy).
+    Staging,
+    /// Staging failed.
+    Failed(String),
 }
 
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
@@ -124,6 +142,8 @@ pub struct SettingsPanel {
 
     // Database
     pub backup_status: BackupStatus,
+    pub load_db_status: LoadDbStatus,
+    pub reset_db_confirm: bool,
 
     // Keyboard
     pub keymap_overrides: HashMap<String, String>, // action_name → keystroke string
@@ -307,6 +327,8 @@ impl SettingsPanel {
             tax_rate,
             notes_template,
             backup_status: BackupStatus::Idle,
+            load_db_status: LoadDbStatus::Idle,
+            reset_db_confirm: false,
             keymap_overrides,
             listening_for: None,
             save_error: None,
@@ -2517,6 +2539,8 @@ impl SettingsPanel {
         let db_path = Self::app_db_path();
         let db_display = db_path.display().to_string();
         let status = self.backup_status.clone();
+        let load_status = self.load_db_status.clone();
+        let reset_confirm = self.reset_db_confirm;
 
         let (status_line1, status_line2, status_color) = match &status {
             BackupStatus::Idle => ("No backup taken yet.".to_string(), None, c.text_muted),
@@ -2758,6 +2782,395 @@ impl SettingsPanel {
                     )
                     .child(div().h(px(1.)).mx(px(32.)).bg(rgb(c.surface_default))),
             )
+            // ── Load Database ──────────────────────────────────────────────
+            .child({
+                let inner = match &load_status {
+                    LoadDbStatus::Confirm(path) => {
+                        let fname = path
+                            .file_name()
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .unwrap_or_else(|| path.display().to_string());
+                        let path_clone = path.clone();
+                        div()
+                            .flex()
+                            .flex_col()
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .items_center()
+                                    .py(px(14.))
+                                    .px(px(32.))
+                                    .gap(px(12.))
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .min_w(px(0.))
+                                            .flex()
+                                            .flex_col()
+                                            .gap(px(4.))
+                                            .child(
+                                                div()
+                                                    .text_size(rems(1.))
+                                                    .text_color(rgb(c.text_default))
+                                                    .child("Load Database"),
+                                            )
+                                            .child(
+                                                div()
+                                                    .text_size(rems(0.846))
+                                                    .text_color(rgb(c.status_red))
+                                                    .child(SharedString::from(format!(
+                                                        "Replace with \"{fname}\"? All current data will be lost."
+                                                    ))),
+                                            ),
+                                    )
+                                    .child(
+                                        div()
+                                            .id("settings-load-db-cancel")
+                                            .px(px(12.))
+                                            .py(px(7.))
+                                            .rounded(px(5.))
+                                            .bg(rgb(c.surface_default))
+                                            .text_size(rems(0.923))
+                                            .text_color(rgb(c.text_muted))
+                                            .cursor_pointer()
+                                            .on_mouse_down(
+                                                MouseButton::Left,
+                                                cx.listener(|this, _: &MouseDownEvent, _, cx| {
+                                                    this.load_db_status = LoadDbStatus::Idle;
+                                                    cx.notify();
+                                                }),
+                                            )
+                                            .child("Cancel"),
+                                    )
+                                    .child(
+                                        div()
+                                            .id("settings-load-db-confirm")
+                                            .px(px(14.))
+                                            .py(px(7.))
+                                            .rounded(px(5.))
+                                            .bg(rgb(c.status_red))
+                                            .text_size(rems(0.923))
+                                            .text_color(rgb(0xffffff))
+                                            .cursor_pointer()
+                                            .on_mouse_down(
+                                                MouseButton::Left,
+                                                cx.listener(move |this, _: &MouseDownEvent, _, cx| {
+                                                    this.load_db_status = LoadDbStatus::Staging;
+                                                    cx.notify();
+                                                    cx.emit(SettingsPanelEvent::LoadDatabase(
+                                                        path_clone.clone(),
+                                                    ));
+                                                }),
+                                            )
+                                            .child("Confirm Load"),
+                                    ),
+                            )
+                            .child(div().h(px(1.)).mx(px(32.)).bg(rgb(c.surface_default)))
+                    }
+                    LoadDbStatus::Staging => div()
+                        .flex()
+                        .flex_col()
+                        .child(
+                            div()
+                                .flex()
+                                .flex_row()
+                                .items_center()
+                                .py(px(14.))
+                                .px(px(32.))
+                                .gap(px(12.))
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .flex()
+                                        .flex_col()
+                                        .gap(px(4.))
+                                        .child(
+                                            div()
+                                                .text_size(rems(1.))
+                                                .text_color(rgb(c.text_default))
+                                                .child("Load Database"),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_size(rems(0.846))
+                                                .text_color(rgb(c.text_muted))
+                                                .child("Preparing… the app will restart."),
+                                        ),
+                                ),
+                        )
+                        .child(div().h(px(1.)).mx(px(32.)).bg(rgb(c.surface_default))),
+                    LoadDbStatus::Failed(e) => {
+                        let msg = e.clone();
+                        div()
+                            .flex()
+                            .flex_col()
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .items_center()
+                                    .py(px(14.))
+                                    .px(px(32.))
+                                    .gap(px(12.))
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .min_w(px(0.))
+                                            .flex()
+                                            .flex_col()
+                                            .gap(px(4.))
+                                            .child(
+                                                div()
+                                                    .text_size(rems(1.))
+                                                    .text_color(rgb(c.text_default))
+                                                    .child("Load Database"),
+                                            )
+                                            .child(
+                                                div()
+                                                    .text_size(rems(0.846))
+                                                    .text_color(rgb(c.status_red))
+                                                    .child(SharedString::from(format!(
+                                                        "Failed: {msg}"
+                                                    ))),
+                                            ),
+                                    )
+                                    .child(
+                                        div()
+                                            .id("settings-load-db-retry")
+                                            .px(px(16.))
+                                            .py(px(7.))
+                                            .rounded(px(5.))
+                                            .bg(rgb(c.surface_active))
+                                            .text_size(rems(0.923))
+                                            .text_color(rgb(c.text_default))
+                                            .cursor_pointer()
+                                            .on_mouse_down(
+                                                MouseButton::Left,
+                                                cx.listener(|this, _: &MouseDownEvent, _, cx| {
+                                                    this.load_db_status = LoadDbStatus::Idle;
+                                                    cx.notify();
+                                                }),
+                                            )
+                                            .child("Dismiss"),
+                                    ),
+                            )
+                            .child(div().h(px(1.)).mx(px(32.)).bg(rgb(c.surface_default)))
+                    }
+                    LoadDbStatus::Idle => div()
+                        .flex()
+                        .flex_col()
+                        .child(
+                            div()
+                                .flex()
+                                .flex_row()
+                                .items_center()
+                                .py(px(14.))
+                                .px(px(32.))
+                                .gap(px(12.))
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .min_w(px(0.))
+                                        .flex()
+                                        .flex_col()
+                                        .gap(px(4.))
+                                        .child(
+                                            div()
+                                                .text_size(rems(1.))
+                                                .text_color(rgb(c.text_default))
+                                                .child("Load Database"),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_size(rems(0.846))
+                                                .text_color(rgb(c.text_muted))
+                                                .child(
+                                                    "Replace the current database with a .sqlite backup file. The app will restart.",
+                                                ),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .id("settings-load-db-btn")
+                                        .px(px(16.))
+                                        .py(px(7.))
+                                        .rounded(px(5.))
+                                        .bg(rgb(c.surface_active))
+                                        .text_size(rems(0.923))
+                                        .text_color(rgb(c.text_default))
+                                        .cursor_pointer()
+                                        .on_mouse_down(
+                                            MouseButton::Left,
+                                            cx.listener(|this, _: &MouseDownEvent, _, cx| {
+                                                let rx = cx.prompt_for_paths(
+                                                    gpui::PathPromptOptions {
+                                                        files: true,
+                                                        directories: false,
+                                                        multiple: false,
+                                                        prompt: Some(
+                                                            "Select a VASSL database file"
+                                                                .into(),
+                                                        ),
+                                                    },
+                                                );
+                                                cx.spawn(async move |this, cx| {
+                                                    let Ok(Ok(Some(paths))) = rx.await else {
+                                                        return;
+                                                    };
+                                                    let Some(path) =
+                                                        paths.into_iter().next()
+                                                    else {
+                                                        return;
+                                                    };
+                                                    let _ = this.update(cx, |sp, cx| {
+                                                        sp.load_db_status =
+                                                            LoadDbStatus::Confirm(path);
+                                                        cx.notify();
+                                                    });
+                                                })
+                                                .detach();
+                                            }),
+                                        )
+                                        .child("Load…"),
+                                ),
+                        )
+                        .child(div().h(px(1.)).mx(px(32.)).bg(rgb(c.surface_default))),
+                };
+                inner
+            })
+            // ── Reset Database ─────────────────────────────────────────────
+            .child({
+                if reset_confirm {
+                    div()
+                        .flex()
+                        .flex_col()
+                        .child(
+                            div()
+                                .flex()
+                                .flex_row()
+                                .items_center()
+                                .py(px(14.))
+                                .px(px(32.))
+                                .gap(px(12.))
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .min_w(px(0.))
+                                        .flex()
+                                        .flex_col()
+                                        .gap(px(4.))
+                                        .child(
+                                            div()
+                                                .text_size(rems(1.))
+                                                .text_color(rgb(c.text_default))
+                                                .child("Reset Database"),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_size(rems(0.846))
+                                                .text_color(rgb(c.status_red))
+                                                .child(
+                                                    "Delete ALL data permanently? This cannot be undone.",
+                                                ),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .id("settings-reset-db-cancel")
+                                        .px(px(12.))
+                                        .py(px(7.))
+                                        .rounded(px(5.))
+                                        .bg(rgb(c.surface_default))
+                                        .text_size(rems(0.923))
+                                        .text_color(rgb(c.text_muted))
+                                        .cursor_pointer()
+                                        .on_mouse_down(
+                                            MouseButton::Left,
+                                            cx.listener(|this, _: &MouseDownEvent, _, cx| {
+                                                this.reset_db_confirm = false;
+                                                cx.notify();
+                                            }),
+                                        )
+                                        .child("Cancel"),
+                                )
+                                .child(
+                                    div()
+                                        .id("settings-reset-db-confirm")
+                                        .px(px(14.))
+                                        .py(px(7.))
+                                        .rounded(px(5.))
+                                        .bg(rgb(c.status_red))
+                                        .text_size(rems(0.923))
+                                        .text_color(rgb(0xffffff))
+                                        .cursor_pointer()
+                                        .on_mouse_down(
+                                            MouseButton::Left,
+                                            cx.listener(|this, _: &MouseDownEvent, _, cx| {
+                                                this.reset_db_confirm = false;
+                                                cx.notify();
+                                                cx.emit(SettingsPanelEvent::ResetDatabase);
+                                            }),
+                                        )
+                                        .child("Confirm Reset"),
+                                ),
+                        )
+                } else {
+                    div()
+                        .flex()
+                        .flex_col()
+                        .child(
+                            div()
+                                .flex()
+                                .flex_row()
+                                .items_center()
+                                .py(px(14.))
+                                .px(px(32.))
+                                .gap(px(12.))
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .min_w(px(0.))
+                                        .flex()
+                                        .flex_col()
+                                        .gap(px(4.))
+                                        .child(
+                                            div()
+                                                .text_size(rems(1.))
+                                                .text_color(rgb(c.text_default))
+                                                .child("Reset Database"),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_size(rems(0.846))
+                                                .text_color(rgb(c.text_muted))
+                                                .child(
+                                                    "Permanently delete all data. The app will restart with an empty database.",
+                                                ),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .id("settings-reset-db-btn")
+                                        .px(px(16.))
+                                        .py(px(7.))
+                                        .rounded(px(5.))
+                                        .bg(rgb(c.surface_active))
+                                        .text_size(rems(0.923))
+                                        .text_color(rgb(c.status_red))
+                                        .cursor_pointer()
+                                        .on_mouse_down(
+                                            MouseButton::Left,
+                                            cx.listener(|this, _: &MouseDownEvent, _, cx| {
+                                                this.reset_db_confirm = true;
+                                                cx.notify();
+                                            }),
+                                        )
+                                        .child("Reset…"),
+                                ),
+                        )
+                }
+            })
     }
 
     fn render_general(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
