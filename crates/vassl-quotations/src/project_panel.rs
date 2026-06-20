@@ -1,8 +1,11 @@
 use gpui::{
-    div, prelude::*, px, rems, rgb, Context, Entity, Focusable, IntoElement, MouseButton,
-    MouseDownEvent, Render, Subscription, Window,
+    div, prelude::*, px, rems, rgb, uniform_list, Context, Entity, Focusable, IntoElement,
+    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Render, Subscription,
+    UniformListScrollHandle, Window,
 };
-use vassl_ui::{tooltip_keyed, AppSettings, NewRecord, ThemeHandle};
+use vassl_ui::{scrollbar_geometry, tooltip_keyed, AppSettings, NewRecord, ScrollDragState, ThemeHandle};
+
+const TRACK_W: f32 = 14.0;
 
 use crate::project_form::{ProjectForm, ProjectFormEvent};
 use crate::project_list::ProjectList;
@@ -18,6 +21,8 @@ pub struct ProjectPanel {
     _edit_project_form_sub: Option<Subscription>,
     detail_open: bool,
     last_detail_gen: u32,
+    detail_scroll: UniformListScrollHandle,
+    detail_drag: Option<ScrollDragState>,
 }
 
 impl ProjectPanel {
@@ -45,6 +50,8 @@ impl ProjectPanel {
             _edit_project_form_sub: None,
             detail_open: false,
             last_detail_gen: 0,
+            detail_scroll: UniformListScrollHandle::default(),
+            detail_drag: None,
         }
     }
 
@@ -203,69 +210,152 @@ impl Render for ProjectPanel {
 
                 if let Some(p) = selected_project {
                     let status_label = format!("{:?}", p.status);
-                    sidebar = sidebar.child(
-                        div()
-                            .id("proj-panel-detail-scroll")
-                            .flex_1()
-                            .min_h(px(0.))
-                            .overflow_y_scroll()
-                            .pb(px(64.))
-                            .flex()
-                            .flex_col()
-                            .child(proj_detail_field("Name", p.name.clone(), &c))
-                            .child(proj_detail_field("Client", p.client_name.clone(), &c))
-                            .child(proj_detail_field(
-                                "Address",
-                                p.client_address.clone().unwrap_or_else(|| "—".into()),
-                                &c,
-                            ))
-                            .child(proj_detail_field(
-                                "Attn",
-                                p.client_attn.clone().unwrap_or_else(|| "—".into()),
-                                &c,
-                            ))
-                            .child(proj_detail_field(
-                                "Tel",
-                                p.client_tel.clone().unwrap_or_else(|| "—".into()),
-                                &c,
-                            ))
-                            .child(proj_detail_field(
-                                "Client Contact",
-                                p.client_contact.clone().unwrap_or_else(|| "—".into()),
-                                &c,
-                            ))
-                            .child(proj_detail_field(
-                                "VASSL Contact",
-                                p.vassl_contact.clone().unwrap_or_else(|| "—".into()),
-                                &c,
-                            ))
-                            .child(proj_detail_field("Status", status_label, &c))
-                            .child(proj_detail_field(
-                                "Date Started",
-                                p.date_started.clone().unwrap_or_else(|| "—".into()),
-                                &c,
-                            ))
-                            .child(proj_detail_field(
-                                "Date Completed",
-                                p.date_completed.clone().unwrap_or_else(|| "—".into()),
-                                &c,
-                            ))
-                            .child(proj_detail_field(
-                                "Signed-off",
-                                p.signedoff_date.clone().unwrap_or_else(|| "—".into()),
-                                &c,
-                            ))
-                            .child(proj_detail_field(
-                                "Technicians",
-                                p.technicians.clone().unwrap_or_else(|| "—".into()),
-                                &c,
-                            ))
-                            .child(proj_detail_field(
-                                "Created",
-                                p.created_at.get(..10).unwrap_or("").to_string(),
-                                &c,
-                            )),
-                    );
+                    let proj_fields: Vec<(String, String)> = vec![
+                        ("Name".into(), p.name.clone()),
+                        ("Client".into(), p.client_name.clone()),
+                        (
+                            "Address".into(),
+                            p.client_address.clone().unwrap_or_else(|| "—".into()),
+                        ),
+                        (
+                            "Attn".into(),
+                            p.client_attn.clone().unwrap_or_else(|| "—".into()),
+                        ),
+                        (
+                            "Tel".into(),
+                            p.client_tel.clone().unwrap_or_else(|| "—".into()),
+                        ),
+                        (
+                            "Client Contact".into(),
+                            p.client_contact.clone().unwrap_or_else(|| "—".into()),
+                        ),
+                        (
+                            "VASSL Contact".into(),
+                            p.vassl_contact.clone().unwrap_or_else(|| "—".into()),
+                        ),
+                        ("Status".into(), status_label),
+                        (
+                            "Date Started".into(),
+                            p.date_started.clone().unwrap_or_else(|| "—".into()),
+                        ),
+                        (
+                            "Date Completed".into(),
+                            p.date_completed.clone().unwrap_or_else(|| "—".into()),
+                        ),
+                        (
+                            "Signed-off".into(),
+                            p.signedoff_date.clone().unwrap_or_else(|| "—".into()),
+                        ),
+                        (
+                            "Technicians".into(),
+                            p.technicians.clone().unwrap_or_else(|| "—".into()),
+                        ),
+                        (
+                            "Created".into(),
+                            p.created_at.get(..10).unwrap_or("").to_string(),
+                        ),
+                    ];
+                    let proj_count = proj_fields.len();
+                    let geom = scrollbar_geometry(&self.detail_scroll);
+                    let is_dragging = self.detail_drag.is_some();
+
+                    let mut track = div()
+                        .id("proj-panel-sb-track")
+                        .flex_shrink_0()
+                        .w(px(TRACK_W))
+                        .h_full()
+                        .relative()
+                        .bg(rgb(c.surface_default));
+                    if let Some(g) = &geom {
+                        let thumb_color = if is_dragging {
+                            rgb(c.text_default)
+                        } else {
+                            rgb(c.text_muted)
+                        };
+                        let (viewport_h, thumb_h, max_scroll) =
+                            (g.viewport_h, g.thumb_h, g.max_scroll);
+                        track = track.child(
+                            div()
+                                .id("proj-panel-sb-thumb")
+                                .absolute()
+                                .top(px(g.thumb_top))
+                                .left(px(2.))
+                                .w(px(TRACK_W - 4.))
+                                .h(px(thumb_h))
+                                .rounded(px(6.))
+                                .bg(thumb_color)
+                                .cursor_pointer()
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(move |this, ev: &MouseDownEvent, _, cx| {
+                                        this.detail_drag = Some(ScrollDragState {
+                                            drag_offset: ev.position.y.as_f32(),
+                                            thumb_h,
+                                            viewport_h,
+                                            max_scroll,
+                                        });
+                                        cx.notify();
+                                    }),
+                                ),
+                        );
+                    }
+
+                    let mut scroll_area = div()
+                        .relative()
+                        .flex_1()
+                        .min_h(px(0.))
+                        .flex()
+                        .flex_row()
+                        .child(
+                            uniform_list(
+                                "proj-panel-detail-scroll",
+                                proj_count,
+                                cx.processor(
+                                    move |_this, range: std::ops::Range<usize>, _window, cx| {
+                                        let c = cx.global::<ThemeHandle>().0.clone();
+                                        range
+                                            .map(|ix| {
+                                                let (label, value) = &proj_fields[ix];
+                                                proj_detail_field(label, value, &c)
+                                                    .into_any_element()
+                                            })
+                                            .collect()
+                                    },
+                                ),
+                            )
+                            .track_scroll(&self.detail_scroll)
+                            .flex_1(),
+                        )
+                        .child(track);
+
+                    if is_dragging {
+                        scroll_area = scroll_area.child(
+                            div()
+                                .id("proj-panel-sb-overlay")
+                                .absolute()
+                                .inset_0()
+                                .cursor_pointer()
+                                .on_mouse_move(cx.listener(|this, ev: &MouseMoveEvent, _, cx| {
+                                    if let Some(drag) = &this.detail_drag {
+                                        let new_offset =
+                                            drag.compute_offset(ev.position.y.as_f32());
+                                        this.detail_scroll.0.borrow().base_handle.set_offset(
+                                            gpui::point(gpui::px(0.), gpui::px(new_offset)),
+                                        );
+                                        cx.notify();
+                                    }
+                                }))
+                                .on_mouse_up(
+                                    MouseButton::Left,
+                                    cx.listener(|this, _: &MouseUpEvent, _, cx| {
+                                        this.detail_drag = None;
+                                        cx.notify();
+                                    }),
+                                ),
+                        );
+                    }
+
+                    sidebar = sidebar.child(scroll_area);
                 } else {
                     sidebar = sidebar.child(
                         div()

@@ -1,6 +1,11 @@
-use gpui::{div, prelude::*, px, rems, rgb, Context, Entity, IntoElement, Render, Window};
+use gpui::{
+    div, prelude::*, px, rems, rgb, uniform_list, Context, Entity, IntoElement, MouseButton,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, Render, UniformListScrollHandle, Window,
+};
 use vassl_core::{QuotationExtras, QuotationStatus};
-use vassl_ui::{ThemeColors, ThemeHandle};
+use vassl_ui::{scrollbar_geometry, ScrollDragState, ThemeColors, ThemeHandle};
+
+const TRACK_W: f32 = 14.0;
 
 const LEGACY_DEFAULT_RATE: f64 = 156.0;
 
@@ -33,11 +38,17 @@ fn status_color(status: &QuotationStatus, c: &ThemeColors) -> u32 {
 
 pub struct QuotationDetail {
     store: Entity<QuotationStore>,
+    scroll_handle: UniformListScrollHandle,
+    drag: Option<ScrollDragState>,
 }
 
 impl QuotationDetail {
     pub fn new(store: Entity<QuotationStore>, _cx: &mut Context<Self>) -> Self {
-        Self { store }
+        Self {
+            store,
+            scroll_handle: UniformListScrollHandle::default(),
+            drag: None,
+        }
     }
 }
 
@@ -88,6 +99,8 @@ impl Render for QuotationDetail {
             } else {
                 settings_rate
             };
+
+        let items_for_footer = items.clone();
 
         if selected_id.is_none() {
             return div()
@@ -212,100 +225,190 @@ impl Render for QuotationDetail {
                     .child("No line items yet — use \"Add Item\" above to add one."),
             );
         } else {
+            let count = items.len();
+            let geom = scrollbar_geometry(&self.scroll_handle);
+            let is_dragging = self.drag.is_some();
+
+            let mut track = div()
+                .id("items-sb-track")
+                .flex_shrink_0()
+                .w(px(TRACK_W))
+                .h_full()
+                .relative()
+                .bg(rgb(c.surface_default));
+
+            if let Some(g) = &geom {
+                let thumb_color = if is_dragging {
+                    rgb(c.text_default)
+                } else {
+                    rgb(c.text_muted)
+                };
+                let (viewport_h, thumb_h, max_scroll) = (g.viewport_h, g.thumb_h, g.max_scroll);
+                track = track.child(
+                    div()
+                        .id("items-sb-thumb")
+                        .absolute()
+                        .top(px(g.thumb_top))
+                        .left(px(2.))
+                        .w(px(TRACK_W - 4.))
+                        .h(px(thumb_h))
+                        .rounded(px(6.))
+                        .bg(thumb_color)
+                        .cursor_pointer()
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(move |this, ev: &MouseDownEvent, _, cx| {
+                                this.drag = Some(ScrollDragState {
+                                    drag_offset: ev.position.y.as_f32(),
+                                    thumb_h,
+                                    viewport_h,
+                                    max_scroll,
+                                });
+                                cx.notify();
+                            }),
+                        ),
+                );
+            }
+
             let store = self.store.clone();
-            let item_rows = div()
-                .id("items-scroll")
+            let mut item_rows = div()
+                .relative()
                 .flex_1()
                 .flex()
-                .flex_col()
-                .overflow_y_scroll()
-                .children(items.iter().map(|item| {
-                    let item_id = item.id;
-                    let store2 = store.clone();
-                    div()
-                        .flex()
-                        .flex_row()
-                        .items_center()
-                        .w_full()
-                        .px(px(12.))
-                        .py(px(6.))
-                        .child(
-                            div()
-                                .flex_1()
-                                .text_size(rems(1.))
-                                .text_color(rgb(c.text_default))
-                                .child(item.description.clone()),
-                        )
-                        .child(
-                            div()
-                                .w(px(50.))
-                                .text_size(rems(0.923))
-                                .text_color(rgb(c.text_default))
-                                .child(format!("{:.2}", item.quantity)),
-                        )
-                        .child(
-                            div()
-                                .w(px(42.))
-                                .text_size(rems(0.846))
-                                .text_color(rgb(c.text_muted))
-                                .child(item.unit.clone().unwrap_or_default()),
-                        )
-                        .child(
-                            div()
-                                .w(px(82.))
-                                .text_size(rems(0.923))
-                                .text_color(rgb(c.text_default))
-                                .child(format!("${:.2}", item.unit_price_usd)),
-                        )
-                        .child(
-                            div()
-                                .w(px(46.))
-                                .text_size(rems(0.846))
-                                .text_color(rgb(c.text_muted))
-                                .child(if item.discount_percent > 0.0 {
-                                    format!("{:.1}%", item.discount_percent)
-                                } else {
-                                    String::new()
-                                }),
-                        )
-                        .child(
-                            div()
-                                .w(px(82.))
-                                .text_size(rems(0.923))
-                                .text_color(rgb(c.status_green))
-                                .child(format!("${:.2}", item.total_usd)),
-                        )
-                        .child(
-                            div()
-                                .id(format!("del-item-{item_id}"))
-                                .w(px(28.))
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .when(can_delete, move |d| {
-                                    d.px(px(6.))
-                                        .py(px(2.))
-                                        .rounded(px(3.))
-                                        .text_size(rems(0.923))
-                                        .text_color(rgb(c.text_muted))
-                                        .cursor_pointer()
-                                        .hover(|s| s.text_color(rgb(c.status_red)))
-                                        .on_mouse_down(
-                                            gpui::MouseButton::Left,
-                                            move |_, _, cx: &mut gpui::App| {
-                                                store2
-                                                    .update(cx, |s, cx| s.delete_item(item_id, cx));
-                                            },
+                .flex_row()
+                .min_h(px(0.))
+                .child(
+                    uniform_list(
+                        "items-scroll",
+                        count,
+                        cx.processor(move |_this, range: std::ops::Range<usize>, _window, cx| {
+                            let c = cx.global::<ThemeHandle>().0.clone();
+                            range
+                                .map(|ix| {
+                                    let item = &items[ix];
+                                    let item_id = item.id;
+                                    let store2 = store.clone();
+                                    div()
+                                        .flex()
+                                        .flex_row()
+                                        .items_center()
+                                        .w_full()
+                                        .px(px(12.))
+                                        .py(px(6.))
+                                        .child(
+                                            div()
+                                                .flex_1()
+                                                .text_size(rems(1.))
+                                                .text_color(rgb(c.text_default))
+                                                .child(item.description.clone()),
                                         )
-                                        .child("×")
-                                }),
-                        )
-                }));
+                                        .child(
+                                            div()
+                                                .w(px(50.))
+                                                .text_size(rems(0.923))
+                                                .text_color(rgb(c.text_default))
+                                                .child(format!("{:.2}", item.quantity)),
+                                        )
+                                        .child(
+                                            div()
+                                                .w(px(42.))
+                                                .text_size(rems(0.846))
+                                                .text_color(rgb(c.text_muted))
+                                                .child(item.unit.clone().unwrap_or_default()),
+                                        )
+                                        .child(
+                                            div()
+                                                .w(px(82.))
+                                                .text_size(rems(0.923))
+                                                .text_color(rgb(c.text_default))
+                                                .child(format!("${:.2}", item.unit_price_usd)),
+                                        )
+                                        .child(
+                                            div()
+                                                .w(px(46.))
+                                                .text_size(rems(0.846))
+                                                .text_color(rgb(c.text_muted))
+                                                .child(if item.discount_percent > 0.0 {
+                                                    format!("{:.1}%", item.discount_percent)
+                                                } else {
+                                                    String::new()
+                                                }),
+                                        )
+                                        .child(
+                                            div()
+                                                .w(px(82.))
+                                                .text_size(rems(0.923))
+                                                .text_color(rgb(c.status_green))
+                                                .child(format!("${:.2}", item.total_usd)),
+                                        )
+                                        .child(
+                                            div()
+                                                .id(format!("del-item-{item_id}"))
+                                                .w(px(28.))
+                                                .flex()
+                                                .items_center()
+                                                .justify_center()
+                                                .when(can_delete, move |d| {
+                                                    d.px(px(6.))
+                                                        .py(px(2.))
+                                                        .rounded(px(3.))
+                                                        .text_size(rems(0.923))
+                                                        .text_color(rgb(c.text_muted))
+                                                        .cursor_pointer()
+                                                        .hover(|s| s.text_color(rgb(c.status_red)))
+                                                        .on_mouse_down(
+                                                            gpui::MouseButton::Left,
+                                                            move |_, _, cx: &mut gpui::App| {
+                                                                store2.update(cx, |s, cx| {
+                                                                    s.delete_item(item_id, cx)
+                                                                });
+                                                            },
+                                                        )
+                                                        .child("×")
+                                                }),
+                                        )
+                                })
+                                .collect()
+                        }),
+                    )
+                    .track_scroll(&self.scroll_handle)
+                    .flex_1(),
+                )
+                .child(track);
+
+            if is_dragging {
+                item_rows = item_rows.child(
+                    div()
+                        .id("items-sb-overlay")
+                        .absolute()
+                        .inset_0()
+                        .cursor_pointer()
+                        .on_mouse_move(cx.listener(|this, ev: &MouseMoveEvent, _, cx| {
+                            if let Some(drag) = &this.drag {
+                                let new_offset = drag.compute_offset(ev.position.y.as_f32());
+                                this.scroll_handle
+                                    .0
+                                    .borrow()
+                                    .base_handle
+                                    .set_offset(gpui::point(gpui::px(0.), gpui::px(new_offset)));
+                                cx.notify();
+                            }
+                        }))
+                        .on_mouse_up(
+                            MouseButton::Left,
+                            cx.listener(|this, _: &MouseUpEvent, _, cx| {
+                                this.drag = None;
+                                cx.notify();
+                            }),
+                        ),
+                );
+            }
+
             root = root.child(item_rows);
         }
 
         // ── Footer: full financial breakdown ────────────────────────────────
-        root.child(totals_footer(&extras, effective_rate, &items, &c))
+        root.child(totals_footer(&extras, effective_rate, &items_for_footer, &c))
             .into_any_element()
     }
 }
